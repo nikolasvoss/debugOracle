@@ -11,6 +11,7 @@ Create or update:
 Using the template:
 
 - [`launch.jsonc.example`](launch.jsonc.example)
+- [`tasks.json.example`](tasks.json.example)
 
 Only the MI/RTT output sections need to be accurate for DebugOracle:
 
@@ -21,7 +22,7 @@ Only the MI/RTT output sections need to be accurate for DebugOracle:
 ## 2) Run a bounded capture
 
 - Start your Cortex-Debug session.
-- Ensure `.dbgoracle` exists before starting (`mkdir -p .dbgoracle`).
+- Ensure `.dbgoracle` exists before starting by using the `DebugOracle: prepare capture paths` task from `tasks.json.example`.
 - Reproduce the fault until the stop point you want to investigate.
 - Open/refresh **Call Stack**, **Registers**, and **Variables/Locals** after the stop.
 - Stop debugging for that run so the MI file stays bounded to one incident.

@@ -15,6 +15,7 @@
       "runToMain": true,
       "gdbPath": "gdb-multiarch",
       "preLaunchCommands": [],
+      "preLaunchTask": "DebugOracle: prepare capture paths",
       "postRunCommands": [
         "monitor reset halt"
       ],

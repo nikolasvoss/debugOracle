@@ -1,0 +1,14 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "DebugOracle: prepare capture paths",
+      "type": "shell",
+      "command": "mkdir -p \"${workspaceFolder}/.dbgoracle\" && : > \"${workspaceFolder}/.dbgoracle/cortex-debug-shared-mi.log\" && : > \"${workspaceFolder}/.dbgoracle/session.rtt\"",
+      "windows": {
+        "command": "New-Item -ItemType Directory -Force -Path \"${workspaceFolder}\\\\.dbgoracle\" | Out-Null; New-Item -ItemType File -Force -Path \"${workspaceFolder}\\\\.dbgoracle\\\\cortex-debug-shared-mi.log\" | Out-Null; New-Item -ItemType File -Force -Path \"${workspaceFolder}\\\\.dbgoracle\\\\session.rtt\" | Out-Null"
+      },
+      "problemMatcher": []
+    }
+  ]
+}

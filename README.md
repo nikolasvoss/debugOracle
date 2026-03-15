@@ -28,8 +28,7 @@ The most useful MI capture includes:
 Use the example below to make first capture quick:
 
 - Merge the entry from `examples/cortex-debug/launch.jsonc.example` into `.vscode/launch.json` (do not replace other launch configurations).
-- Make sure the MI/RTT file paths are writable in your workspace.
-- Ensure `.dbgoracle` exists before you start the debug run (`mkdir -p .dbgoracle`).
+- Merge `examples/cortex-debug/tasks.json.example` into `.vscode/tasks.json` so `.dbgoracle` is created automatically before each debug launch.
 - Run one focused debug stop.
 - Build once:
 
