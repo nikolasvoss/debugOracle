@@ -25,16 +25,25 @@ def main(argv: list[str] | None = None) -> int:
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="dbgoracle",
-        description="Passive embedded debug evidence packager for ChatGPT",
+        description=(
+            "Passive embedded debug evidence packager for Cortex-Debug and GDB/MI sessions"
+        ),
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    observe = subparsers.add_parser("observe", help="Build and store the latest snapshot")
-    _add_input_arguments(observe, require_snapshot=False)
+    observe = subparsers.add_parser(
+        "observe",
+        help="Capture and store a reusable snapshot for later report or prompt use",
+        description=(
+            "Build and store a reusable evidence snapshot from a bounded GDB/MI "
+            "transcript plus optional RTT logs."
+        ),
+    )
+    _add_input_arguments(observe, include_snapshot_file=False)
     observe.add_argument(
         "--state-out",
         default=".dbgoracle/latest_snapshot.json",
-        help="Path for the stored snapshot JSON",
+        help="Path for the reusable snapshot JSON written by observe",
     )
     observe.add_argument(
         "--rtt-window",
@@ -44,8 +53,15 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     observe.set_defaults(func=_cmd_observe)
 
-    snapshot = subparsers.add_parser("snapshot", help="Render a snapshot")
-    _add_input_arguments(snapshot, require_snapshot=False)
+    snapshot = subparsers.add_parser(
+        "snapshot",
+        help="Advanced snapshot rendering for automation or low-level inspection",
+        description=(
+            "Render a snapshot from a saved bundle or bounded raw inputs. Most users "
+            "should start with observe, then use report or prompt."
+        ),
+    )
+    _add_input_arguments(snapshot, include_snapshot_file=True)
     snapshot.add_argument(
         "--format",
         choices=["json", "text", "markdown"],
@@ -64,8 +80,15 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     snapshot.set_defaults(func=_cmd_snapshot)
 
-    prompt = subparsers.add_parser("prompt", help="Build a ChatGPT-ready prompt package")
-    _add_input_arguments(prompt, require_snapshot=False)
+    prompt = subparsers.add_parser(
+        "prompt",
+        help="Build a ChatGPT-ready prompt package from a snapshot or raw inputs",
+        description=(
+            "Package a saved snapshot or bounded raw inputs into a prompt you can "
+            "paste into ChatGPT."
+        ),
+    )
+    _add_input_arguments(prompt, include_snapshot_file=True)
     prompt.add_argument("--goal", required=True, help="Investigation goal to hand to ChatGPT")
     prompt.add_argument("--intent", help="Optional intended system state text")
     prompt.add_argument("--intent-file", help="Optional file containing intended system state text")
@@ -85,8 +108,15 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     prompt.set_defaults(func=_cmd_prompt)
 
-    report = subparsers.add_parser("report", help="Build an evidence-only report")
-    _add_input_arguments(report, require_snapshot=False)
+    report = subparsers.add_parser(
+        "report",
+        help="Render a human-readable evidence report from a snapshot or raw inputs",
+        description=(
+            "Render a human-readable evidence report from a saved snapshot or bounded "
+            "raw inputs."
+        ),
+    )
+    _add_input_arguments(report, include_snapshot_file=True)
     report.add_argument(
         "--format",
         choices=["text", "markdown"],
@@ -105,14 +135,28 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _add_input_arguments(parser: argparse.ArgumentParser, require_snapshot: bool) -> None:
-    parser.add_argument("--snapshot-file", help="Existing snapshot JSON to load")
+def _add_input_arguments(
+    parser: argparse.ArgumentParser,
+    include_snapshot_file: bool,
+) -> None:
+    if include_snapshot_file:
+        parser.add_argument(
+            "--snapshot-file",
+            help="Existing snapshot JSON produced by observe",
+        )
     parser.add_argument(
         "--gdb-mi",
-        help="Path to a GDB/MI transcript (use - to read from stdin)",
+        help="Path to a bounded GDB/MI transcript (use - to read from stdin once)",
     )
-    parser.add_argument("--gdb-mi-stream", action="store_true", help="Read GDB/MI data from stdin")
-    parser.add_argument("--rtt", help="Path to an RTT log")
+    parser.add_argument(
+        "--gdb-mi-stream",
+        action="store_true",
+        help="Read bounded GDB/MI data from stdin until EOF (not live-follow mode)",
+    )
+    parser.add_argument(
+        "--rtt",
+        help="Path to an RTT log captured alongside the MI transcript",
+    )
 
 
 def _cmd_observe(args: argparse.Namespace) -> int:
@@ -149,8 +193,9 @@ def _cmd_report(args: argparse.Namespace) -> int:
 
 
 def _resolve_bundle(args: argparse.Namespace, full: bool = False):
-    if args.snapshot_file:
-        return load_bundle(args.snapshot_file)
+    snapshot_file = getattr(args, "snapshot_file", None)
+    if snapshot_file:
+        return load_bundle(snapshot_file)
 
     if not args.gdb_mi_stream and not args.gdb_mi:
         raise SystemExit(

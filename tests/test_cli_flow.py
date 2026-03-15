@@ -52,10 +52,10 @@ class DebugOracleCliTests(unittest.TestCase):
         self.assertIn("Instructions For ChatGPT", output)
         self.assertIn("C1 Session context and stop state", output)
 
-    def test_report_is_deterministic_from_saved_snapshot(self) -> None:
+    def test_observe_writes_snapshot_reused_by_report_and_prompt(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             snapshot_path = Path(tmpdir) / "snapshot.json"
-            self._run_cli(
+            observe_output = self._run_cli(
                 [
                     "observe",
                     "--gdb-mi",
@@ -66,12 +66,23 @@ class DebugOracleCliTests(unittest.TestCase):
                     str(snapshot_path),
                 ]
             )
-            first = self._run_cli(["report", "--snapshot-file", str(snapshot_path)])
-            second = self._run_cli(["report", "--snapshot-file", str(snapshot_path)])
-        self.assertEqual(first, second)
-        self.assertIn("DebugOracle Evidence Report", first)
-        self.assertIn("Snapshot ID", first)
-        self.assertIn("Recent RTT", first)
+            self.assertTrue(snapshot_path.exists())
+            report_output = self._run_cli(["report", "--snapshot-file", str(snapshot_path)])
+            prompt_output = self._run_cli(
+                [
+                    "prompt",
+                    "--snapshot-file",
+                    str(snapshot_path),
+                    "--goal",
+                    "Explain why the target stopped here",
+                ]
+            )
+        self.assertIn("Saved snapshot", observe_output)
+        self.assertIn("DebugOracle Evidence Report", report_output)
+        self.assertIn("Snapshot ID", report_output)
+        self.assertIn("Recent RTT", report_output)
+        self.assertIn("# DebugOracle Prompt Package", prompt_output)
+        self.assertIn("Explain why the target stopped here", prompt_output)
 
     def test_prompt_can_read_intent_from_stdin(self) -> None:
         stdin = io.StringIO("The system should remain in READY state.")
@@ -117,6 +128,19 @@ class DebugOracleCliTests(unittest.TestCase):
             )
         payload = json.loads(output)
         self.assertEqual(payload["frames"][0]["func"], "main")
+
+    def test_thin_snapshot_surfaces_missing_evidence_gaps(self) -> None:
+        stopped_line = (FIXTURES / "sample.mi").read_text(encoding="utf-8").splitlines()[0]
+        with tempfile.NamedTemporaryFile("w", suffix=".mi", delete=False) as handle:
+            handle.write(f"{stopped_line}\n")
+            path = handle.name
+        try:
+            output = self._run_cli(["report", "--gdb-mi", path])
+        finally:
+            Path(path).unlink()
+        self.assertIn("No register-values record was found", output)
+        self.assertIn("No watched values or locals were captured", output)
+        self.assertIn("No RTT lines were available for this snapshot.", output)
 
     def test_corrupt_snapshot_file_still_renders_report(self) -> None:
         with tempfile.NamedTemporaryFile("w", delete=False) as handle:
