@@ -23,6 +23,43 @@ The most useful MI capture includes:
 
 ## Commands
 
+### Easy setup for Cortex-Debug
+
+Use the example below to make first capture quick:
+
+- Merge the entry from `examples/cortex-debug/launch.jsonc.example` into `.vscode/launch.json` (do not replace other launch configurations).
+- Make sure the MI/RTT file paths are writable in your workspace.
+- Ensure `.dbgoracle` exists before you start the debug run (`mkdir -p .dbgoracle`).
+- Run one focused debug stop.
+- Build once:
+
+```bash
+./dbgoracle observe --gdb-mi .dbgoracle/cortex-debug-shared-mi.log --rtt .dbgoracle/session.rtt
+./dbgoracle report --snapshot-file .dbgoracle/latest_snapshot.json
+./dbgoracle prompt --snapshot-file .dbgoracle/latest_snapshot.json --goal "Explain why the target stopped here"
+```
+
+Before running `observe`, verify the MI file is receiving output:
+
+```bash
+test -s .dbgoracle/cortex-debug-shared-mi.log && echo "MI log ready" || echo "MI log empty or missing"
+```
+
+What to configure in Cortex-Debug:
+
+- MI log path should point to `.dbgoracle/cortex-debug-shared-mi.log`.
+- RTT path should point to `.dbgoracle/session.rtt` if your session has RTT enabled.
+- Keep captures bounded: stop at the event you care about and end the debug session to avoid mixing multiple stops.
+- Refresh Call Stack, Registers, and Variables/Locals before capture so the latest stop has rich context.
+
+Quick check after run:
+
+- `observe` succeeds and writes `.dbgoracle/latest_snapshot.json`.
+- `report` shows stop reason + frame + register/local context.
+- `prompt` includes evidence sections you can paste into ChatGPT.
+
+See full sample config and step-by-step checklist in [`examples/cortex-debug/README.md`](examples/cortex-debug/README.md).
+
 Typical Cortex-Debug flow:
 
 ```bash

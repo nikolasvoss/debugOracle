@@ -1,0 +1,34 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "DebugOracle (template)",
+      "type": "cortex-debug",
+      "request": "launch",
+
+      // ----- Fill these as needed for your project -----
+      "servertype": "openocd",
+      "cwd": "${workspaceFolder}",
+      "executable": "${workspaceFolder}/build/firmware.elf",
+
+      "showDevDebugOutput": "raw",
+      "runToMain": true,
+      "gdbPath": "gdb-multiarch",
+      "preLaunchCommands": [],
+      "postRunCommands": [
+        "monitor reset halt"
+      ],
+
+      // Cortex-Debug MI logging (replace this key name with the one your installed
+      // Cortex-Debug version exposes, keeping the same value format):
+      "sharedMiLogFile": "${workspaceFolder}/.dbgoracle/cortex-debug-shared-mi.log",
+
+      // Cortex-Debug RTT logging support varies by version.
+      // If your version exposes a different key, replace this object block only.
+      "rttConfig": {
+        "enabled": true,
+        "logFile": "${workspaceFolder}/.dbgoracle/session.rtt"
+      }
+    }
+  ]
+}
