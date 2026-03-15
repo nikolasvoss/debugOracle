@@ -1,0 +1,5 @@
+*stopped,reason="breakpoint-hit",disp="keep",bkptno="1",frame={addr="0x08000100",func="main",args=[],file="main.c",fullname="/workspace/src/main.c",line="42"},thread-id="1",stopped-threads="all",core="0"
+^done,stack=[frame={level="0",addr="0x08000100",func="main",file="main.c",fullname="/workspace/src/main.c",line="42"},frame={level="1",addr="0x08000080",func="Reset_Handler",file="startup.c",fullname="/workspace/src/startup.c",line="12"}]
+^done,register-values=[{number="13",value="0x20002000"},{number="14",value="0x08000081"},{number="15",value="0x08000100"}]
+^done,locals=[{name="system_state",value="READY"},{name="boot_count",value="3"}]
+
