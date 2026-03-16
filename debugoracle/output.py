@@ -441,15 +441,46 @@ def _parsing_summary_section(bundle: EvidenceBundle, plain: bool = False) -> str
 
 
 def _non_mi_excerpt(bundle: EvidenceBundle, limit: int = 50) -> list[str]:
-    lines = [
-        event.payload.get("raw", "")
+    events = [
+        event
         for event in bundle.session_events
         if event.kind in {"non_mi_line", "console-output", "prompt-marker"}
     ]
-    lines = [line for line in lines if line]
-    if limit <= 0:
+    if not events or limit <= 0:
         return []
-    return lines[-limit:]
+
+    noise_lines: list[str] = []
+    seen: set[tuple[str, str]] = set()
+    for event in reversed(events):
+        payload = event.payload or {}
+        normalized = payload.get("normalized")
+        raw = normalized if isinstance(normalized, str) else None
+        if raw is None:
+            raw_value = payload.get("raw")
+            raw = raw_value if isinstance(raw_value, str) else None
+        if raw is None:
+            continue
+        raw_one_line = raw.replace("\n", "\\n")
+        key = (event.kind, raw_one_line)
+        if key in seen:
+            continue
+        seen.add(key)
+        line_marker = payload.get("line")
+        marker = f"L{line_marker}: " if line_marker is not None else ""
+        noise_lines.append(f"{event.kind}:{marker}{raw_one_line}")
+        if len(noise_lines) >= limit:
+            break
+    noise_lines.reverse()
+
+    lines: list[str] = []
+    noise_patterns = _coerce_str_list(bundle.provenance.get("non_mi_patterns"))
+    if noise_patterns:
+        lines.append("Top non-MI patterns:")
+        lines.extend([f"  {item}" for item in noise_patterns[:3]])
+    if noise_lines:
+        lines.append("Latest distinct non-MI samples:")
+        lines.extend(noise_lines)
+    return lines
 
 
 def _evidence_quality_score(bundle: EvidenceBundle) -> int | None:

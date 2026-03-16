@@ -88,6 +88,7 @@ def build_bundle_from_text(
     mi_record_count = 0
     non_mi_line_count = 0
     mi_parse_error_count = 0
+    noise_line_counts = Counter[str]()
 
     if not gdb_text:
         parse_warnings.append("No GDB/MI input was provided before building this snapshot.")
@@ -102,7 +103,7 @@ def build_bundle_from_text(
             parse_event_counts["prompt-marker"] += 1
             parse_event_severity["info"] += 1
             non_mi_line_count += 1
-            parse_warnings.append(f"Line {line_number}: non-MI output retained as context")
+            noise_line_counts["prompt-marker"] += 1
             session_events.append(
                 SessionEvent(
                     source="gdb_mi",
@@ -112,6 +113,7 @@ def build_bundle_from_text(
                         "line": line_number,
                         "raw": stripped,
                         "normalized": stripped,
+                        "dedupe_key": stripped,
                         "severity": "info",
                     },
                 )
@@ -124,7 +126,7 @@ def build_bundle_from_text(
             parse_event_severity["info"] += 1
             non_mi_line_count += 1
             normalized = _strip_console_output(stripped)
-            parse_warnings.append(f"Line {line_number}: non-MI output retained as context")
+            noise_line_counts["console-output"] += 1
             session_events.append(
                 SessionEvent(
                     source="gdb_mi",
@@ -134,6 +136,7 @@ def build_bundle_from_text(
                         "line": line_number,
                         "raw": stripped,
                         "normalized": normalized,
+                        "dedupe_key": normalized,
                         "severity": "info",
                     },
                 )
@@ -174,6 +177,7 @@ def build_bundle_from_text(
                 parse_event_counts["non_mi_line"] += 1
                 parse_event_severity["info"] += 1
                 non_mi_line_count += 1
+                noise_line_counts["non_mi_line"] += 1
                 session_events.append(
                     SessionEvent(
                         source="gdb_mi",
@@ -182,12 +186,11 @@ def build_bundle_from_text(
                         payload={
                             "line": line_number,
                             "raw": stripped,
+                            "normalized": stripped,
+                            "dedupe_key": stripped,
                             "severity": "info",
                         },
                     )
-                )
-                parse_warnings.append(
-                    f"Line {line_number}: non-MI output retained as context"
                 )
                 noise_pattern_counts[stripped[:64]] += 1
             continue
@@ -235,6 +238,15 @@ def build_bundle_from_text(
         parse_warnings.append("No RTT lines were available for this snapshot.")
         parse_event_counts["missing-rtt"] += 1
         parse_event_severity["warn"] += 1
+
+    if non_mi_line_count:
+        parse_warnings.append(
+            "Transcript noise retained as context: "
+            f"{noise_line_counts.get('prompt-marker', 0)} prompt markers, "
+            f"{noise_line_counts.get('console-output', 0)} console-output lines, "
+            f"{noise_line_counts.get('non_mi_line', 0)} other non-MI lines. "
+            "Raw sidecar export provides the full transcript."
+        )
 
     critical_events: list[str] = []
     if not gdb_text:

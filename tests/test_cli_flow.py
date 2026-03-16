@@ -106,6 +106,65 @@ class DebugOracleCliTests(unittest.TestCase):
         self.assertIn("Event types:", report_output)
         self.assertIn("Raw Non-MI Excerpt", report_output)
 
+    def test_snapshot_compacts_noise_into_summary_warning(self) -> None:
+        noisy_log = (
+            "(gdb)\n"
+            + ('@"Unable to match requested speed 500 kHz, using 480 kHz\\n"\n' * 8)
+            + (FIXTURES / "sample.mi").read_text(encoding="utf-8")
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            noisy_path = Path(tmpdir) / "noisy.mi"
+            noisy_path.write_text(noisy_log, encoding="utf-8")
+            output = self._run_cli(
+                [
+                    "snapshot",
+                    "--gdb-mi",
+                    str(noisy_path),
+                    "--rtt",
+                    str(FIXTURES / "sample.rtt"),
+                    "--format",
+                    "json",
+                ]
+            )
+            payload = json.loads(output)
+
+        self.assertEqual(payload["stop_reason"], "breakpoint-hit")
+        self.assertEqual(payload["provenance"]["parse_warning_count"], 1)
+        self.assertEqual(payload["provenance"]["parse_event_counts"]["prompt-marker"], 1)
+        self.assertEqual(payload["provenance"]["parse_event_counts"]["console-output"], 8)
+
+    def test_report_raw_non_mi_excerpt_is_compacted(self) -> None:
+        noisy_log = (
+            '@"Unable to match requested speed 500 kHz, using 480 kHz\\n"\n' * 10
+            + "(gdb)\n" * 3
+            + (FIXTURES / "sample.mi").read_text(encoding="utf-8")
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            noisy_path = Path(tmpdir) / "noisy.mi"
+            noisy_path.write_text(noisy_log, encoding="utf-8")
+            snapshot_path = Path(tmpdir) / "snapshot.json"
+            self._run_cli(
+                [
+                    "observe",
+                    "--gdb-mi",
+                    str(noisy_path),
+                    "--rtt",
+                    str(FIXTURES / "sample.rtt"),
+                    "--state-out",
+                    str(snapshot_path),
+                ]
+            )
+            report_output = self._run_cli(["report", "--snapshot-file", str(snapshot_path)])
+
+        raw_section = report_output.split("## Raw Non-MI Excerpt", 1)[1]
+        raw_section = raw_section.split("## Unknowns And Gaps", 1)[0]
+        self.assertIn("Top non-MI patterns", raw_section)
+        self.assertLessEqual(
+            raw_section.count("Unable to match requested speed 500 kHz, using 480 kHz"),
+            2,
+        )
+        self.assertIn("(gdb)", raw_section)
+
     def test_prompt_markdown_contains_goal_intent_and_citations(self) -> None:
         output = self._run_cli(
             [
