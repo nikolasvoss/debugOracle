@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -365,13 +366,32 @@ def _resolve_bundle(args: argparse.Namespace, full: bool = False):
             rtt_source=args.rtt,
             rtt_window=rtt_window,
         )
-    return build_bundle_from_files(args.gdb_mi, args.rtt, rtt_window=rtt_window)
+
+    _require_readable_file(args.gdb_mi, "GDB/MI")
+    if args.rtt:
+        _require_readable_file(args.rtt, "RTT")
+    try:
+        return build_bundle_from_files(args.gdb_mi, args.rtt, rtt_window=rtt_window)
+    except OSError as error:
+        raise SystemExit(f"Unable to read one of the required input files: {error}") from error
 
 
 def _read_rtt(rtt_path: str | None) -> str:
     if not rtt_path:
         return ""
-    return Path(rtt_path).read_text(encoding="utf-8", errors="replace")
+    try:
+        return Path(rtt_path).read_text(encoding="utf-8", errors="replace")
+    except OSError as error:
+        raise SystemExit(f"Unable to read RTT file '{rtt_path}': {error}") from error
+
+
+def _require_readable_file(path: str, label: str) -> None:
+    if not os.path.exists(path):
+        raise SystemExit(f"{label} file does not exist: {path}")
+    if not os.path.isfile(path):
+        raise SystemExit(f"{label} path is not a file: {path}")
+    if not os.access(path, os.R_OK):
+        raise SystemExit(f"{label} file is not readable: {path}")
 
 
 def _read_intent(intent: str | None, intent_file: str | None) -> str | None:

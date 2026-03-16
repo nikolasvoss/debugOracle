@@ -9,9 +9,14 @@
       "request": "launch",
       "showDevDebugOutput": "raw",
       "servertype": "openocd",
-      "serverpath": "${workspaceFolder}/.vscode/openocd-wrapper.sh",
       "overrideGDBServerStartedRegex": "Info\\s*:\\s*Listening on port\\s+\\d+\\s+for\\s+gdb\\s+connections?",
-      "armToolchainPath": "/usr/bin",
+      // PATH-based tool lookup is used by default.
+      // Set these only when your environment needs fixed binaries:
+      // "armToolchainPath": "${env:HOME}/.local/toolchains/arm-none-eabi/bin",
+      // "gdbPath": "${env:HOME}/.local/toolchains/arm-none-eabi/bin/arm-none-eabi-gdb",
+
+      // Optional advanced override only (not shipped by default):
+      // "serverpath": "/absolute/path/to/openocd-wrapper.sh",
       "configFiles": [
         "interface/stlink.cfg",
         "target/stm32l4x.cfg"
@@ -21,7 +26,6 @@
       ],
       "cwd": "${workspaceFolder}",
       "executable": "${workspaceFolder}/build/app.elf",
-      "gdbPath": "/usr/bin/arm-none-eabi-gdb",
       "runToEntryPoint": "main",
       "preLaunchTask": "Prepare debug logs",
 

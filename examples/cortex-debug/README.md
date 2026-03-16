@@ -22,8 +22,25 @@ using it on another project:
 - RTT (optional) output should write to `.dbgoracle/session.rtt`
 - If your Cortex-Debug version uses different MI/RTT key names, update only the
   logging lines.
-- If you are not using this exact STM32/OpenOCD setup, also update `serverpath`,
+- `serverpath` in the sample is optional and commented out by default.
+  This repo does **not** ship `.vscode/openocd-wrapper.sh` (it is your local
+  advanced setup choice only).
+- If you are not using this exact STM32/OpenOCD setup, also update
   `configFiles`, `executable`, `gdbPath`, and `runToEntryPoint`.
+
+## 1.5) Quick preflight
+
+Before first capture, validate environment basics:
+
+```bash
+if ! command -v openocd >/dev/null 2>&1; then
+  echo "openocd not found in PATH"
+  exit 1
+fi
+openocd --version
+test -f .dbgoracle/cortex-debug-shared-mi.log && echo "MI file path exists" || echo "run Prepare debug logs first"
+test -f .dbgoracle/session.rtt && echo "RTT file path exists" || echo "RTT log not present (optional)"
+```
 
 ## 2) Run a bounded capture
 
@@ -37,7 +54,10 @@ Before calling `observe`, confirm MI data exists:
 
 ```bash
 test -s .dbgoracle/cortex-debug-shared-mi.log && echo "MI log ready" || echo "MI log empty or missing"
+test -s .dbgoracle/session.rtt && echo "RTT log has data" || echo "RTT log empty or not enabled"
 ```
+MI data is required for every capture. Reset logs between runs with `Prepare debug logs`
+to avoid stale evidence.
 
 ## 3) Build and inspect evidence
 
@@ -65,6 +85,5 @@ Then hand it to ChatGPT:
 
 - Cortex-Debug launch JSON schemas vary slightly by extension/version; keep only the MI/RTT paths and shared-logging settings aligned with your installed version.
 - If logs are stale, remove old `.dbgoracle/*` files before next run.
-
-TODO: .dbgoracle folder for snapshots is located in source folder. good idea?
-TODO: use latest snapshot as default, if no args given.
+- For security, treat MI/RTT logs as potentially sensitive traces (register values,
+  call frames, and firmware-related strings).

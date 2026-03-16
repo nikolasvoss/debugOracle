@@ -24,7 +24,7 @@ def build_bundle_from_files(
     rtt_path: str | None = None,
     rtt_window: int = DEFAULT_RTT_WINDOW,
 ) -> EvidenceBundle:
-    gdb_text = _read_text_file(gdb_mi_path, errors="replace")
+    gdb_text = _read_text_file(gdb_mi_path, errors="replace", required=True)
     rtt_text = _read_text_file(rtt_path, errors="replace") if rtt_path else ""
     return build_bundle_from_text(
         gdb_text=gdb_text,
@@ -297,10 +297,12 @@ def _select_recent_rtt(rtt_text: str, rtt_window: int) -> list[str]:
     return lines[-rtt_window:] if len(lines) > rtt_window else lines
 
 
-def _read_text_file(path: str, errors: str = "strict") -> str:
+def _read_text_file(path: str, errors: str = "strict", *, required: bool = False) -> str:
     try:
         return Path(path).read_text(encoding="utf-8", errors=errors)
     except OSError as error:
+        if required:
+            raise
         return f"[DEBUGORACLE_READ_ERROR {path}: {error}]"
 
 
