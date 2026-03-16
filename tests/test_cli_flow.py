@@ -7,9 +7,11 @@ import sys
 import tempfile
 import unittest
 from contextlib import redirect_stdout
+from contextlib import redirect_stderr
 from pathlib import Path
 from unittest.mock import patch
 
+from debugoracle.builder import build_bundle_from_files, save_bundle
 from debugoracle.rtt import RttCaptureState
 from debugoracle.cli import main
 
@@ -124,6 +126,147 @@ class DebugOracleCliTests(unittest.TestCase):
             self.assertIn("Health: healthy", status_output)
             self.assertIn("Snapshot ID: snap-", status_output)
             self.assertNotIn("Snapshot file not found", status_output)
+
+    def test_snapshot_uses_auto_discovery_in_current_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            session_dir = workspace / ".dbgoracle"
+            session_dir.mkdir()
+            auto_bundle = build_bundle_from_files(
+                str(FIXTURES / "sample.mi"),
+                str(FIXTURES / "sample.rtt"),
+            )
+            auto_snapshot = session_dir / "latest_snapshot.json"
+            save_bundle(auto_bundle, str(auto_snapshot))
+
+            previous = os.getcwd()
+            try:
+                os.chdir(workspace)
+                output, stderr = self._run_cli(
+                    ["snapshot", "--format", "json"],
+                    capture_stderr=True,
+                )
+            finally:
+                os.chdir(previous)
+
+            payload = json.loads(output)
+            self.assertEqual(payload["snapshot_id"], auto_bundle.snapshot_id)
+            self.assertIn("Auto-discovered input paths for snapshot:", stderr)
+            self.assertIn(f"- snapshot-file: {auto_snapshot}", stderr)
+
+    def test_prompt_uses_auto_discovery_in_current_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            session_dir = workspace / ".dbgoracle"
+            session_dir.mkdir()
+            bundle = build_bundle_from_files(
+                str(FIXTURES / "sample.mi"),
+                str(FIXTURES / "sample.rtt"),
+            )
+            save_bundle(bundle, str(session_dir / "latest_snapshot.json"))
+
+            previous = os.getcwd()
+            try:
+                os.chdir(workspace)
+                output, _ = self._run_cli(
+                    [
+                        "prompt",
+                        "--goal",
+                        "Explain why the target stopped here",
+                    ],
+                    capture_stderr=True,
+                )
+            finally:
+                os.chdir(previous)
+
+        self.assertIn("Snapshot ID:", output)
+        self.assertIn(bundle.snapshot_id, output)
+
+    def test_snapshot_prefers_explicit_snapshot_file_over_discovery(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            session_dir = workspace / ".dbgoracle"
+            session_dir.mkdir()
+            discovered_bundle = build_bundle_from_files(
+                str(FIXTURES / "sample.mi"),
+                str(FIXTURES / "sample.rtt"),
+            )
+            explicit_mi = Path(tmpdir) / "explicit.mi"
+            explicit_mi.write_text(
+                (FIXTURES / "sample.mi").read_text(encoding="utf-8") + "\n# explicit capture marker\n",
+                encoding="utf-8",
+            )
+            explicit_bundle = build_bundle_from_files(str(explicit_mi), str(FIXTURES / "sample.rtt"))
+            discovered_snapshot = session_dir / "latest_snapshot.json"
+            explicit_snapshot = workspace / "explicit_snapshot.json"
+
+            save_bundle(discovered_bundle, str(discovered_snapshot))
+            save_bundle(explicit_bundle, str(explicit_snapshot))
+
+            previous = os.getcwd()
+            try:
+                os.chdir(workspace)
+                output = self._run_cli(
+                    [
+                        "snapshot",
+                        "--snapshot-file",
+                        str(explicit_snapshot),
+                        "--format",
+                        "json",
+                    ]
+                )
+            finally:
+                os.chdir(previous)
+
+        payload = json.loads(output)
+        self.assertEqual(payload["snapshot_id"], explicit_bundle.snapshot_id)
+        self.assertNotEqual(payload["snapshot_id"], discovered_bundle.snapshot_id)
+
+    def test_observe_uses_discovered_workspace_defaults(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            session_dir = workspace / ".dbgoracle"
+            session_dir.mkdir()
+            (session_dir / "cortex-debug-shared-mi.log").write_text(
+                (FIXTURES / "sample.mi").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (session_dir / "session.rtt").write_text(
+                (FIXTURES / "sample.rtt").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+
+            previous = os.getcwd()
+            try:
+                os.chdir(workspace)
+                output, stderr = self._run_cli(
+                    ["observe"],
+                    capture_stderr=True,
+                )
+            finally:
+                os.chdir(previous)
+
+            snapshot_path = session_dir / "latest_snapshot.json"
+            self.assertIn("Saved snapshot", output)
+            self.assertIn(f"{snapshot_path}", output)
+            self.assertTrue(snapshot_path.exists())
+            self.assertIn("Auto-discovered input paths for observe:", stderr)
+
+    def test_snapshot_fails_with_clear_message_when_nothing_can_be_resolved(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            previous = os.getcwd()
+            try:
+                os.chdir(workspace)
+                with self.assertRaises(SystemExit) as error:
+                    self._run_cli(["snapshot"])
+            finally:
+                os.chdir(previous)
+
+        message = str(error.exception)
+        self.assertIn("could not auto-resolve an input source", message)
+        self.assertIn(".dbgoracle/latest_snapshot.json", message)
+        self.assertIn(".dbgoracle/cortex-debug-shared-mi.log", message)
 
     def test_observe_writes_snapshot_next_to_explicit_inputs_when_no_state_out_given(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -260,8 +403,19 @@ class DebugOracleCliTests(unittest.TestCase):
         self.assertIn("DebugOracle Evidence Report", output)
         self.assertIn("MI/RTT parsing warnings", output)
 
-    def _run_cli(self, argv: list[str]) -> str:
+    def _run_cli(
+        self,
+        argv: list[str],
+        *,
+        capture_stderr: bool = False,
+    ) -> str | tuple[str, str]:
         buffer = io.StringIO()
+        if capture_stderr:
+            stderr = io.StringIO()
+            with redirect_stdout(buffer), redirect_stderr(stderr):
+                exit_code = main(argv)
+            self.assertEqual(exit_code, 0)
+            return buffer.getvalue(), stderr.getvalue()
         with redirect_stdout(buffer):
             exit_code = main(argv)
         self.assertEqual(exit_code, 0)

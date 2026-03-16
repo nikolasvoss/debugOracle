@@ -71,14 +71,14 @@ to avoid stale evidence.
 ## 3) Build and inspect evidence
 
 ```bash
-./dbgoracle observe --gdb-mi .dbgoracle/cortex-debug-shared-mi.log --rtt .dbgoracle/session.rtt
-./dbgoracle report --snapshot-file .dbgoracle/latest_snapshot.json
+./dbgoracle observe
+./dbgoracle report
 ```
 
 Then hand it to ChatGPT:
 
 ```bash
-./dbgoracle prompt --snapshot-file .dbgoracle/latest_snapshot.json --goal "Explain why the target stopped here"
+./dbgoracle prompt --goal "Explain why the target stopped here"
 ```
 
 ## Minimal validation checklist

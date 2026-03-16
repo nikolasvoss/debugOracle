@@ -174,11 +174,6 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _add_input_arguments(observe, include_snapshot_file=False)
     observe.add_argument(
-        "--workspace-root",
-        default=".",
-        help="Workspace root used to resolve file paths",
-    )
-    observe.add_argument(
         "--state-out",
         default=None,
         help=(
@@ -344,6 +339,11 @@ def _add_input_arguments(
         "--rtt",
         help="Path to an RTT log captured alongside the MI transcript",
     )
+    parser.add_argument(
+        "--workspace-root",
+        default=".",
+        help="Workspace root used to resolve default file paths",
+    )
 
 
 def _cmd_status(args: argparse.Namespace) -> int:
@@ -422,9 +422,18 @@ def _cmd_capture_rtt(args: argparse.Namespace) -> int:
 
 def _cmd_observe(args: argparse.Namespace) -> int:
     workspace_root = Path(args.workspace_root).resolve()
-    gdb_mi = _resolve_workspace_path(args.gdb_mi, workspace_root)
-    rtt = _resolve_workspace_path(args.rtt, workspace_root)
-    bundle = _resolve_bundle(args, gdb_mi=gdb_mi, rtt=rtt)
+    discovery = _resolve_observe_inputs(args, workspace_root)
+    gdb_mi = discovery["gdb_mi"]
+    rtt = discovery["rtt"]
+    bundle = _resolve_bundle(
+        args,
+        gdb_mi=gdb_mi,
+        rtt=rtt,
+        allow_snapshot_fallback=False,
+        command_name="observe",
+        explicit_gdb=discovery["gdb_mi_explicit"],
+        explicit_rtt=discovery["rtt_explicit"],
+    )
     state_out = _resolve_state_out_path(
         workspace_root=workspace_root,
         requested_state_out=args.state_out,
@@ -453,13 +462,20 @@ def _warn_if_connected_no_bytes_rtt_capture(rtt: str | None) -> None:
 
 
 def _cmd_snapshot(args: argparse.Namespace) -> int:
-    bundle = _resolve_bundle(args)
+    bundle = _resolve_bundle(
+        args,
+        command_name="snapshot",
+    )
     output = render_snapshot(bundle, fmt=args.format)
     return _emit(output, args.output)
 
 
 def _cmd_prompt(args: argparse.Namespace) -> int:
-    bundle = _resolve_bundle(args, full=args.full)
+    bundle = _resolve_bundle(
+        args,
+        full=args.full,
+        command_name="prompt",
+    )
     intent = _read_intent(args.intent, args.intent_file)
     request = InvestigationRequest(
         goal_text=args.goal,
@@ -473,7 +489,10 @@ def _cmd_prompt(args: argparse.Namespace) -> int:
 
 
 def _cmd_report(args: argparse.Namespace) -> int:
-    bundle = _resolve_bundle(args)
+    bundle = _resolve_bundle(
+        args,
+        command_name="report",
+    )
     output = render_report(bundle, fmt=args.format)
     return _emit(output, args.output)
 
@@ -483,21 +502,87 @@ def _resolve_bundle(
     full: bool = False,
     gdb_mi: str | None = None,
     rtt: str | None = None,
+    *,
+    allow_snapshot_fallback: bool = True,
+    command_name: str = "snapshot",
+    explicit_gdb: bool = False,
+    explicit_rtt: bool = False,
 ):
-    gdb_mi = gdb_mi if gdb_mi is not None else getattr(args, "gdb_mi", None)
-    rtt = rtt if rtt is not None else getattr(args, "rtt", None)
-    snapshot_file = getattr(args, "snapshot_file", None)
-    if snapshot_file:
-        return load_bundle(snapshot_file)
+    workspace_root = Path(args.workspace_root).resolve()
+    config = _resolve_session_config(args, workspace_root)
+    requested_snapshot_file = getattr(args, "snapshot_file", None)
+    requested_gdb = gdb_mi if gdb_mi is not None else getattr(args, "gdb_mi", None)
+    requested_rtt = rtt if rtt is not None else getattr(args, "rtt", None)
+    explicit_gdb = explicit_gdb or (getattr(args, "gdb_mi", None) is not None)
+    explicit_rtt = explicit_rtt or (getattr(args, "rtt", None) is not None)
 
-    if not args.gdb_mi_stream and not gdb_mi:
+    if requested_snapshot_file:
+        resolved_snapshot = str(Path(requested_snapshot_file))
+        _emit_discovery_summary(
+            command_name,
+            {
+                "snapshot-file": resolved_snapshot,
+            },
+            {
+                "snapshot-file": False,
+            },
+        )
+        return load_bundle(requested_snapshot_file)
+
+    if allow_snapshot_fallback and not args.gdb_mi_stream and not explicit_gdb:
+        if config.snapshot_file.exists():
+            _emit_discovery_summary(
+                command_name,
+                {
+                    "snapshot-file": str(config.snapshot_file),
+                },
+                {
+                    "snapshot-file": True,
+                },
+            )
+            return load_bundle(str(config.snapshot_file))
+
+    if not args.gdb_mi_stream and not explicit_gdb and not config.gdb_mi_file.is_file():
         raise SystemExit(
-            "Either --snapshot-file, --gdb-mi, --gdb-mi-stream, or --gdb-mi - is required."
+            _missing_inputs_error(
+                command_name,
+                workspace_root,
+                config,
+                allow_snapshot_fallback,
+            )
         )
 
+    gdb_discovered = False
+    if explicit_gdb:
+        gdb_mi = _resolve_workspace_path(requested_gdb, workspace_root)
+    else:
+        gdb_mi = str(config.gdb_mi_file)
+        gdb_discovered = True
+
+    rtt_discovered = False
+    if explicit_rtt:
+        rtt = _resolve_workspace_path(requested_rtt, workspace_root)
+    elif config.rtt_file.is_file():
+        rtt = str(config.rtt_file)
+        rtt_discovered = True
+
     rtt_window = FULL_RTT_WINDOW if full else getattr(args, "rtt_window", DEFAULT_RTT_WINDOW)
+    discovered_inputs = {
+        "snapshot-file": False,
+        "gdb-mi": gdb_discovered,
+        "rtt": rtt_discovered,
+    }
+
     if args.gdb_mi_stream:
         rtt_text = _read_rtt(rtt)
+        _emit_discovery_summary(
+            command_name,
+            {
+                "gdb-mi": gdb_mi,
+                "rtt": rtt,
+            },
+            discovered_inputs,
+        )
         return build_bundle_from_stream(
             sys.stdin,
             rtt_text=rtt_text,
@@ -507,6 +592,14 @@ def _resolve_bundle(
         )
     if gdb_mi in {"-", "/dev/stdin", "stdin"}:
         rtt_text = _read_rtt(rtt)
+        _emit_discovery_summary(
+            command_name,
+            {
+                "gdb-mi": gdb_mi,
+                "rtt": rtt,
+            },
+            discovered_inputs,
+        )
         return build_bundle_from_stream(
             sys.stdin,
             rtt_text=rtt_text,
@@ -515,14 +608,112 @@ def _resolve_bundle(
             rtt_window=rtt_window,
         )
 
-    assert gdb_mi is not None
-    _require_readable_file(gdb_mi, "GDB/MI")
+    if gdb_mi is not None:
+        _require_readable_file(gdb_mi, "GDB/MI")
+
+    _emit_discovery_summary(
+        command_name,
+        {
+            "gdb-mi": gdb_mi,
+            "rtt": rtt,
+        },
+        discovered_inputs,
+    )
     if rtt:
         _require_readable_file(rtt, "RTT")
     try:
         return build_bundle_from_files(gdb_mi, rtt, rtt_window=rtt_window)
     except OSError as error:
         raise SystemExit(f"Unable to read one of the required input files: {error}") from error
+
+
+def _resolve_session_config(
+    args: argparse.Namespace,
+    workspace_root: Path,
+) -> SessionConfig:
+    return SessionConfig.from_workspace(
+        workspace_root=workspace_root,
+        snapshot_file=getattr(args, "snapshot_file", None),
+        gdb_mi_file=getattr(args, "gdb_mi", None),
+        rtt_file=getattr(args, "rtt", None),
+        rtt_state_file=getattr(args, "rtt_state", None) if hasattr(args, "rtt_state") else None,
+    )
+
+
+def _resolve_observe_inputs(
+    args: argparse.Namespace,
+    workspace_root: Path,
+) -> dict[str, str | None | bool]:
+    config = _resolve_session_config(args, workspace_root)
+    explicit_gdb = getattr(args, "gdb_mi", None) is not None
+    explicit_rtt = getattr(args, "rtt", None) is not None
+    gdb_mi = _resolve_workspace_path(
+        getattr(args, "gdb_mi", None),
+        workspace_root,
+    )
+    rtt = _resolve_workspace_path(
+        getattr(args, "rtt", None),
+        workspace_root,
+    )
+    gdb_mi_discovered = False
+    rtt_discovered = False
+
+    if gdb_mi is None:
+        gdb_mi = str(config.gdb_mi_file)
+        gdb_mi_discovered = True
+    if rtt is None and config.rtt_file.exists():
+        rtt = str(config.rtt_file)
+        rtt_discovered = True
+
+    return {
+        "gdb_mi": gdb_mi,
+        "rtt": rtt,
+        "gdb_mi_discovered": gdb_mi_discovered,
+        "rtt_discovered": rtt_discovered,
+        "gdb_mi_explicit": explicit_gdb,
+        "rtt_explicit": explicit_rtt,
+    }
+
+
+def _missing_inputs_error(
+    command_name: str,
+    workspace_root: Path,
+    config: SessionConfig,
+    allow_snapshot_fallback: bool,
+) -> str:
+    lines = [
+        f"{command_name} could not auto-resolve an input source.",
+        "Either provide --snapshot-file / --gdb-mi, or run from a workspace with:",
+        f"  - Snapshot: {config.snapshot_file}",
+        f"  - GDB/MI: {config.gdb_mi_file}",
+        f"  - RTT: {config.rtt_file} (optional)",
+        f"Workspace root: {workspace_root}",
+    ]
+    if allow_snapshot_fallback:
+        lines.append("Tip: run from a folder with .dbgoracle/latest_snapshot.json or set --workspace-root.")
+    else:
+        lines.append("Tip: set --gdb-mi (and optional --rtt) or run from .dbgoracle with MI input files.")
+    return "\n".join(lines)
+
+
+def _emit_discovery_summary(
+    command_name: str,
+    values: dict[str, str | None],
+    discovered: dict[str, bool],
+) -> None:
+    discovered_items = [
+        (label, value)
+        for label, value in values.items()
+        if value and discovered.get(label, False)
+    ]
+    if not discovered_items:
+        return
+    print(
+        f"Auto-discovered input paths for {command_name}:",
+        file=sys.stderr,
+    )
+    for label, value in discovered_items:
+        print(f"- {label}: {value}", file=sys.stderr)
 
 
 def _read_rtt(rtt_path: str | None) -> str:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import os
 import tempfile
 import unittest
 from contextlib import redirect_stdout
@@ -24,6 +25,19 @@ class DebugOracleLiveCliTests(unittest.TestCase):
         self.assertIn("Snapshot ID: snap-", output)
         self.assertIn("RTT Capture:", output)
         self.assertIn("Transport Status: no managed capture detected", output)
+
+    def test_status_defaults_to_current_workspace_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._prepare_workspace(tmpdir)
+            previous = os.getcwd()
+            try:
+                os.chdir(tmpdir)
+                output = self._run_cli(["status"])
+            finally:
+                os.chdir(previous)
+
+        self.assertIn("Health: healthy", output)
+        self.assertIn("Transport Status: ", output)
 
     def test_status_command_keeps_missing_rtt_non_fatal(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

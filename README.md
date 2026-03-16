@@ -39,9 +39,9 @@ Use the example below to make first capture quick:
 - Build once:
 
 ```bash
-./dbgoracle observe --gdb-mi .dbgoracle/cortex-debug-shared-mi.log --rtt .dbgoracle/session.rtt
-./dbgoracle report --snapshot-file .dbgoracle/latest_snapshot.json
-./dbgoracle prompt --snapshot-file .dbgoracle/latest_snapshot.json --goal "Explain why the target stopped here"
+./dbgoracle observe
+./dbgoracle report
+./dbgoracle prompt --goal "Explain why the target stopped here"
 ```
 
 Before running `observe`, verify the MI file is receiving output:
@@ -73,15 +73,15 @@ Typical Cortex-Debug flow:
 
 ```bash
 ./dbgoracle capture-rtt --port 60001 --output /path/to/session.rtt
-./dbgoracle observe --gdb-mi /path/to/cortex-debug-shared-mi.log --rtt /path/to/session.rtt
-./dbgoracle report --snapshot-file .dbgoracle/latest_snapshot.json
-./dbgoracle prompt --snapshot-file .dbgoracle/latest_snapshot.json --goal "Explain why the target stopped here"
+./dbgoracle observe --workspace-root /path/to/workspace
+./dbgoracle report --workspace-root /path/to/workspace
+./dbgoracle prompt --workspace-root /path/to/workspace --goal "Explain why the target stopped here"
 ```
 
 Advanced or automation-oriented rendering:
 
 ```bash
-./dbgoracle snapshot --snapshot-file .dbgoracle/latest_snapshot.json --format json
+./dbgoracle snapshot --format json
 cat /path/to/cortex-debug-shared-mi.log | ./dbgoracle snapshot --gdb-mi-stream --format json
 printf "*stopped,reason=\"breakpoint-hit\",...\\n^done,register-values=[...]" | ./dbgoracle snapshot --gdb-mi - --format json
 ```
