@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -150,6 +151,10 @@ def collect_session_status(
         bundle = load_bundle(snapshot.path)
         snapshot_id = bundle.snapshot_id
         parse_warnings = list(bundle.parse_warnings)
+        critical_warning_count = _as_int(bundle.provenance.get("critical_warning_count"))
+        critical_warnings = _extract_critical_warnings(bundle, critical_warning_count)
+        if critical_warnings:
+            health_issues.extend(critical_warnings)
         for warning in parse_warnings:
             if _is_health_issue_warning(warning):
                 health_issues.append(warning)
@@ -350,8 +355,32 @@ def _is_health_issue_warning(message: str) -> bool:
             "could not parse snapshot json",
             "unable to parse mi record",
             "no gdb/mi input was provided",
+            "evidence quality is reduced",
         )
     )
+
+
+def _extract_critical_warnings(
+    bundle: "Any",
+    critical_warning_count: int | None,
+) -> list[str]:
+    if critical_warning_count is not None and critical_warning_count <= 0:
+        return []
+    raw = bundle.provenance.get("critical_warnings")
+    if isinstance(raw, list):
+        warnings = [item for item in raw if isinstance(item, str)]
+        if warnings:
+            return warnings
+    if critical_warning_count is None:
+        return []
+    return ["Parser reported unresolved critical events while processing the snapshot."]
+
+
+def _as_int(value: object) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _track_rtt_capture(

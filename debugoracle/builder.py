@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from collections import Counter
 import json
 from io import TextIOBase
 from datetime import datetime, timezone
@@ -91,12 +92,65 @@ def build_bundle_from_text(
     if not gdb_text:
         parse_warnings.append("No GDB/MI input was provided before building this snapshot.")
 
+    parse_event_counts = Counter[str]()
+    parse_event_severity = Counter[str]()
+    noise_pattern_counts = Counter[str]()
     for line_number, raw_line in enumerate(gdb_text.splitlines(), start=1):
         timestamp = utc_now()
+        stripped = raw_line.strip()
+        if stripped.startswith("(gdb)") and stripped == "(gdb)":
+            parse_event_counts["prompt-marker"] += 1
+            parse_event_severity["info"] += 1
+            non_mi_line_count += 1
+            parse_warnings.append(f"Line {line_number}: non-MI output retained as context")
+            session_events.append(
+                SessionEvent(
+                    source="gdb_mi",
+                    timestamp=timestamp,
+                    kind="prompt-marker",
+                    payload={
+                        "line": line_number,
+                        "raw": stripped,
+                        "normalized": stripped,
+                        "severity": "info",
+                    },
+                )
+            )
+            noise_pattern_counts[stripped] += 1
+            continue
+
+        if stripped.startswith("@\"") or stripped.startswith("~\""):
+            parse_event_counts["console-output"] += 1
+            parse_event_severity["info"] += 1
+            non_mi_line_count += 1
+            normalized = _strip_console_output(stripped)
+            parse_warnings.append(f"Line {line_number}: non-MI output retained as context")
+            session_events.append(
+                SessionEvent(
+                    source="gdb_mi",
+                    timestamp=timestamp,
+                    kind="console-output",
+                    payload={
+                        "line": line_number,
+                        "raw": stripped,
+                        "normalized": normalized,
+                        "severity": "info",
+                    },
+                )
+            )
+            noise_pattern_counts[normalized[:64]] += 1
+            continue
+
         try:
             record = parse_mi_record(raw_line)
         except MIParseError as error:
             mi_parse_error_count += 1
+            kind = "mi-parse-error-unhandled"
+            severity = "warn"
+            if _is_likely_mi_line(raw_line):
+                kind = "mi-parse-error-known"
+            parse_event_counts[kind] += 1
+            parse_event_severity[severity] += 1
             parse_warnings.append(
                 f"Line {line_number}: unable to parse MI record: {error}"
             )
@@ -104,35 +158,48 @@ def build_bundle_from_text(
                 SessionEvent(
                     source="gdb_mi",
                     timestamp=timestamp,
-                    kind="parse_error",
-                    payload={"line": line_number, "raw": raw_line, "error": str(error)},
+                    kind=kind,
+                    payload={
+                        "line": line_number,
+                        "raw": raw_line,
+                        "error": str(error),
+                        "severity": severity,
+                    },
                 )
             )
             continue
 
         if record is None:
-            stripped = raw_line.strip()
             if stripped:
+                parse_event_counts["non_mi_line"] += 1
+                parse_event_severity["info"] += 1
                 non_mi_line_count += 1
                 session_events.append(
                     SessionEvent(
                         source="gdb_mi",
                         timestamp=timestamp,
                         kind="non_mi_line",
-                        payload={"line": line_number, "raw": stripped},
+                        payload={
+                            "line": line_number,
+                            "raw": stripped,
+                            "severity": "info",
+                        },
                     )
                 )
                 parse_warnings.append(
                     f"Line {line_number}: non-MI output retained as context"
                 )
+                noise_pattern_counts[stripped[:64]] += 1
             continue
 
         mi_record_count += 1
+        parse_event_counts[f"{record.prefix}{record.kind}"] += 1
+        parse_event_severity["info"] += 1
         event = SessionEvent(
             source="gdb_mi",
             timestamp=timestamp,
             kind=f"{record.prefix}{record.kind}",
-            payload={"line": line_number, **record.data},
+            payload={"line": line_number, "severity": "info", **record.data},
         )
         session_events.append(event)
 
@@ -166,6 +233,36 @@ def build_bundle_from_text(
 
     if not recent_rtt:
         parse_warnings.append("No RTT lines were available for this snapshot.")
+        parse_event_counts["missing-rtt"] += 1
+        parse_event_severity["warn"] += 1
+
+    critical_events: list[str] = []
+    if not gdb_text:
+        critical_events.append("No GDB/MI input was provided before building this snapshot.")
+        parse_event_counts["critical-missing-input"] += 1
+        parse_event_severity["warn"] += 1
+    if latest_stop is None:
+        critical_events.append("Could not recover a stop context from the transcript.")
+    if mi_parse_error_count:
+        critical_events.append(f"Encountered {mi_parse_error_count} MI parse errors.")
+        parse_event_counts["critical-mi-parse-errors"] += mi_parse_error_count
+        parse_event_severity["warn"] += 1
+    critical_warning_count = len(critical_events)
+    quality_score = _compute_evidence_quality_score(
+        latest_stop=latest_stop,
+        latest_stack=latest_stack,
+        latest_registers=latest_registers,
+        latest_watched=latest_watched,
+        parse_error_count=mi_parse_error_count,
+        warning_count=len(parse_warnings),
+    )
+
+    non_mi_top_patterns = [
+        f"{pattern} x{count}"
+        for pattern, count in noise_pattern_counts.most_common(8)
+    ]
+    known_event_counts = {key: int(value) for key, value in parse_event_counts.items()}
+    severity_counts = {key: int(value) for key, value in parse_event_severity.items()}
 
     raw_export: dict[str, Any] = {}
     if export_dir is not None:
@@ -208,6 +305,13 @@ def build_bundle_from_text(
             "mi_record_count": mi_record_count,
             "non_mi_line_count": non_mi_line_count,
             "mi_parse_error_count": mi_parse_error_count,
+            "evidence_quality_score": quality_score,
+            "parse_event_counts": known_event_counts,
+            "parse_event_severity_counts": severity_counts,
+            "critical_warnings": critical_events,
+            "critical_warning_count": critical_warning_count,
+            "non_mi_patterns": non_mi_top_patterns,
+            "raw_line_warning_count": non_mi_line_count,
             **raw_export,
         },
         session_events=session_events,
@@ -356,6 +460,60 @@ def _select_recent_rtt(rtt_text: str, rtt_window: int) -> list[str]:
     if rtt_window <= 0:
         return []
     return lines[-rtt_window:] if len(lines) > rtt_window else lines
+
+
+def _is_likely_mi_line(line: str) -> bool:
+    cleaned = line.strip()
+    cursor = 0
+    while cursor < len(cleaned) and cleaned[cursor].isdigit():
+        cursor += 1
+    if cursor:
+        cleaned = cleaned[cursor:].lstrip()
+    return bool(cleaned) and cleaned[0] in {"^", "*", "=", "+"}
+
+
+def _strip_console_output(line: str) -> str:
+    if not (line.startswith("@\"") or line.startswith("~\"")):
+        return line
+    start = 2
+    if not line.endswith("\""):
+        return line[start:]
+    body = line[start:-1]
+    chars: list[str] = []
+    cursor = 0
+    while cursor < len(body):
+        char = body[cursor]
+        if char == "\\" and cursor + 1 < len(body):
+            cursor += 1
+            escaped = body[cursor]
+            chars.append({"n": "\n", "r": "\r", "t": "\t", '"': '"', "\\": "\\"}.get(escaped, escaped))
+            cursor += 1
+            continue
+        chars.append(char)
+        cursor += 1
+    return "".join(chars)
+
+
+def _compute_evidence_quality_score(
+    latest_stop: dict[str, Any] | None,
+    latest_stack: list[StackFrame],
+    latest_registers: dict[str, str],
+    latest_watched: dict[str, str],
+    parse_error_count: int,
+    warning_count: int,
+) -> int:
+    score = 100
+    if latest_stop is None:
+        score -= 30
+    if not latest_stack:
+        score -= 20
+    if not latest_registers:
+        score -= 20
+    if not latest_watched:
+        score -= 15
+    score -= min(25, parse_error_count * 8)
+    score -= min(5, warning_count // 4)
+    return max(0, score)
 
 
 def _read_text_file(path: str, errors: str = "strict", *, required: bool = False) -> str:

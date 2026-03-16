@@ -36,6 +36,76 @@ class DebugOracleCliTests(unittest.TestCase):
         self.assertEqual(payload["watched_values"]["system_state"], "READY")
         self.assertEqual(len(payload["recent_rtt"]), 3)
 
+    def test_snapshot_classifies_noise_lines_without_masking_stop_context(self) -> None:
+        noisy_log = (
+            "(gdb)\n"
+            '@"Unable to match requested speed 500 kHz, using 480 kHz\\n"\n'
+            "17+download,{section=\".isr_vector\",section-size=\"400\",total-size=\"800\"}\n"
+            "@\"rtt: Listening\\n\"\n"
+            "random-non-mi-line\n"
+            + (FIXTURES / "sample.mi").read_text(encoding="utf-8")
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            noisy_path = Path(tmpdir) / "noisy.mi"
+            noisy_path.write_text(noisy_log, encoding="utf-8")
+            output = self._run_cli(
+                [
+                    "snapshot",
+                    "--gdb-mi",
+                    str(noisy_path),
+                    "--rtt",
+                    str(FIXTURES / "sample.rtt"),
+                    "--format",
+                    "json",
+                ]
+            )
+            payload = json.loads(output)
+            counts = payload["provenance"]["parse_event_counts"]
+            severity_counts = payload["provenance"]["parse_event_severity_counts"]
+
+        self.assertEqual(payload["stop_reason"], "breakpoint-hit")
+        self.assertEqual(payload["pc"], "0x08000100")
+        self.assertEqual(counts.get("prompt-marker"), 1)
+        self.assertEqual(counts.get("console-output", 0), 2)
+        self.assertNotIn("mi-parse-error-known", counts)
+        self.assertNotIn("mi-parse-error-unhandled", counts)
+        self.assertEqual(counts.get("non_mi_line", 0), 1)
+        self.assertEqual(payload["provenance"]["non_mi_line_count"], 4)
+        self.assertEqual(payload["provenance"]["mi_parse_error_count"], 0)
+        self.assertEqual(severity_counts.get("warn", 0), 0)
+        self.assertGreaterEqual(severity_counts.get("info", 0), 8)
+
+    def test_report_summary_prefers_actionable_metrics_over_raw_noise(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            noisy_log = (
+                "(gdb)\n"
+                '@"Unable to match requested speed 500 kHz, using 480 kHz\\n"\n'
+                "17+download,{section=\".isr_vector\",section-size=\"400\",total-size=\"800\"}\n"
+                "@\"rtt: Listening\\n\"\n"
+                + (FIXTURES / "sample.mi").read_text(encoding="utf-8")
+            )
+            noisy_path = Path(tmpdir) / "noisy.mi"
+            noisy_path.write_text(noisy_log, encoding="utf-8")
+            snapshot_path = Path(tmpdir) / "snapshot.json"
+            self._run_cli(
+                [
+                    "observe",
+                    "--gdb-mi",
+                    str(noisy_path),
+                    "--rtt",
+                    str(FIXTURES / "sample.rtt"),
+                    "--state-out",
+                    str(snapshot_path),
+                ]
+            )
+            report_output = self._run_cli(["report", "--snapshot-file", str(snapshot_path)])
+
+        self.assertIn("Parsing Summary", report_output)
+        self.assertIn("Evidence Quality Score", report_output)
+        self.assertIn("Top non-MI patterns", report_output)
+        self.assertIn("Event types:", report_output)
+        self.assertIn("Raw Non-MI Excerpt", report_output)
+
     def test_prompt_markdown_contains_goal_intent_and_citations(self) -> None:
         output = self._run_cli(
             [

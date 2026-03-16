@@ -35,7 +35,7 @@ def parse_mi_record(line: str) -> MIRecord | None:
     body = line[1:]
     if "," in body:
         kind, payload = body.split(",", 1)
-        data = _ValueParser(payload).parse_results()
+        data = _ValueParser(payload).parse_payload()
     else:
         kind = body
         data = {}
@@ -64,6 +64,16 @@ class _ValueParser:
                 results[key] = value
             self._consume_if(",")
         return results
+
+    def parse_payload(self) -> dict[str, object]:
+        self._skip_ws()
+        if self._eof():
+            return {}
+        if self._peek() == "{":
+            return self._parse_tuple()
+        if self._peek() == "[":
+            return {"result": self._parse_list()}
+        return self.parse_results()
 
     def _parse_value(self) -> object:
         char = self._peek()

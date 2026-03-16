@@ -211,6 +211,9 @@ def _summary(bundle: EvidenceBundle, request: InvestigationRequest) -> str:
         f"- RTT Window Included: {len(bundle.recent_rtt)} lines (configured window {log_window})",
         f"- Requested Goal: {request.goal_text}",
     ]
+    evidence_quality = bundle.provenance.get("evidence_quality_score")
+    if evidence_quality is not None:
+        lines.append(f"- Evidence Quality Score: {evidence_quality}/100")
     if request.detail_level == "full":
         lines.append("- Detail Mode: full")
     else:
@@ -303,10 +306,17 @@ def _unknowns(bundle: EvidenceBundle, request: InvestigationRequest | None) -> l
         unknowns.append("No watched values or locals were captured in the parsed transcript.")
     if not bundle.recent_rtt:
         unknowns.append("No RTT lines were available for this snapshot.")
+    if evidence_quality := _evidence_quality_score(bundle):
+        if evidence_quality < 60:
+            unknowns.append(
+                f"Evidence quality is reduced ({evidence_quality}/100), which may hide state transitions."
+            )
     if mi_parse_error_count:
         unknowns.append(
             f"MI parse errors detected: {mi_parse_error_count} (see Parsing Summary)."
         )
+    for warning in _critical_warnings(bundle):
+        unknowns.append(f"Critical parser warning: {warning}")
     if request and request.intent_text is None:
         unknowns.append("No intended system state text was provided.")
     if request and len(request.goal_text.strip()) < 10:
@@ -370,26 +380,63 @@ def _parsing_summary_counts(bundle: EvidenceBundle) -> tuple[int, int, int]:
     mi_record_count = int(bundle.provenance.get("mi_record_count", 0) or 0)
     non_mi_line_count = int(bundle.provenance.get("non_mi_line_count", 0) or 0)
     mi_parse_error_count = int(bundle.provenance.get("mi_parse_error_count", 0) or 0)
+    parse_event_counts = _coerce_count_map(bundle.provenance.get("parse_event_counts"))
 
-    if not any((mi_record_count, non_mi_line_count, mi_parse_error_count)):
-        for event in bundle.session_events:
-            if event.kind == "non_mi_line":
-                non_mi_line_count += 1
-            elif event.kind == "parse_error":
-                mi_parse_error_count += 1
-            else:
-                mi_record_count += 1
+    if not mi_record_count and parse_event_counts:
+        mi_record_count = sum(
+            value
+            for kind, value in parse_event_counts.items()
+            if kind
+            not in {
+                "non_mi_line",
+                "prompt-marker",
+                "console-output",
+                "missing-rtt",
+                "critical-missing-input",
+                "critical-mi-parse-errors",
+            }
+            and not kind.startswith("mi-parse-error")
+        )
+    if not non_mi_line_count and parse_event_counts:
+        non_mi_line_count = sum(
+            parse_event_counts.get(kind, 0)
+            for kind in ("non_mi_line", "prompt-marker", "console-output")
+        )
+    if not mi_parse_error_count and parse_event_counts:
+        mi_parse_error_count = sum(
+            value
+            for kind, value in parse_event_counts.items()
+            if kind.startswith("mi-parse-error")
+        )
 
     return mi_record_count, non_mi_line_count, mi_parse_error_count
 
 
 def _parsing_summary_section(bundle: EvidenceBundle, plain: bool = False) -> str:
     mi_record_count, non_mi_line_count, mi_parse_error_count = _parsing_summary_counts(bundle)
+    parse_event_counts = _coerce_count_map(bundle.provenance.get("parse_event_counts"))
+    parse_event_severity_counts = _coerce_count_map(
+        bundle.provenance.get("parse_event_severity_counts")
+    )
+    parse_patterns = _coerce_str_list(bundle.provenance.get("non_mi_patterns"))
+    quality_score = _evidence_quality_score(bundle)
     lines = [
         f"- MI records parsed: {mi_record_count}",
         f"- Non-MI lines retained: {non_mi_line_count}",
         f"- MI parse errors: {mi_parse_error_count}",
     ]
+    if quality_score is not None:
+        lines.append(f"- Evidence Quality Score: {quality_score}/100")
+    if parse_event_severity_counts:
+        warn_count = parse_event_severity_counts.get("warn", 0)
+        info_count = parse_event_severity_counts.get("info", 0)
+        lines.append(f"- Event severity: info={info_count}, warn={warn_count}")
+    if parse_patterns:
+        lines.extend(["- Top non-MI patterns:"] + [f"  - {item}" for item in parse_patterns[:6]])
+    if parse_event_counts:
+        lines.append("- Event types:")
+        for kind in sorted(parse_event_counts):
+            lines.append(f"  - {kind}: {parse_event_counts[kind]}")
     return "\n".join(lines)
 
 
@@ -397,12 +444,47 @@ def _non_mi_excerpt(bundle: EvidenceBundle, limit: int = 50) -> list[str]:
     lines = [
         event.payload.get("raw", "")
         for event in bundle.session_events
-        if event.kind == "non_mi_line"
+        if event.kind in {"non_mi_line", "console-output", "prompt-marker"}
     ]
     lines = [line for line in lines if line]
     if limit <= 0:
         return []
     return lines[-limit:]
+
+
+def _evidence_quality_score(bundle: EvidenceBundle) -> int | None:
+    value = bundle.provenance.get("evidence_quality_score")
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _critical_warnings(bundle: EvidenceBundle) -> list[str]:
+    raw = bundle.provenance.get("critical_warnings")
+    if isinstance(raw, list):
+        return [item for item in raw if isinstance(item, str)]
+    return []
+
+
+def _coerce_count_map(value: object) -> dict[str, int]:
+    if not isinstance(value, dict):
+        return {}
+    counts: dict[str, int] = {}
+    for key, item in value.items():
+        if not isinstance(key, str):
+            continue
+        try:
+            counts[key] = int(item)
+        except (TypeError, ValueError):
+            counts[key] = 0
+    return counts
+
+
+def _coerce_str_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, str)]
 
 
 def _with_parse_warnings(

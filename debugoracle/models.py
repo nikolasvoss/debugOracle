@@ -88,8 +88,8 @@ class EvidenceBundle:
             watched_values=_as_str_dict(raw.get("watched_values")),
             recent_rtt=[_as_optional_str(line, "") for line in _as_list(raw.get("recent_rtt"), []) if line is not None],
             parse_warnings=[_as_optional_str(item, "") for item in _as_list(raw.get("parse_warnings"), []) if item is not None],
-            source_context=_as_str_dict(raw.get("source_context")),
-            provenance=_as_str_dict(raw.get("provenance")),
+            source_context=_as_any_dict(raw.get("source_context")),
+            provenance=_as_any_dict(raw.get("provenance")),
             session_events=events,
         )
 
@@ -131,6 +131,18 @@ def _as_str_dict(value: object) -> dict[str, str]:
         if key_text is None:
             continue
         parsed[key_text] = _as_optional_str(item, "")
+    return parsed
+
+
+def _as_any_dict(value: object) -> dict[str, object]:
+    if not isinstance(value, dict):
+        return {}
+    parsed: dict[str, object] = {}
+    for key, item in value.items():
+        key_text = _as_optional_str(key)
+        if key_text is None:
+            continue
+        parsed[key_text] = item
     return parsed
 
 

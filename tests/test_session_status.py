@@ -97,6 +97,29 @@ class SessionStatusTests(unittest.TestCase):
         self.assertIn("No RTT lines were available", status.parse_warnings[0])
         self.assertIn("RTT file not found", "\n".join(status.warnings))
 
+    def test_collect_session_status_keeps_non_mi_noise_as_warning_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            session_dir = Path(tmpdir) / ".dbgoracle"
+            session_dir.mkdir()
+            noisy_log = (
+                "(gdb)\n"
+                '@"Unable to match requested speed 500 kHz, using 480 kHz\\n"\n'
+                "17+download,{section=\".text\",section-size=\"1\",total-size=\"1\"}\n"
+                + (FIXTURES / "sample.mi").read_text(encoding="utf-8")
+            )
+            (session_dir / "cortex-debug-shared-mi.log").write_text(noisy_log, encoding="utf-8")
+            (session_dir / "session.rtt").write_text(
+                (FIXTURES / "sample.rtt").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            bundle = build_bundle_from_files(str(session_dir / "cortex-debug-shared-mi.log"), str(session_dir / "session.rtt"))
+            save_bundle(bundle, str(session_dir / "latest_snapshot.json"))
+
+            status = collect_session_status(SessionConfig.from_workspace(tmpdir))
+
+        self.assertEqual(status.health, "healthy")
+        self.assertGreater(status.parse_warning_count, 0)
+
     def test_collect_session_status_reads_rtt_capture_sidecar(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = self._prepare_workspace(tmpdir)
