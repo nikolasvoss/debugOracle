@@ -45,8 +45,9 @@ test -f .dbgoracle/session.rtt && echo "RTT file path exists" || echo "RTT log n
 ## 2) Run a bounded capture
 
 - Start your Cortex-Debug session.
-- Ensure `.dbgoracle` exists before starting by using the `Prepare debug logs` task from `tasks.json.example`.
-- In a second terminal, start the supported RTT capture path after Cortex-Debug/OpenOCD announces the RTT TCP port:
+- Ensure `.dbgoracle` exists before starting by using the `DebugOracle: Prelaunch` task from `tasks.json.example`.
+- The example tasks auto-start `capture-rtt` and stop it when the debug session ends (POSIX shells only).
+- If you are not using the tasks, start the supported RTT capture path after Cortex-Debug/OpenOCD announces the RTT TCP port:
 
 ```bash
 ./dbgoracle capture-rtt --port 60001 --output .dbgoracle/session.rtt
@@ -97,6 +98,7 @@ Then hand it to ChatGPT:
 - Cortex-Debug launch JSON schemas vary slightly by extension/version; keep only the MI/RTT paths and shared-logging settings aligned with your installed version.
 - Treat Cortex-Debug `rttConfig.logFile` as best-effort only. The supported robust path is `./dbgoracle capture-rtt`.
 - If the RTT file stays empty, inspect `.dbgoracle/session.rtt.state.json` or run `./dbgoracle status` to see whether the helper connected, stayed idle, or hit an error.
+- If a debug session ends unexpectedly, run the `Stop RTT capture` task to clean up the PID file.
 - If logs are stale, remove old `.dbgoracle/*` files before next run.
 - For security, treat MI/RTT logs as potentially sensitive traces (register values,
   call frames, and firmware-related strings).

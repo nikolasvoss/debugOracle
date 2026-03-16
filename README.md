@@ -29,11 +29,7 @@ Use the example below to make first capture quick:
 
 - Merge the entry from `examples/cortex-debug/launch.jsonc.example` into `.vscode/launch.json` (do not replace other launch configurations).
 - Merge `examples/cortex-debug/tasks.json.example` into `.vscode/tasks.json` so `.dbgoracle` is created automatically before each debug launch.
-- Start the supported RTT helper in a second terminal after OpenOCD exposes the RTT TCP port:
-
-```bash
-./dbgoracle capture-rtt --port 60001 --output .dbgoracle/session.rtt
-```
+- The example tasks auto-start `capture-rtt` and stop it when the debug session ends (POSIX shells only).
 
 - Run one focused debug stop.
 - Build once:
@@ -96,6 +92,13 @@ printf "*stopped,reason=\"breakpoint-hit\",...\\n^done,register-values=[...]" | 
 - Attaching a machine-readable artifact to an issue or test case
 
 Raw JSON is not required for the everyday `observe -> report -> prompt` workflow.
+
+### Raw input export on parse warnings
+
+When DebugOracle detects parse warnings, it now writes raw input sidecars next to the
+snapshot/session artifacts and records their paths in the snapshot provenance. You can
+also force a raw export with `--export-raw` on `observe`, `snapshot`, `report`, or `prompt`.
+Raw exports may include sensitive data from your debug logs.
 
 ## Roadmap and low-level verification
 

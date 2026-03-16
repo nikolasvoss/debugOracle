@@ -2,12 +2,36 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "DebugOracle: Prelaunch",
+      "dependsOn": [
+        "Prepare debug logs",
+        "Start RTT capture"
+      ],
+      "dependsOrder": "sequence",
+      "problemMatcher": []
+    },
+    {
       "label": "Prepare debug logs",
       "type": "shell",
       "command": "mkdir -p \"${workspaceFolder}/.dbgoracle\" && : > \"${workspaceFolder}/.dbgoracle/cortex-debug-shared-mi.log\" && : > \"${workspaceFolder}/.dbgoracle/session.rtt\" && rm -f \"${workspaceFolder}/.dbgoracle/session.rtt.state.json\"",
       "windows": {
         "command": "New-Item -ItemType Directory -Force -Path \"${workspaceFolder}\\\\.dbgoracle\" | Out-Null; New-Item -ItemType File -Force -Path \"${workspaceFolder}\\\\.dbgoracle\\\\cortex-debug-shared-mi.log\" | Out-Null; New-Item -ItemType File -Force -Path \"${workspaceFolder}\\\\.dbgoracle\\\\session.rtt\" | Out-Null; Remove-Item -ErrorAction SilentlyContinue \"${workspaceFolder}\\\\.dbgoracle\\\\session.rtt.state.json\""
       },
+      "problemMatcher": []
+    },
+    {
+      "label": "Start RTT capture",
+      "type": "shell",
+      "command": "bash -lc 'mkdir -p \"${workspaceFolder}/.dbgoracle\"; rm -f \"${workspaceFolder}/.dbgoracle/session.rtt.pid\"; ./dbgoracle capture-rtt --port 60001 --output \"${workspaceFolder}/.dbgoracle/session.rtt\" --state \"${workspaceFolder}/.dbgoracle/session.rtt.state.json\" & echo $! > \"${workspaceFolder}/.dbgoracle/session.rtt.pid\"'",
+      "windows": {
+        "command": "powershell -NoProfile -Command \"Write-Host 'RTT auto-capture is POSIX-only. Start ./dbgoracle capture-rtt manually if needed.'\""
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Stop RTT capture",
+      "type": "shell",
+      "command": "bash -lc 'pidfile=\"${workspaceFolder}/.dbgoracle/session.rtt.pid\"; if [ -f \"$pidfile\" ]; then pid=$(cat \"$pidfile\" || true); if [ -n \"$pid\" ] && kill -0 \"$pid\" 2>/dev/null; then kill \"$pid\" || true; fi; rm -f \"$pidfile\"; fi'",
       "problemMatcher": []
     }
   ]

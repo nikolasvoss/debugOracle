@@ -3,7 +3,7 @@ model_reasoning_effort = "medium"
 
 [mcp_servers.filesystem]
 command = "npx"
-args = ["-y", "@modelcontextprotocol/server-filesystem", "/home/niko/Dokumente/Bastelei/stm32_1"]
+args = ["-y", "@modelcontextprotocol/server-filesystem", "."]
 # Narrow to the minimal file operations you actually use
 enabled_tools = ["read_file", "list_directory", "search_files"]
 
@@ -12,7 +12,7 @@ url = "https://developers.openai.com/mcp"
 
 [mcp_servers.git]
 command = "npx"
-args = ["-y", "@modelcontextprotocol/server-git", "/home/niko/Dokumente/Bastelei/stm32_1"]
+args = ["-y", "@modelcontextprotocol/server-git", "."]
 
 [mcp_servers.shell-command]
 command = "npx"
