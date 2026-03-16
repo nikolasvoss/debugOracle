@@ -119,7 +119,8 @@ def _render_prompt_text(bundle: EvidenceBundle, package: PromptPackage) -> str:
 
 def _render_report_markdown(bundle: EvidenceBundle) -> str:
     return "\n".join(
-        [
+        _with_parse_warnings(
+            [
             "# DebugOracle Evidence Report",
             "",
             _session_summary(bundle),
@@ -136,15 +137,25 @@ def _render_report_markdown(bundle: EvidenceBundle) -> str:
             "## Recent RTT",
             _lines_section(bundle.recent_rtt),
             "",
+            "## Parsing Summary",
+            _parsing_summary_section(bundle),
+            "",
+            "## Raw Non-MI Excerpt",
+            _lines_section(_non_mi_excerpt(bundle)),
+            "",
             "## Unknowns And Gaps",
             _render_bullets(_unknowns(bundle, None), bullet="- "),
-        ]
+            ],
+            bundle.parse_warnings,
+            header="## Parse Warnings",
+        )
     ).rstrip() + "\n"
 
 
 def _render_report_text(bundle: EvidenceBundle) -> str:
     return "\n".join(
-        [
+        _with_parse_warnings(
+            [
             "DebugOracle Evidence Report",
             "",
             _session_summary(bundle, plain=True),
@@ -161,9 +172,18 @@ def _render_report_text(bundle: EvidenceBundle) -> str:
             "Recent RTT:",
             _lines_section(bundle.recent_rtt, plain=True),
             "",
+            "Parsing Summary:",
+            _parsing_summary_section(bundle, plain=True),
+            "",
+            "Raw Non-MI Excerpt:",
+            _lines_section(_non_mi_excerpt(bundle), plain=True),
+            "",
             "Unknowns And Gaps:",
             _render_bullets(_unknowns(bundle, None)),
-        ]
+            ],
+            bundle.parse_warnings,
+            header="Parse Warnings:",
+        )
     ).rstrip() + "\n"
 
 
@@ -217,15 +237,26 @@ def _appendix(bundle: EvidenceBundle, request: InvestigationRequest) -> str:
         "### Recent RTT",
         _lines_section(recent_rtt),
         "",
+        "### Parsing Summary",
+        _parsing_summary_section(bundle),
+        "",
+        "### Raw Non-MI Excerpt",
+        _lines_section(_non_mi_excerpt(bundle)),
+        "",
         "### Source Context Placeholder",
         _mapping_section(bundle.source_context),
         "",
         "### Provenance",
         _mapping_section(bundle.provenance),
-        "",
-        "### Parse Warnings",
-        _lines_section(bundle.parse_warnings),
     ]
+    if bundle.parse_warnings:
+        sections.extend(
+            [
+                "",
+                "### Parse Warnings",
+                _lines_section(bundle.parse_warnings),
+            ]
+        )
     return "\n".join(sections).rstrip()
 
 
@@ -261,6 +292,7 @@ def _citations(bundle: EvidenceBundle) -> list[str]:
 
 def _unknowns(bundle: EvidenceBundle, request: InvestigationRequest | None) -> list[str]:
     unknowns: list[str] = []
+    _, _, mi_parse_error_count = _parsing_summary_counts(bundle)
     if bundle.stop_reason is None:
         unknowns.append("No stop reason was found in the parsed GDB/MI transcript.")
     if not bundle.frames:
@@ -271,9 +303,9 @@ def _unknowns(bundle: EvidenceBundle, request: InvestigationRequest | None) -> l
         unknowns.append("No watched values or locals were captured in the parsed transcript.")
     if not bundle.recent_rtt:
         unknowns.append("No RTT lines were available for this snapshot.")
-    if bundle.parse_warnings:
+    if mi_parse_error_count:
         unknowns.append(
-            f"MI/RTT parsing warnings: {len(bundle.parse_warnings)} observed."
+            f"MI parse errors detected: {mi_parse_error_count} (see Parsing Summary)."
         )
     if request and request.intent_text is None:
         unknowns.append("No intended system state text was provided.")
@@ -332,3 +364,53 @@ def _lines_section(lines: Iterable[str], plain: bool = False) -> str:
 
 def _render_bullets(items: Iterable[str], bullet: str = "- ") -> str:
     return "\n".join(f"{bullet}{item}" for item in items)
+
+
+def _parsing_summary_counts(bundle: EvidenceBundle) -> tuple[int, int, int]:
+    mi_record_count = int(bundle.provenance.get("mi_record_count", 0) or 0)
+    non_mi_line_count = int(bundle.provenance.get("non_mi_line_count", 0) or 0)
+    mi_parse_error_count = int(bundle.provenance.get("mi_parse_error_count", 0) or 0)
+
+    if not any((mi_record_count, non_mi_line_count, mi_parse_error_count)):
+        for event in bundle.session_events:
+            if event.kind == "non_mi_line":
+                non_mi_line_count += 1
+            elif event.kind == "parse_error":
+                mi_parse_error_count += 1
+            else:
+                mi_record_count += 1
+
+    return mi_record_count, non_mi_line_count, mi_parse_error_count
+
+
+def _parsing_summary_section(bundle: EvidenceBundle, plain: bool = False) -> str:
+    mi_record_count, non_mi_line_count, mi_parse_error_count = _parsing_summary_counts(bundle)
+    lines = [
+        f"- MI records parsed: {mi_record_count}",
+        f"- Non-MI lines retained: {non_mi_line_count}",
+        f"- MI parse errors: {mi_parse_error_count}",
+    ]
+    return "\n".join(lines)
+
+
+def _non_mi_excerpt(bundle: EvidenceBundle, limit: int = 50) -> list[str]:
+    lines = [
+        event.payload.get("raw", "")
+        for event in bundle.session_events
+        if event.kind == "non_mi_line"
+    ]
+    lines = [line for line in lines if line]
+    if limit <= 0:
+        return []
+    return lines[-limit:]
+
+
+def _with_parse_warnings(
+    sections: list[str],
+    parse_warnings: list[str],
+    *,
+    header: str,
+) -> list[str]:
+    if not parse_warnings:
+        return sections
+    return [*sections, "", header, _lines_section(parse_warnings)]

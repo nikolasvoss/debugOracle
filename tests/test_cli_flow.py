@@ -487,7 +487,8 @@ class DebugOracleCliTests(unittest.TestCase):
         finally:
             Path(path).unlink()
         self.assertIn("DebugOracle Evidence Report", output)
-        self.assertIn("MI/RTT parsing warnings", output)
+        self.assertIn("Parse Warnings", output)
+        self.assertIn("Could not parse snapshot JSON", output)
 
     def _run_cli(
         self,

@@ -69,6 +69,9 @@ def build_bundle_from_text(
     latest_watched: dict[str, str] = {}
     session_events: list[SessionEvent] = []
     parse_warnings: list[str] = []
+    mi_record_count = 0
+    non_mi_line_count = 0
+    mi_parse_error_count = 0
 
     if not gdb_text:
         parse_warnings.append("No GDB/MI input was provided before building this snapshot.")
@@ -78,6 +81,7 @@ def build_bundle_from_text(
         try:
             record = parse_mi_record(raw_line)
         except MIParseError as error:
+            mi_parse_error_count += 1
             parse_warnings.append(
                 f"Line {line_number}: unable to parse MI record: {error}"
             )
@@ -94,6 +98,7 @@ def build_bundle_from_text(
         if record is None:
             stripped = raw_line.strip()
             if stripped:
+                non_mi_line_count += 1
                 session_events.append(
                     SessionEvent(
                         source="gdb_mi",
@@ -102,11 +107,9 @@ def build_bundle_from_text(
                         payload={"line": line_number, "raw": stripped},
                     )
                 )
-                parse_warnings.append(
-                    f"Line {line_number}: non-MI output retained as context"
-                )
             continue
 
+        mi_record_count += 1
         event = SessionEvent(
             source="gdb_mi",
             timestamp=timestamp,
@@ -171,6 +174,9 @@ def build_bundle_from_text(
             "rtt_total_line_count": len([line for line in rtt_text.splitlines()]),
             "rtt_window": rtt_window,
             "parse_warning_count": len(parse_warnings),
+            "mi_record_count": mi_record_count,
+            "non_mi_line_count": non_mi_line_count,
+            "mi_parse_error_count": mi_parse_error_count,
         },
         session_events=session_events,
         parse_warnings=parse_warnings,

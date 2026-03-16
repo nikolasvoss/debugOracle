@@ -17,7 +17,18 @@ class MIRecord:
 
 def parse_mi_record(line: str) -> MIRecord | None:
     line = line.strip()
-    if not line or line[0] not in {"^", "*", "="}:
+    if not line:
+        return None
+
+    cursor = 0
+    while cursor < len(line) and line[cursor].isdigit():
+        cursor += 1
+    if cursor:
+        line = line[cursor:].lstrip()
+        if not line:
+            return None
+
+    if line[0] not in {"^", "*", "=", "+"}:
         return None
 
     prefix = line[0]
