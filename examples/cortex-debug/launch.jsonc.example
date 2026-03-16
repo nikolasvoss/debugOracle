@@ -55,10 +55,12 @@
         "polling_interval": 10,
         "decoders": [
           {
+            // Keep this decoder for the RTT console/channel selection.
+            // DebugOracle should capture RTT into .dbgoracle/session.rtt via
+            // `./dbgoracle capture-rtt`, not via Cortex-Debug's best-effort logFile.
             "label": "RTT",
             "type": "console",
             "port": 0,
-            "logFile": "${workspaceFolder}/.dbgoracle/session.rtt",
             "timestamp": true
           }
         ]

@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .builder import load_bundle
+from .rtt import default_state_path as default_rtt_state_path
+from .rtt import load_capture_state
 
 DEFAULT_SESSION_DIR = ".dbgoracle"
 DEFAULT_SNAPSHOT_FILENAME = "latest_snapshot.json"
@@ -20,6 +22,7 @@ class SessionConfig:
     snapshot_file: Path
     gdb_mi_file: Path
     rtt_file: Path
+    rtt_state_file: Path
     stale_after_seconds: int = DEFAULT_STALE_AFTER_SECONDS
 
     @classmethod
@@ -29,15 +32,22 @@ class SessionConfig:
         snapshot_file: str | Path | None = None,
         gdb_mi_file: str | Path | None = None,
         rtt_file: str | Path | None = None,
+        rtt_state_file: str | Path | None = None,
         stale_after_seconds: int = DEFAULT_STALE_AFTER_SECONDS,
     ) -> "SessionConfig":
         root = Path(workspace_root).resolve()
         session_root = root / DEFAULT_SESSION_DIR
+        rtt_path = _resolve_path(root, rtt_file, session_root / DEFAULT_RTT_FILENAME)
         return cls(
             workspace_root=root,
             snapshot_file=_resolve_path(root, snapshot_file, session_root / DEFAULT_SNAPSHOT_FILENAME),
             gdb_mi_file=_resolve_path(root, gdb_mi_file, session_root / DEFAULT_GDB_MI_FILENAME),
-            rtt_file=_resolve_path(root, rtt_file, session_root / DEFAULT_RTT_FILENAME),
+            rtt_file=rtt_path,
+            rtt_state_file=_resolve_path(
+                root,
+                rtt_state_file,
+                default_rtt_state_path(rtt_path),
+            ),
             stale_after_seconds=max(0, stale_after_seconds),
         )
 
@@ -56,6 +66,25 @@ class ArtifactStatus:
     size_bytes: int | None
 
 
+@dataclass(frozen=True)
+class RttCaptureStatus:
+    path: str
+    exists: bool
+    updated_at: str | None
+    age_seconds: int | None
+    stale: bool
+    size_bytes: int | None
+    source: str | None = None
+    host: str | None = None
+    port: int | None = None
+    status: str | None = None
+    connected_at: str | None = None
+    last_byte_at: str | None = None
+    bytes_captured: int | None = None
+    error: str | None = None
+    parse_error: str | None = None
+
+
 @dataclass
 class SessionStatus:
     checked_at: str
@@ -68,6 +97,7 @@ class SessionStatus:
     snapshot: ArtifactStatus | None = None
     gdb_mi: ArtifactStatus | None = None
     rtt: ArtifactStatus | None = None
+    rtt_capture: RttCaptureStatus | None = None
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -81,6 +111,11 @@ def collect_session_status(
     snapshot = _artifact_status(config.snapshot_file, checked_at_dt, config.stale_after_seconds)
     gdb_mi = _artifact_status(config.gdb_mi_file, checked_at_dt, config.stale_after_seconds)
     rtt = _artifact_status(config.rtt_file, checked_at_dt, config.stale_after_seconds)
+    rtt_capture = _rtt_capture_status(
+        config.rtt_state_file,
+        checked_at_dt,
+        config.stale_after_seconds,
+    )
 
     health_issues: list[str] = []
     warnings: list[str] = []
@@ -88,6 +123,7 @@ def collect_session_status(
     _track_artifact("Snapshot", snapshot, health_issues, missing_is_health_issue=True)
     _track_artifact("GDB/MI", gdb_mi, health_issues, missing_is_health_issue=True)
     _track_artifact("RTT", rtt, warnings, missing_is_health_issue=False)
+    _track_rtt_capture(rtt, rtt_capture, warnings)
 
     snapshot_id: str | None = None
     parse_warnings: list[str] = []
@@ -101,7 +137,7 @@ def collect_session_status(
             else:
                 warnings.append(warning)
 
-    if not any((snapshot.exists, gdb_mi.exists, rtt.exists)):
+    if not any((snapshot.exists, gdb_mi.exists, rtt.exists, rtt_capture.exists)):
         health_issues.append("No DebugOracle artifacts were found in the session directory.")
 
     health = "healthy" if not health_issues else "degraded"
@@ -116,6 +152,7 @@ def collect_session_status(
         snapshot=snapshot,
         gdb_mi=gdb_mi,
         rtt=rtt,
+        rtt_capture=rtt_capture,
     )
 
 
@@ -140,6 +177,9 @@ def render_session_status(status: SessionStatus, fmt: str = "text") -> str:
         "",
         "RTT:",
         *_artifact_lines(status.rtt),
+        "",
+        "RTT Capture:",
+        *_rtt_capture_lines(status.rtt_capture),
         "",
         "Warnings:",
     ]
@@ -176,6 +216,53 @@ def _artifact_status(path: Path, now: datetime, stale_after_seconds: int) -> Art
     )
 
 
+def _rtt_capture_status(
+    path: Path,
+    now: datetime,
+    stale_after_seconds: int,
+) -> RttCaptureStatus:
+    artifact = _artifact_status(path, now, stale_after_seconds)
+    if not artifact.exists:
+        return RttCaptureStatus(
+            path=artifact.path,
+            exists=False,
+            updated_at=artifact.updated_at,
+            age_seconds=artifact.age_seconds,
+            stale=artifact.stale,
+            size_bytes=artifact.size_bytes,
+        )
+
+    try:
+        capture = load_capture_state(path)
+    except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError) as error:
+        return RttCaptureStatus(
+            path=artifact.path,
+            exists=True,
+            updated_at=artifact.updated_at,
+            age_seconds=artifact.age_seconds,
+            stale=artifact.stale,
+            size_bytes=artifact.size_bytes,
+            parse_error=f"{error.__class__.__name__}: {error}",
+        )
+
+    return RttCaptureStatus(
+        path=artifact.path,
+        exists=True,
+        updated_at=artifact.updated_at,
+        age_seconds=artifact.age_seconds,
+        stale=artifact.stale,
+        size_bytes=artifact.size_bytes,
+        source=capture.source,
+        host=capture.host,
+        port=capture.port,
+        status=capture.status,
+        connected_at=capture.connected_at,
+        last_byte_at=capture.last_byte_at,
+        bytes_captured=capture.bytes_captured,
+        error=capture.error,
+    )
+
+
 def _track_artifact(
     label: str,
     artifact: ArtifactStatus,
@@ -205,6 +292,32 @@ def _artifact_lines(artifact: ArtifactStatus | None) -> list[str]:
     ]
 
 
+def _rtt_capture_lines(capture: RttCaptureStatus | None) -> list[str]:
+    if capture is None:
+        return ["- None"]
+    return [
+        f"- Path: {capture.path}",
+        f"- Exists: {'yes' if capture.exists else 'no'}",
+        f"- Updated At: {capture.updated_at or 'unavailable'}",
+        f"- Age Seconds: {capture.age_seconds if capture.age_seconds is not None else 'unavailable'}",
+        f"- Stale: {'yes' if capture.stale else 'no'}",
+        f"- Size Bytes: {capture.size_bytes if capture.size_bytes is not None else 'unavailable'}",
+        f"- Source: {capture.source or 'unavailable'}",
+        f"- Host: {capture.host or 'unavailable'}",
+        f"- Port: {capture.port if capture.port is not None else 'unavailable'}",
+        (
+            f"- Transport Status: {capture.status}"
+            if capture.status
+            else "- Transport Status: no managed capture detected"
+        ),
+        f"- Connected At: {capture.connected_at or 'unavailable'}",
+        f"- Last Byte At: {capture.last_byte_at or 'unavailable'}",
+        f"- Bytes Captured: {capture.bytes_captured if capture.bytes_captured is not None else 'unavailable'}",
+        f"- Transport Error: {capture.error or 'none'}",
+        f"- Parse Error: {capture.parse_error or 'none'}",
+    ]
+
+
 def _bullet_lines(items: list[str]) -> list[str]:
     return [f"- {item}" for item in items]
 
@@ -220,6 +333,34 @@ def _is_health_issue_warning(message: str) -> bool:
             "no gdb/mi input was provided",
         )
     )
+
+
+def _track_rtt_capture(
+    rtt: ArtifactStatus,
+    capture: RttCaptureStatus,
+    warnings: list[str],
+) -> None:
+    if not capture.exists:
+        return
+    if capture.parse_error:
+        warnings.append(
+            f"Could not parse RTT capture state file: {capture.path} ({capture.parse_error})"
+        )
+        return
+    if capture.stale:
+        warnings.append(
+            f"RTT capture state file is stale: {capture.path} ({capture.age_seconds}s old)"
+        )
+    if capture.error:
+        warnings.append(f"RTT capture reported an error: {capture.error}")
+    elif capture.status == "connected" and (capture.bytes_captured or 0) == 0:
+        warnings.append("RTT capture connected but no bytes were captured yet.")
+    elif capture.status == "idle":
+        warnings.append("RTT capture is connected but currently idle.")
+    elif capture.status == "waiting":
+        warnings.append("RTT capture is waiting for the OpenOCD RTT TCP server.")
+    if rtt.exists and rtt.size_bytes == 0 and (capture.bytes_captured or 0) == 0:
+        warnings.append("RTT log file exists but is still empty.")
 
 
 def _resolve_path(

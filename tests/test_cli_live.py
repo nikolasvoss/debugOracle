@@ -22,6 +22,8 @@ class DebugOracleLiveCliTests(unittest.TestCase):
         self.assertIn("DebugOracle Session Status", output)
         self.assertIn("Health: healthy", output)
         self.assertIn("Snapshot ID: snap-", output)
+        self.assertIn("RTT Capture:", output)
+        self.assertIn("Transport Status: no managed capture detected", output)
 
     def test_status_command_keeps_missing_rtt_non_fatal(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -31,6 +33,15 @@ class DebugOracleLiveCliTests(unittest.TestCase):
         self.assertIn("Health: healthy", output)
         self.assertIn("RTT file not found", output)
         self.assertIn("Snapshot Parse Warnings: 1", output)
+
+    def test_status_command_reports_connected_but_empty_managed_rtt_capture(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._prepare_workspace(tmpdir, include_rtt=True, include_rtt_state=True, rtt_bytes=0)
+            output = self._run_cli(["status", "--workspace-root", tmpdir])
+
+        self.assertIn("Transport Status: connected", output)
+        self.assertIn("Bytes Captured: 0", output)
+        self.assertIn("RTT capture connected but no bytes were captured yet.", output)
 
     def test_live_status_command_uses_demo_backend(self) -> None:
         output = self._run_cli(["live-status"])
@@ -64,7 +75,14 @@ class DebugOracleLiveCliTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         return buffer.getvalue()
 
-    def _prepare_workspace(self, tmpdir: str, *, include_rtt: bool = True) -> None:
+    def _prepare_workspace(
+        self,
+        tmpdir: str,
+        *,
+        include_rtt: bool = True,
+        include_rtt_state: bool = False,
+        rtt_bytes: int | None = None,
+    ) -> None:
         workspace = Path(tmpdir)
         session_dir = workspace / ".dbgoracle"
         session_dir.mkdir()
@@ -82,6 +100,25 @@ class DebugOracleLiveCliTests(unittest.TestCase):
                 (FIXTURES / "sample.rtt").read_text(encoding="utf-8"),
                 encoding="utf-8",
             )
+        if include_rtt_state:
+            bytes_captured = 0 if rtt_bytes is None else rtt_bytes
+            (session_dir / "session.rtt.state.json").write_text(
+                (
+                    "{\n"
+                    '  "source": "openocd-rtt-tcp",\n'
+                    '  "host": "127.0.0.1",\n'
+                    '  "port": 60001,\n'
+                    '  "status": "connected",\n'
+                    '  "connected_at": "2026-03-16T10:00:00+00:00",\n'
+                    '  "last_byte_at": null,\n'
+                    f'  "bytes_captured": {bytes_captured},\n'
+                    '  "error": null\n'
+                    "}\n"
+                ),
+                encoding="utf-8",
+            )
+            if include_rtt and rtt_bytes == 0:
+                (session_dir / "session.rtt").write_text("", encoding="utf-8")
 
 
 if __name__ == "__main__":

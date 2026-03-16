@@ -24,6 +24,14 @@ from .live import (
 )
 from .models import InvestigationRequest
 from .output import render_prompt, render_report, render_snapshot
+from .rtt import (
+    DEFAULT_RTT_CONNECT_TIMEOUT,
+    DEFAULT_RTT_HOST,
+    DEFAULT_RTT_POLL_INTERVAL,
+    RttCaptureTimeoutError,
+    capture_rtt,
+    default_state_path,
+)
 from .session import (
     DEFAULT_SESSION_DIR,
     DEFAULT_SNAPSHOT_FILENAME,
@@ -101,6 +109,58 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Number of bytes to read",
     )
     live_memory.set_defaults(func=_cmd_live_memory)
+
+    capture = subparsers.add_parser(
+        "capture-rtt",
+        help="Capture RTT from an OpenOCD RTT TCP endpoint into a file",
+        description=(
+            "Connect to an OpenOCD RTT TCP endpoint, write the raw stream into a "
+            "session log, and maintain a small transport state sidecar."
+        ),
+    )
+    capture.add_argument(
+        "--host",
+        default=DEFAULT_RTT_HOST,
+        help="RTT TCP host",
+    )
+    capture.add_argument(
+        "--port",
+        required=True,
+        type=int,
+        help="RTT TCP port exposed by OpenOCD",
+    )
+    capture.add_argument(
+        "--output",
+        required=True,
+        help="Target RTT log file path",
+    )
+    capture.add_argument(
+        "--state-out",
+        help="Optional RTT capture state sidecar path",
+    )
+    capture.add_argument(
+        "--connect-timeout",
+        type=float,
+        default=DEFAULT_RTT_CONNECT_TIMEOUT,
+        help="Seconds to wait for the RTT TCP server before failing",
+    )
+    capture.add_argument(
+        "--poll-interval",
+        type=float,
+        default=DEFAULT_RTT_POLL_INTERVAL,
+        help="Socket poll interval in seconds while waiting for data",
+    )
+    capture.add_argument(
+        "--idle-timeout",
+        type=float,
+        help="Optional idle timeout in seconds after connecting with no new bytes",
+    )
+    capture.add_argument(
+        "--append",
+        action="store_true",
+        help="Append to the RTT output file instead of truncating it",
+    )
+    capture.set_defaults(func=_cmd_capture_rtt)
 
     observe = subparsers.add_parser(
         "observe",
@@ -234,6 +294,10 @@ def _add_session_arguments(parser: argparse.ArgumentParser) -> None:
         help="Override the RTT log path",
     )
     parser.add_argument(
+        "--rtt-state",
+        help="Override the RTT capture state sidecar path",
+    )
+    parser.add_argument(
         "--stale-after",
         type=int,
         default=DEFAULT_STALE_AFTER_SECONDS,
@@ -286,6 +350,7 @@ def _cmd_status(args: argparse.Namespace) -> int:
         snapshot_file=args.snapshot_file,
         gdb_mi_file=args.gdb_mi,
         rtt_file=args.rtt,
+        rtt_state_file=args.rtt_state,
         stale_after_seconds=args.stale_after,
     )
     status = collect_session_status(config)
@@ -313,6 +378,44 @@ def _cmd_live_memory(args: argparse.Namespace) -> int:
         raise SystemExit(str(error)) from error
     output = render_memory_result(backend.read_memory(address, size), fmt=args.format)
     return _emit(output, args.output)
+
+
+def _cmd_capture_rtt(args: argparse.Namespace) -> int:
+    output_path = Path(args.output).expanduser()
+    state_path = (
+        Path(args.state_out).expanduser()
+        if args.state_out
+        else default_state_path(output_path)
+    )
+    try:
+        state = capture_rtt(
+            host=args.host,
+            port=args.port,
+            output_path=output_path,
+            state_path=state_path,
+            connect_timeout=max(0.0, args.connect_timeout),
+            poll_interval=max(0.05, args.poll_interval),
+            idle_timeout=args.idle_timeout,
+            append=args.append,
+            on_connect=lambda _: print(
+                f"RTT capture connected {args.host}:{args.port} -> {output_path}"
+            ),
+        )
+    except RttCaptureTimeoutError as error:
+        print(str(error), file=sys.stderr)
+        return 2
+    except OSError as error:
+        print(f"RTT capture failed: {error}", file=sys.stderr)
+        return 1
+
+    if state.status == "idle":
+        print("RTT capture stopped after reaching the configured idle timeout.")
+    elif state.status == "eof":
+        print("RTT capture stopped because the RTT server closed the connection.")
+    elif state.status == "interrupted":
+        print("RTT capture interrupted by user.")
+        return 130
+    return 0
 
 
 def _cmd_observe(args: argparse.Namespace) -> int:
