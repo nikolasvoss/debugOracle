@@ -1,0 +1,38 @@
+model = "gpt-5.3-codex-spark"
+model_reasoning_effort = "medium"
+
+[mcp_servers.filesystem]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-filesystem", "/home/niko/Dokumente/Bastelei/stm32_1"]
+# Narrow to the minimal file operations you actually use
+enabled_tools = ["read_file", "list_directory", "search_files"]
+
+[mcp_servers.openaiDeveloperDocs]
+url = "https://developers.openai.com/mcp"
+
+[mcp_servers.git]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-git", "/home/niko/Dokumente/Bastelei/stm32_1"]
+
+[mcp_servers.shell-command]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-shell"]
+# Keep disabled by default unless you truly need it often
+enabled = false
+
+[mcp_servers.docs]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-fetch"]
+# Broad web/file fetch is often redundant if OpenAI docs are the main need
+enabled = false
+
+[mcp_servers.tree-sitter]
+command = "npx"
+args = ["-y", "mcp-server-tree-sitter"]
+
+[mcp_servers.cmake]
+command = "npx"
+args = ["-y", "mcp-server-cmake"]
+
+[mcp_servers.embedded-debugger-mcp]
+command = "embedded-debugger-mcp"
