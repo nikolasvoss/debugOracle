@@ -25,6 +25,8 @@ from .live import (
 from .models import InvestigationRequest
 from .output import render_prompt, render_report, render_snapshot
 from .session import (
+    DEFAULT_SESSION_DIR,
+    DEFAULT_SNAPSHOT_FILENAME,
     DEFAULT_STALE_AFTER_SECONDS,
     SessionConfig,
     collect_session_status,
@@ -110,9 +112,18 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _add_input_arguments(observe, include_snapshot_file=False)
     observe.add_argument(
+        "--workspace-root",
+        default=".",
+        help="Workspace root used to resolve file paths",
+    )
+    observe.add_argument(
         "--state-out",
-        default=".dbgoracle/latest_snapshot.json",
-        help="Path for the reusable snapshot JSON written by observe",
+        default=None,
+        help=(
+            "Path for the reusable snapshot JSON written by observe. When omitted, "
+            "defaults to the latest_snapshot.json file beside the GDB/MI input, "
+            "or falls back to <workspace>/.dbgoracle/latest_snapshot.json."
+        ),
     )
     observe.add_argument(
         "--rtt-window",
@@ -305,9 +316,18 @@ def _cmd_live_memory(args: argparse.Namespace) -> int:
 
 
 def _cmd_observe(args: argparse.Namespace) -> int:
-    bundle = _resolve_bundle(args)
-    save_bundle(bundle, args.state_out)
-    print(f"Saved snapshot {bundle.snapshot_id} to {args.state_out}")
+    workspace_root = Path(args.workspace_root).resolve()
+    gdb_mi = _resolve_workspace_path(args.gdb_mi, workspace_root)
+    rtt = _resolve_workspace_path(args.rtt, workspace_root)
+    bundle = _resolve_bundle(args, gdb_mi=gdb_mi, rtt=rtt)
+    state_out = _resolve_state_out_path(
+        workspace_root=workspace_root,
+        requested_state_out=args.state_out,
+        gdb_mi=gdb_mi,
+        rtt=rtt,
+    )
+    save_bundle(bundle, state_out)
+    print(f"Saved snapshot {bundle.snapshot_id} to {state_out}")
     return 0
 
 
@@ -337,41 +357,49 @@ def _cmd_report(args: argparse.Namespace) -> int:
     return _emit(output, args.output)
 
 
-def _resolve_bundle(args: argparse.Namespace, full: bool = False):
+def _resolve_bundle(
+    args: argparse.Namespace,
+    full: bool = False,
+    gdb_mi: str | None = None,
+    rtt: str | None = None,
+):
+    gdb_mi = gdb_mi if gdb_mi is not None else getattr(args, "gdb_mi", None)
+    rtt = rtt if rtt is not None else getattr(args, "rtt", None)
     snapshot_file = getattr(args, "snapshot_file", None)
     if snapshot_file:
         return load_bundle(snapshot_file)
 
-    if not args.gdb_mi_stream and not args.gdb_mi:
+    if not args.gdb_mi_stream and not gdb_mi:
         raise SystemExit(
             "Either --snapshot-file, --gdb-mi, --gdb-mi-stream, or --gdb-mi - is required."
         )
 
     rtt_window = FULL_RTT_WINDOW if full else getattr(args, "rtt_window", DEFAULT_RTT_WINDOW)
     if args.gdb_mi_stream:
-        rtt_text = _read_rtt(args.rtt)
+        rtt_text = _read_rtt(rtt)
         return build_bundle_from_stream(
             sys.stdin,
             rtt_text=rtt_text,
-            gdb_source=args.gdb_mi if args.gdb_mi else "<stdin>",
-            rtt_source=args.rtt,
+            gdb_source=gdb_mi if gdb_mi else "<stdin>",
+            rtt_source=rtt,
             rtt_window=rtt_window,
         )
-    if args.gdb_mi in {"-", "/dev/stdin", "stdin"}:
-        rtt_text = _read_rtt(args.rtt)
+    if gdb_mi in {"-", "/dev/stdin", "stdin"}:
+        rtt_text = _read_rtt(rtt)
         return build_bundle_from_stream(
             sys.stdin,
             rtt_text=rtt_text,
-            gdb_source=args.gdb_mi,
-            rtt_source=args.rtt,
+            gdb_source=gdb_mi,
+            rtt_source=rtt,
             rtt_window=rtt_window,
         )
 
-    _require_readable_file(args.gdb_mi, "GDB/MI")
-    if args.rtt:
-        _require_readable_file(args.rtt, "RTT")
+    assert gdb_mi is not None
+    _require_readable_file(gdb_mi, "GDB/MI")
+    if rtt:
+        _require_readable_file(rtt, "RTT")
     try:
-        return build_bundle_from_files(args.gdb_mi, args.rtt, rtt_window=rtt_window)
+        return build_bundle_from_files(gdb_mi, rtt, rtt_window=rtt_window)
     except OSError as error:
         raise SystemExit(f"Unable to read one of the required input files: {error}") from error
 
@@ -392,6 +420,35 @@ def _require_readable_file(path: str, label: str) -> None:
         raise SystemExit(f"{label} path is not a file: {path}")
     if not os.access(path, os.R_OK):
         raise SystemExit(f"{label} file is not readable: {path}")
+
+
+def _resolve_workspace_path(value: str | None, workspace_root: Path) -> str | None:
+    if not value:
+        return None
+    if value in {"-", "/dev/stdin", "stdin"}:
+        return value
+    path = Path(value).expanduser()
+    if path.is_absolute():
+        return str(path)
+    return str(workspace_root / path)
+
+
+def _resolve_state_out_path(
+    workspace_root: Path,
+    requested_state_out: str | None,
+    gdb_mi: str | None,
+    rtt: str | None,
+) -> str:
+    if requested_state_out:
+        return _resolve_workspace_path(requested_state_out, workspace_root)
+
+    if gdb_mi and gdb_mi not in {"-", "/dev/stdin", "stdin"}:
+        return str(Path(gdb_mi).parent / DEFAULT_SNAPSHOT_FILENAME)
+
+    if rtt:
+        return str(Path(rtt).parent / DEFAULT_SNAPSHOT_FILENAME)
+
+    return str(workspace_root / DEFAULT_SESSION_DIR / DEFAULT_SNAPSHOT_FILENAME)
 
 
 def _read_intent(intent: str | None, intent_file: str | None) -> str | None:

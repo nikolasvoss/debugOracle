@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -83,6 +84,71 @@ class DebugOracleCliTests(unittest.TestCase):
         self.assertIn("Recent RTT", report_output)
         self.assertIn("# DebugOracle Prompt Package", prompt_output)
         self.assertIn("Explain why the target stopped here", prompt_output)
+
+    def test_observe_defaults_to_workspace_session_folder_for_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir) / "workspace"
+            session_dir = workspace / ".dbgoracle"
+            session_dir.mkdir(parents=True)
+            (session_dir / "cortex-debug-shared-mi.log").write_text(
+                (FIXTURES / "sample.mi").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (session_dir / "session.rtt").write_text(
+                (FIXTURES / "sample.rtt").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+
+            cwd = Path(tmpdir) / "other"
+            cwd.mkdir()
+            previous = os.getcwd()
+            try:
+                os.chdir(cwd)
+                observe_output = self._run_cli(
+                    [
+                        "observe",
+                        "--workspace-root", str(workspace),
+                        "--gdb-mi", ".dbgoracle/cortex-debug-shared-mi.log",
+                        "--rtt", ".dbgoracle/session.rtt",
+                    ]
+                )
+            finally:
+                os.chdir(previous)
+
+            snapshot_path = session_dir / "latest_snapshot.json"
+            self.assertTrue(snapshot_path.exists())
+            self.assertIn(f"Saved snapshot", observe_output)
+            self.assertIn(str(snapshot_path), observe_output)
+            status_output = self._run_cli(["status", "--workspace-root", str(workspace)])
+            self.assertIn("Health: healthy", status_output)
+            self.assertIn("Snapshot ID: snap-", status_output)
+            self.assertNotIn("Snapshot file not found", status_output)
+
+    def test_observe_writes_snapshot_next_to_explicit_inputs_when_no_state_out_given(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            logs = workspace / "custom-logs"
+            logs.mkdir()
+            gdb = logs / "cortex-debug-shared-mi.log"
+            rtt = logs / "session.rtt"
+            gdb.write_text((FIXTURES / "sample.mi").read_text(encoding="utf-8"), encoding="utf-8")
+            rtt.write_text((FIXTURES / "sample.rtt").read_text(encoding="utf-8"), encoding="utf-8")
+
+            observe_output = self._run_cli(
+                [
+                    "observe",
+                    "--workspace-root", str(workspace),
+                    "--gdb-mi", str(gdb),
+                    "--rtt", str(rtt),
+                ]
+            )
+
+            inferred_snapshot = logs / "latest_snapshot.json"
+            fallback_snapshot = workspace / ".dbgoracle" / "latest_snapshot.json"
+            self.assertTrue(inferred_snapshot.exists())
+            self.assertFalse(fallback_snapshot.exists())
+            self.assertIn(f"Saved snapshot", observe_output)
+            self.assertIn(str(inferred_snapshot), observe_output)
 
     def test_prompt_can_read_intent_from_stdin(self) -> None:
         stdin = io.StringIO("The system should remain in READY state.")
