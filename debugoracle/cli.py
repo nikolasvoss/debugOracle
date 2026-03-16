@@ -28,7 +28,9 @@ from .rtt import (
     DEFAULT_RTT_CONNECT_TIMEOUT,
     DEFAULT_RTT_HOST,
     DEFAULT_RTT_POLL_INTERVAL,
+    STATE_STATUS_CONNECTED,
     RttCaptureTimeoutError,
+    load_capture_state,
     capture_rtt,
     default_state_path,
 )
@@ -430,8 +432,24 @@ def _cmd_observe(args: argparse.Namespace) -> int:
         rtt=rtt,
     )
     save_bundle(bundle, state_out)
+    _warn_if_connected_no_bytes_rtt_capture(rtt=rtt)
     print(f"Saved snapshot {bundle.snapshot_id} to {state_out}")
     return 0
+
+
+def _warn_if_connected_no_bytes_rtt_capture(rtt: str | None) -> None:
+    if not rtt or rtt in {"-", "/dev/stdin", "stdin"}:
+        return
+    state_path = default_state_path(Path(rtt).expanduser())
+    try:
+        state = load_capture_state(state_path)
+    except (OSError, ValueError, TypeError, KeyError):
+        return
+    if state.status == STATE_STATUS_CONNECTED and state.bytes_captured == 0:
+        print(
+            "Warning: RTT capture is connected but no bytes were recorded yet. "
+            "If RTT should be active, check your capture configuration."
+        )
 
 
 def _cmd_snapshot(args: argparse.Namespace) -> int:

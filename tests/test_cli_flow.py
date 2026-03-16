@@ -10,6 +10,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
+from debugoracle.rtt import RttCaptureState
 from debugoracle.cli import main
 
 
@@ -149,6 +150,46 @@ class DebugOracleCliTests(unittest.TestCase):
             self.assertFalse(fallback_snapshot.exists())
             self.assertIn(f"Saved snapshot", observe_output)
             self.assertIn(str(inferred_snapshot), observe_output)
+
+    def test_observe_warns_when_rtt_capture_connected_but_empty(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            session_dir = Path(tmpdir)
+            gdb = session_dir / "cortex-debug-shared-mi.log"
+            rtt = session_dir / "session.rtt"
+            state = session_dir / "session.rtt.state.json"
+            gdb.write_text((FIXTURES / "sample.mi").read_text(encoding="utf-8"), encoding="utf-8")
+            rtt.write_text("", encoding="utf-8")
+            state.write_text(
+                json.dumps(
+                    RttCaptureState(
+                        source="openocd-rtt-tcp",
+                        host="127.0.0.1",
+                        port=60001,
+                        status="connected",
+                        connected_at="2026-03-16T10:00:00+00:00",
+                        last_byte_at=None,
+                        bytes_captured=0,
+                        error=None,
+                    ).to_dict(),
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+            observe_output = self._run_cli(
+                [
+                    "observe",
+                    "--gdb-mi",
+                    str(gdb),
+                    "--rtt",
+                    str(rtt),
+                    "--state-out",
+                    str(session_dir / "snapshot.json"),
+                ]
+            )
+
+        self.assertIn("Warning: RTT capture is connected but no bytes were recorded yet.", observe_output)
+        self.assertIn("If RTT should be active, check your capture configuration.", observe_output)
 
     def test_prompt_can_read_intent_from_stdin(self) -> None:
         stdin = io.StringIO("The system should remain in READY state.")
