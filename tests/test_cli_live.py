@@ -39,6 +39,34 @@ class DebugOracleLiveCliTests(unittest.TestCase):
         self.assertIn("Health: healthy", output)
         self.assertIn("Transport Status: ", output)
 
+    def test_status_discovers_workspace_root_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            bundle = build_bundle_from_files(
+                str(FIXTURES / "sample.mi"),
+                str(FIXTURES / "sample.rtt"),
+            )
+            save_bundle(bundle, str(workspace / "latest_snapshot.json"))
+            (workspace / "cortex-debug-shared-mi.log").write_text(
+                (FIXTURES / "sample.mi").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (workspace / "session.rtt").write_text(
+                (FIXTURES / "sample.rtt").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+
+            previous = os.getcwd()
+            try:
+                os.chdir(tmpdir)
+                output = self._run_cli(["status"])
+            finally:
+                os.chdir(previous)
+
+        self.assertIn("DebugOracle Session Status", output)
+        self.assertIn("Health: healthy", output)
+        self.assertIn("Snapshot ID: snap-", output)
+
     def test_status_command_keeps_missing_rtt_non_fatal(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             self._prepare_workspace(tmpdir, include_rtt=False)

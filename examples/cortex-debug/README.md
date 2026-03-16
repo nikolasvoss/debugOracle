@@ -18,7 +18,7 @@ DebugOracle only requires the MI output path plus an OpenOCD RTT TCP endpoint,
 but this example is not a generic Cortex-Debug template. Expect to edit the
 target-specific fields before using it on another project:
 
-- MI transcript output should write to `.dbgoracle/cortex-debug-shared-mi.log`
+- MI transcript output should write to `./cortex-debug-shared-mi.log` or `.dbgoracle/cortex-debug-shared-mi.log`
 - RTT should be captured by `./dbgoracle capture-rtt` into `.dbgoracle/session.rtt`
 - If your Cortex-Debug version uses different MI/RTT key names, update only the
   logging lines.
@@ -38,7 +38,7 @@ if ! command -v openocd >/dev/null 2>&1; then
   exit 1
 fi
 openocd --version
-test -f .dbgoracle/cortex-debug-shared-mi.log && echo "MI file path exists" || echo "run Prepare debug logs first"
+test -f cortex-debug-shared-mi.log && echo "MI file path exists" || test -f .dbgoracle/cortex-debug-shared-mi.log && echo "MI file path exists" || echo "run Prepare debug logs first"
 test -f .dbgoracle/session.rtt && echo "RTT file path exists" || echo "RTT log not present yet"
 ```
 
@@ -61,9 +61,9 @@ test -f .dbgoracle/session.rtt && echo "RTT file path exists" || echo "RTT log n
 Before calling `observe`, confirm MI data exists:
 
 ```bash
-test -s .dbgoracle/cortex-debug-shared-mi.log && echo "MI log ready" || echo "MI log empty or missing"
-test -s .dbgoracle/session.rtt && echo "RTT log has data" || echo "RTT log empty or not enabled"
-test -f .dbgoracle/session.rtt.state.json && echo "RTT capture state present" || echo "RTT capture helper not attached"
+test -s cortex-debug-shared-mi.log && echo "MI log ready" || test -s .dbgoracle/cortex-debug-shared-mi.log && echo "MI log ready" || echo "MI log empty or missing"
+test -s session.rtt && echo "RTT log has data" || test -s .dbgoracle/session.rtt && echo "RTT log has data" || echo "RTT log empty or not enabled"
+test -f session.rtt.state.json && echo "RTT capture state present" || test -f .dbgoracle/session.rtt.state.json && echo "RTT capture state present" || echo "RTT capture helper not attached"
 ```
 MI data is required for every capture. Reset logs between runs with `Prepare debug logs`
 to avoid stale evidence.
@@ -83,7 +83,8 @@ Then hand it to ChatGPT:
 
 ## Minimal validation checklist
 
-- `observe` exits successfully and writes `.dbgoracle/latest_snapshot.json`.
+- `observe` exits successfully and writes `latest_snapshot.json` in the detected artifact folder
+  (workspace root or `.dbgoracle`).
 - `status` shows an `RTT Capture` section with the RTT transport state if you used `capture-rtt`.
 - `report` includes:
   - stop reason

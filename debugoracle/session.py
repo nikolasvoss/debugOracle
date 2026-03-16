@@ -37,11 +37,30 @@ class SessionConfig:
     ) -> "SessionConfig":
         root = Path(workspace_root).resolve()
         session_root = root / DEFAULT_SESSION_DIR
-        rtt_path = _resolve_path(root, rtt_file, session_root / DEFAULT_RTT_FILENAME)
+        snapshot_default = root / DEFAULT_SNAPSHOT_FILENAME
+        gdb_mi_default = root / DEFAULT_GDB_MI_FILENAME
+        rtt_default = root / DEFAULT_RTT_FILENAME
+        rtt_session_default = session_root / DEFAULT_RTT_FILENAME
+        rtt_path = _resolve_path(
+            root,
+            rtt_file,
+            rtt_default,
+            rtt_session_default,
+        )
         return cls(
             workspace_root=root,
-            snapshot_file=_resolve_path(root, snapshot_file, session_root / DEFAULT_SNAPSHOT_FILENAME),
-            gdb_mi_file=_resolve_path(root, gdb_mi_file, session_root / DEFAULT_GDB_MI_FILENAME),
+            snapshot_file=_resolve_path(
+                root,
+                snapshot_file,
+                snapshot_default,
+                session_root / DEFAULT_SNAPSHOT_FILENAME,
+            ),
+            gdb_mi_file=_resolve_path(
+                root,
+                gdb_mi_file,
+                gdb_mi_default,
+                session_root / DEFAULT_GDB_MI_FILENAME,
+            ),
             rtt_file=rtt_path,
             rtt_state_file=_resolve_path(
                 root,
@@ -366,10 +385,15 @@ def _track_rtt_capture(
 def _resolve_path(
     workspace_root: Path,
     override: str | Path | None,
-    default_path: Path,
+    *default_paths: Path,
 ) -> Path:
     if override is None:
-        return default_path
+        for path in default_paths:
+            if path.exists():
+                return path
+        if default_paths:
+            return default_paths[0]
+        raise ValueError("at least one default path is required")
     path = Path(override)
     if path.is_absolute():
         return path

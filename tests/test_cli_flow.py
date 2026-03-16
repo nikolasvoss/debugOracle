@@ -154,6 +154,38 @@ class DebugOracleCliTests(unittest.TestCase):
             self.assertIn("Auto-discovered input paths for snapshot:", stderr)
             self.assertIn(f"- snapshot-file: {auto_snapshot}", stderr)
 
+    def test_snapshot_prefers_workspace_root_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            auto_bundle = build_bundle_from_files(
+                str(FIXTURES / "sample.mi"),
+                str(FIXTURES / "sample.rtt"),
+            )
+            (workspace / "cortex-debug-shared-mi.log").write_text(
+                (FIXTURES / "sample.mi").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (workspace / "session.rtt").write_text(
+                (FIXTURES / "sample.rtt").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+
+            previous = os.getcwd()
+            try:
+                os.chdir(workspace)
+                output, stderr = self._run_cli(
+                    ["snapshot", "--format", "json"],
+                    capture_stderr=True,
+                )
+            finally:
+                os.chdir(previous)
+
+            payload = json.loads(output)
+            self.assertEqual(payload["snapshot_id"], auto_bundle.snapshot_id)
+            self.assertIn("Auto-discovered input paths for snapshot:", stderr)
+            self.assertIn(f"- gdb-mi: {workspace / 'cortex-debug-shared-mi.log'}", stderr)
+            self.assertIn(f"- rtt: {workspace / 'session.rtt'}", stderr)
+
     def test_prompt_uses_auto_discovery_in_current_workspace(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
@@ -175,6 +207,31 @@ class DebugOracleCliTests(unittest.TestCase):
                         "Explain why the target stopped here",
                     ],
                     capture_stderr=True,
+                )
+            finally:
+                os.chdir(previous)
+
+        self.assertIn("Snapshot ID:", output)
+        self.assertIn(bundle.snapshot_id, output)
+
+    def test_prompt_prefers_workspace_root_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            bundle = build_bundle_from_files(
+                str(FIXTURES / "sample.mi"),
+                str(FIXTURES / "sample.rtt"),
+            )
+            save_bundle(bundle, str(workspace / "latest_snapshot.json"))
+
+            previous = os.getcwd()
+            try:
+                os.chdir(workspace)
+                output = self._run_cli(
+                    [
+                        "prompt",
+                        "--goal",
+                        "Explain why the target stopped here",
+                    ]
                 )
             finally:
                 os.chdir(previous)
@@ -251,6 +308,35 @@ class DebugOracleCliTests(unittest.TestCase):
             self.assertIn(f"{snapshot_path}", output)
             self.assertTrue(snapshot_path.exists())
             self.assertIn("Auto-discovered input paths for observe:", stderr)
+
+    def test_observe_prefers_workspace_root_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            (workspace / "cortex-debug-shared-mi.log").write_text(
+                (FIXTURES / "sample.mi").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (workspace / "session.rtt").write_text(
+                (FIXTURES / "sample.rtt").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+
+            previous = os.getcwd()
+            try:
+                os.chdir(workspace)
+                output, stderr = self._run_cli(
+                    ["observe"],
+                    capture_stderr=True,
+                )
+            finally:
+                os.chdir(previous)
+
+            snapshot_path = workspace / "latest_snapshot.json"
+            self.assertIn("Saved snapshot", output)
+            self.assertIn(f"{snapshot_path}", output)
+            self.assertIn("- gdb-mi: " + str(workspace / "cortex-debug-shared-mi.log"), stderr)
+            self.assertIn("- rtt: " + str(workspace / "session.rtt"), stderr)
+            self.assertTrue(snapshot_path.exists())
 
     def test_snapshot_fails_with_clear_message_when_nothing_can_be_resolved(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

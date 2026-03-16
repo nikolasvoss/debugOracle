@@ -47,12 +47,12 @@ Use the example below to make first capture quick:
 Before running `observe`, verify the MI file is receiving output:
 
 ```bash
-test -s .dbgoracle/cortex-debug-shared-mi.log && echo "MI log ready" || echo "MI log empty or missing"
+test -s cortex-debug-shared-mi.log && echo "MI log ready" || test -s .dbgoracle/cortex-debug-shared-mi.log && echo "MI log ready" || echo "MI log empty or missing"
 ```
 
 What to configure in Cortex-Debug:
 
-- MI log path should point to `.dbgoracle/cortex-debug-shared-mi.log`.
+- MI log path should point to `./cortex-debug-shared-mi.log` or `.dbgoracle/cortex-debug-shared-mi.log`.
 - RTT should stay enabled in Cortex-Debug/OpenOCD so the RTT TCP server comes up, but DebugOracle should write `.dbgoracle/session.rtt` via `capture-rtt`.
 - Keep captures bounded: stop at the event you care about and end the debug session to avoid mixing multiple stops.
 - Refresh Call Stack, Registers, and Variables/Locals before capture so the latest stop has rich context.
@@ -60,7 +60,8 @@ What to configure in Cortex-Debug:
 
 Quick check after run:
 
-- `observe` succeeds and writes `.dbgoracle/latest_snapshot.json`.
+- `observe` succeeds and writes `latest_snapshot.json` in the detected artifact folder
+  (workspace root or `.dbgoracle`).
 - `report` shows stop reason + frame + register/local context.
 - `prompt` includes evidence sections you can paste into ChatGPT.
 

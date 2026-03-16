@@ -37,6 +37,8 @@ from .rtt import (
 from .session import (
     DEFAULT_SESSION_DIR,
     DEFAULT_SNAPSHOT_FILENAME,
+    DEFAULT_GDB_MI_FILENAME,
+    DEFAULT_RTT_FILENAME,
     DEFAULT_STALE_AFTER_SECONDS,
     SessionConfig,
     collect_session_status,
@@ -63,8 +65,8 @@ def _build_parser() -> argparse.ArgumentParser:
         "status",
         help="Inspect session freshness and snapshot health",
         description=(
-            "Inspect the default .dbgoracle artifacts without mutating the current "
-            "debug session."
+            "Inspect default artifacts in the workspace root or .dbgoracle folder "
+            "without mutating the current debug session."
         ),
     )
     _add_session_arguments(status)
@@ -179,7 +181,8 @@ def _build_parser() -> argparse.ArgumentParser:
         help=(
             "Path for the reusable snapshot JSON written by observe. When omitted, "
             "defaults to the latest_snapshot.json file beside the GDB/MI input, "
-            "or falls back to <workspace>/.dbgoracle/latest_snapshot.json."
+            "or falls back to <workspace>/latest_snapshot.json or "
+            "<workspace>/.dbgoracle/latest_snapshot.json."
         ),
     )
     observe.add_argument(
@@ -276,7 +279,7 @@ def _add_session_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--workspace-root",
         default=".",
-        help="Workspace root used to resolve .dbgoracle defaults",
+        help="Workspace root used to resolve default file paths",
     )
     parser.add_argument(
         "--snapshot-file",
@@ -547,7 +550,6 @@ def _resolve_bundle(
             _missing_inputs_error(
                 command_name,
                 workspace_root,
-                config,
                 allow_snapshot_fallback,
             )
         )
@@ -678,21 +680,44 @@ def _resolve_observe_inputs(
 def _missing_inputs_error(
     command_name: str,
     workspace_root: Path,
-    config: SessionConfig,
     allow_snapshot_fallback: bool,
 ) -> str:
+    snapshot_candidates = [
+        workspace_root / DEFAULT_SNAPSHOT_FILENAME,
+        workspace_root / DEFAULT_SESSION_DIR / DEFAULT_SNAPSHOT_FILENAME,
+    ]
+    gdb_candidates = [
+        workspace_root / DEFAULT_GDB_MI_FILENAME,
+        workspace_root / DEFAULT_SESSION_DIR / DEFAULT_GDB_MI_FILENAME,
+    ]
+    rtt_candidates = [
+        workspace_root / DEFAULT_RTT_FILENAME,
+        workspace_root / DEFAULT_SESSION_DIR / DEFAULT_RTT_FILENAME,
+    ]
     lines = [
         f"{command_name} could not auto-resolve an input source.",
         "Either provide --snapshot-file / --gdb-mi, or run from a workspace with:",
-        f"  - Snapshot: {config.snapshot_file}",
-        f"  - GDB/MI: {config.gdb_mi_file}",
-        f"  - RTT: {config.rtt_file} (optional)",
+        "  - Snapshot:",
+        f"    - {snapshot_candidates[0]}",
+        f"    - {snapshot_candidates[1]}",
+        "  - GDB/MI:",
+        f"    - {gdb_candidates[0]}",
+        f"    - {gdb_candidates[1]}",
+        "  - RTT: (optional)",
+        f"    - {rtt_candidates[0]}",
+        f"    - {rtt_candidates[1]}",
         f"Workspace root: {workspace_root}",
     ]
     if allow_snapshot_fallback:
-        lines.append("Tip: run from a folder with .dbgoracle/latest_snapshot.json or set --workspace-root.")
+        lines.append(
+            "Tip: run from a folder with latest_snapshot.json (or .dbgoracle/latest_snapshot.json) "
+            "or set --workspace-root."
+        )
     else:
-        lines.append("Tip: set --gdb-mi (and optional --rtt) or run from .dbgoracle with MI input files.")
+        lines.append(
+            "Tip: set --gdb-mi (and optional --rtt) or run from a workspace with "
+            "cortex-debug-shared-mi.log (at workspace root or inside .dbgoracle)."
+        )
     return "\n".join(lines)
 
 
