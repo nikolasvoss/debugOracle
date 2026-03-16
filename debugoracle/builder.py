@@ -13,6 +13,8 @@ from .models import EvidenceBundle, SessionEvent, StackFrame
 
 DEFAULT_RTT_WINDOW = 40
 FULL_RTT_WINDOW = 200
+RAW_GDB_MI_FILENAME = "raw-gdb-mi.log"
+RAW_RTT_FILENAME = "raw-rtt.log"
 
 
 def utc_now() -> str:
@@ -23,6 +25,9 @@ def build_bundle_from_files(
     gdb_mi_path: str,
     rtt_path: str | None = None,
     rtt_window: int = DEFAULT_RTT_WINDOW,
+    *,
+    export_raw: bool = False,
+    export_dir: str | Path | None = None,
 ) -> EvidenceBundle:
     gdb_text = _read_text_file(gdb_mi_path, errors="replace", required=True)
     rtt_text = _read_text_file(rtt_path, errors="replace") if rtt_path else ""
@@ -32,6 +37,8 @@ def build_bundle_from_files(
         gdb_source=gdb_mi_path,
         rtt_source=rtt_path,
         rtt_window=rtt_window,
+        export_raw=export_raw,
+        export_dir=export_dir,
     )
 
 
@@ -41,6 +48,9 @@ def build_bundle_from_stream(
     gdb_source: str = "<stdin>",
     rtt_source: str | None = None,
     rtt_window: int = DEFAULT_RTT_WINDOW,
+    *,
+    export_raw: bool = False,
+    export_dir: str | Path | None = None,
 ) -> EvidenceBundle:
     gdb_text = stream.read()
     return build_bundle_from_text(
@@ -49,6 +59,8 @@ def build_bundle_from_stream(
         gdb_source=gdb_source,
         rtt_source=rtt_source,
         rtt_window=rtt_window,
+        export_raw=export_raw,
+        export_dir=export_dir,
     )
 
 
@@ -58,6 +70,9 @@ def build_bundle_from_text(
     gdb_source: str = "<stdin>",
     rtt_source: str | None = None,
     rtt_window: int = DEFAULT_RTT_WINDOW,
+    *,
+    export_raw: bool = False,
+    export_dir: str | Path | None = None,
 ) -> EvidenceBundle:
     captured_at = utc_now()
     registry = CapabilityRegistry()
@@ -107,6 +122,9 @@ def build_bundle_from_text(
                         payload={"line": line_number, "raw": stripped},
                     )
                 )
+                parse_warnings.append(
+                    f"Line {line_number}: non-MI output retained as context"
+                )
             continue
 
         mi_record_count += 1
@@ -149,6 +167,19 @@ def build_bundle_from_text(
     if not recent_rtt:
         parse_warnings.append("No RTT lines were available for this snapshot.")
 
+    raw_export: dict[str, Any] = {}
+    if export_dir is not None:
+        should_export = export_raw or bool(non_mi_line_count or mi_parse_error_count or not gdb_text)
+        raw_export["raw_exported"] = should_export
+        if should_export:
+            raw_export.update(
+                _export_raw_inputs(
+                    gdb_text=gdb_text,
+                    rtt_text=rtt_text,
+                    export_dir=Path(export_dir),
+                )
+            )
+
     return EvidenceBundle(
         snapshot_id=snapshot_id,
         captured_at=captured_at,
@@ -177,6 +208,7 @@ def build_bundle_from_text(
             "mi_record_count": mi_record_count,
             "non_mi_line_count": non_mi_line_count,
             "mi_parse_error_count": mi_parse_error_count,
+            **raw_export,
         },
         session_events=session_events,
         parse_warnings=parse_warnings,
@@ -220,6 +252,29 @@ def save_bundle(bundle: EvidenceBundle, path: str) -> None:
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(bundle.to_dict(), indent=2), encoding="utf-8")
+
+
+def _export_raw_inputs(
+    *,
+    gdb_text: str,
+    rtt_text: str,
+    export_dir: Path,
+) -> dict[str, Any]:
+    export_dir.mkdir(parents=True, exist_ok=True)
+    payload: dict[str, Any] = {
+        "raw_export_root": str(export_dir),
+    }
+    if gdb_text:
+        gdb_path = export_dir / RAW_GDB_MI_FILENAME
+        gdb_path.write_text(gdb_text, encoding="utf-8")
+        payload["gdb_mi_raw_path"] = str(gdb_path)
+        payload["gdb_mi_raw_bytes"] = gdb_path.stat().st_size
+    if rtt_text:
+        rtt_path = export_dir / RAW_RTT_FILENAME
+        rtt_path.write_text(rtt_text, encoding="utf-8")
+        payload["rtt_raw_path"] = str(rtt_path)
+        payload["rtt_raw_bytes"] = rtt_path.stat().st_size
+    return payload
 
 
 def _extract_stack(raw_stack: object) -> list[StackFrame]:

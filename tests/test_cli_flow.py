@@ -465,6 +465,151 @@ class DebugOracleCliTests(unittest.TestCase):
         payload = json.loads(output)
         self.assertEqual(payload["frames"][0]["func"], "main")
 
+    def test_snapshot_exports_raw_inputs_on_parse_warning(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            mi_path = workspace / "bad.mi"
+            bad_line = '^done,locals=[{name="x",value="'
+            mi_path.write_text(
+                (FIXTURES / "sample.mi").read_text(encoding="utf-8") + f"\n{bad_line}\n",
+                encoding="utf-8",
+            )
+            output = self._run_cli(
+                [
+                    "snapshot",
+                    "--gdb-mi",
+                    str(mi_path),
+                    "--rtt",
+                    str(FIXTURES / "sample.rtt"),
+                    "--workspace-root",
+                    str(workspace),
+                    "--format",
+                    "json",
+                ]
+            )
+            payload = json.loads(output)
+            provenance = payload["provenance"]
+            self.assertTrue(provenance.get("raw_exported"))
+            self.assertTrue(Path(provenance["gdb_mi_raw_path"]).exists())
+
+    def test_snapshot_exports_rtt_sidecar_on_parse_warning(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            mi_path = workspace / "bad.mi"
+            mi_path.write_text(
+                (FIXTURES / "sample.mi").read_text(encoding="utf-8") + "\n# non-mi line\n",
+                encoding="utf-8",
+            )
+            output = self._run_cli(
+                [
+                    "snapshot",
+                    "--gdb-mi",
+                    str(mi_path),
+                    "--rtt",
+                    str(FIXTURES / "sample.rtt"),
+                    "--workspace-root",
+                    str(workspace),
+                    "--format",
+                    "json",
+                ]
+            )
+            payload = json.loads(output)
+            provenance = payload["provenance"]
+            self.assertTrue(provenance.get("raw_exported"))
+            self.assertTrue(Path(provenance["rtt_raw_path"]).exists())
+
+    def test_snapshot_exports_raw_inputs_with_explicit_flag(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            output = self._run_cli(
+                [
+                    "snapshot",
+                    "--gdb-mi",
+                    str(FIXTURES / "sample.mi"),
+                    "--rtt",
+                    str(FIXTURES / "sample.rtt"),
+                    "--workspace-root",
+                    str(workspace),
+                    "--export-raw",
+                    "--format",
+                    "json",
+                ]
+            )
+            payload = json.loads(output)
+            provenance = payload["provenance"]
+            self.assertTrue(provenance.get("raw_exported"))
+            self.assertTrue(Path(provenance["gdb_mi_raw_path"]).exists())
+
+    def test_snapshot_skips_raw_export_when_no_warnings(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            output = self._run_cli(
+                [
+                    "snapshot",
+                    "--gdb-mi",
+                    str(FIXTURES / "sample.mi"),
+                    "--rtt",
+                    str(FIXTURES / "sample.rtt"),
+                    "--workspace-root",
+                    str(workspace),
+                    "--format",
+                    "json",
+                ]
+            )
+            payload = json.loads(output)
+            provenance = payload["provenance"]
+            self.assertFalse(provenance.get("raw_exported"))
+
+    def test_snapshot_exports_raw_inputs_on_non_mi_line(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            mi_path = workspace / "non_mi.mi"
+            mi_path.write_text(
+                (FIXTURES / "sample.mi").read_text(encoding="utf-8") + "\n# non-mi line\n",
+                encoding="utf-8",
+            )
+            output = self._run_cli(
+                [
+                    "snapshot",
+                    "--gdb-mi",
+                    str(mi_path),
+                    "--workspace-root",
+                    str(workspace),
+                    "--format",
+                    "json",
+                ]
+            )
+            payload = json.loads(output)
+            provenance = payload["provenance"]
+            self.assertTrue(provenance.get("raw_exported"))
+            self.assertTrue(Path(provenance["gdb_mi_raw_path"]).exists())
+
+    def test_observe_exports_raw_inputs_to_state_dir(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            mi_path = workspace / "bad.mi"
+            mi_path.write_text(
+                (FIXTURES / "sample.mi").read_text(encoding="utf-8") + "\n# non-mi line\n",
+                encoding="utf-8",
+            )
+            snapshot_path = workspace / "snapshots" / "snapshot.json"
+            output = self._run_cli(
+                [
+                    "observe",
+                    "--gdb-mi",
+                    str(mi_path),
+                    "--workspace-root",
+                    str(workspace),
+                    "--state-out",
+                    str(snapshot_path),
+                ]
+            )
+            self.assertIn("Saved snapshot", output)
+            payload = json.loads(snapshot_path.read_text(encoding="utf-8"))
+            provenance = payload["provenance"]
+            self.assertTrue(provenance.get("raw_exported"))
+            self.assertTrue(Path(provenance["gdb_mi_raw_path"]).exists())
+
     def test_thin_snapshot_surfaces_missing_evidence_gaps(self) -> None:
         stopped_line = (FIXTURES / "sample.mi").read_text(encoding="utf-8").splitlines()[0]
         with tempfile.NamedTemporaryFile("w", suffix=".mi", delete=False) as handle:

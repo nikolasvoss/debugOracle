@@ -343,6 +343,14 @@ def _add_input_arguments(
         help="Path to an RTT log captured alongside the MI transcript",
     )
     parser.add_argument(
+        "--export-raw",
+        action="store_true",
+        help=(
+            "Export raw MI/RTT inputs to sidecar files. Raw export also happens "
+            "automatically when parse warnings are detected."
+        ),
+    )
+    parser.add_argument(
         "--workspace-root",
         default=".",
         help="Workspace root used to resolve default file paths",
@@ -428,6 +436,12 @@ def _cmd_observe(args: argparse.Namespace) -> int:
     discovery = _resolve_observe_inputs(args, workspace_root)
     gdb_mi = discovery["gdb_mi"]
     rtt = discovery["rtt"]
+    state_out = _resolve_state_out_path(
+        workspace_root=workspace_root,
+        requested_state_out=args.state_out,
+        gdb_mi=gdb_mi,
+        rtt=rtt,
+    )
     bundle = _resolve_bundle(
         args,
         gdb_mi=gdb_mi,
@@ -436,12 +450,7 @@ def _cmd_observe(args: argparse.Namespace) -> int:
         command_name="observe",
         explicit_gdb=discovery["gdb_mi_explicit"],
         explicit_rtt=discovery["rtt_explicit"],
-    )
-    state_out = _resolve_state_out_path(
-        workspace_root=workspace_root,
-        requested_state_out=args.state_out,
-        gdb_mi=gdb_mi,
-        rtt=rtt,
+        export_dir=Path(state_out).parent,
     )
     save_bundle(bundle, state_out)
     _warn_if_connected_no_bytes_rtt_capture(rtt=rtt)
@@ -510,6 +519,7 @@ def _resolve_bundle(
     command_name: str = "snapshot",
     explicit_gdb: bool = False,
     explicit_rtt: bool = False,
+    export_dir: Path | None = None,
 ):
     workspace_root = Path(args.workspace_root).resolve()
     config = _resolve_session_config(args, workspace_root)
@@ -585,13 +595,17 @@ def _resolve_bundle(
             },
             discovered_inputs,
         )
-        return build_bundle_from_stream(
+        bundle = build_bundle_from_stream(
             sys.stdin,
             rtt_text=rtt_text,
             gdb_source=gdb_mi if gdb_mi else "<stdin>",
             rtt_source=rtt,
             rtt_window=rtt_window,
+            export_raw=args.export_raw,
+            export_dir=export_dir or config.snapshot_file.parent,
         )
+        _emit_raw_export_notice(command_name, bundle.provenance)
+        return bundle
     if gdb_mi in {"-", "/dev/stdin", "stdin"}:
         rtt_text = _read_rtt(rtt)
         _emit_discovery_summary(
@@ -602,13 +616,17 @@ def _resolve_bundle(
             },
             discovered_inputs,
         )
-        return build_bundle_from_stream(
+        bundle = build_bundle_from_stream(
             sys.stdin,
             rtt_text=rtt_text,
             gdb_source=gdb_mi,
             rtt_source=rtt,
             rtt_window=rtt_window,
+            export_raw=args.export_raw,
+            export_dir=export_dir or config.snapshot_file.parent,
         )
+        _emit_raw_export_notice(command_name, bundle.provenance)
+        return bundle
 
     if gdb_mi is not None:
         _require_readable_file(gdb_mi, "GDB/MI")
@@ -624,7 +642,15 @@ def _resolve_bundle(
     if rtt:
         _require_readable_file(rtt, "RTT")
     try:
-        return build_bundle_from_files(gdb_mi, rtt, rtt_window=rtt_window)
+        bundle = build_bundle_from_files(
+            gdb_mi,
+            rtt,
+            rtt_window=rtt_window,
+            export_raw=args.export_raw,
+            export_dir=export_dir or config.snapshot_file.parent,
+        )
+        _emit_raw_export_notice(command_name, bundle.provenance)
+        return bundle
     except OSError as error:
         raise SystemExit(f"Unable to read one of the required input files: {error}") from error
 
@@ -739,6 +765,21 @@ def _emit_discovery_summary(
     )
     for label, value in discovered_items:
         print(f"- {label}: {value}", file=sys.stderr)
+
+
+def _emit_raw_export_notice(command_name: str, provenance: dict[str, object]) -> None:
+    if not provenance.get("raw_exported"):
+        return
+    print(f"Raw input export for {command_name}:", file=sys.stderr)
+    export_root = provenance.get("raw_export_root")
+    if export_root:
+        print(f"- export root: {export_root}", file=sys.stderr)
+    gdb_path = provenance.get("gdb_mi_raw_path")
+    if gdb_path:
+        print(f"- gdb-mi raw: {gdb_path}", file=sys.stderr)
+    rtt_path = provenance.get("rtt_raw_path")
+    if rtt_path:
+        print(f"- rtt raw: {rtt_path}", file=sys.stderr)
 
 
 def _read_rtt(rtt_path: str | None) -> str:
