@@ -1,0 +1,88 @@
+from __future__ import annotations
+
+import io
+import tempfile
+import unittest
+from contextlib import redirect_stdout
+from pathlib import Path
+
+from debugoracle.builder import build_bundle_from_files, save_bundle
+from debugoracle.cli import main
+
+
+FIXTURES = Path(__file__).parent / "fixtures"
+
+
+class DebugOracleLiveCliTests(unittest.TestCase):
+    def test_status_command_reports_session_health(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._prepare_workspace(tmpdir)
+            output = self._run_cli(["status", "--workspace-root", tmpdir])
+
+        self.assertIn("DebugOracle Session Status", output)
+        self.assertIn("Health: healthy", output)
+        self.assertIn("Snapshot ID: snap-", output)
+
+    def test_status_command_keeps_missing_rtt_non_fatal(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._prepare_workspace(tmpdir, include_rtt=False)
+            output = self._run_cli(["status", "--workspace-root", tmpdir])
+
+        self.assertIn("Health: healthy", output)
+        self.assertIn("RTT file not found", output)
+        self.assertIn("Snapshot Parse Warnings: 1", output)
+
+    def test_live_status_command_uses_demo_backend(self) -> None:
+        output = self._run_cli(["live-status"])
+        self.assertIn("DebugOracle Live Backend Status", output)
+        self.assertIn("Backend: demo", output)
+        self.assertIn("Available: yes", output)
+
+    def test_live_registers_command_renders_registers(self) -> None:
+        output = self._run_cli(["live-registers"])
+        self.assertIn("DebugOracle Live Registers", output)
+        self.assertIn("pc: 0x08000100", output)
+        self.assertIn("sp: 0x20002000", output)
+
+    def test_live_memory_command_renders_memory_payload(self) -> None:
+        output = self._run_cli(
+            ["live-memory", "--address", "0x20002000", "--size", "8"]
+        )
+        self.assertIn("DebugOracle Live Memory", output)
+        self.assertIn("Address: 0x20002000", output)
+        self.assertIn("DebugOra", output)
+
+    def test_live_status_command_rejects_unknown_backend(self) -> None:
+        with self.assertRaises(SystemExit) as error:
+            main(["live-status", "--backend", "missing"])
+        self.assertIn("Unknown live backend", str(error.exception))
+
+    def _run_cli(self, argv: list[str]) -> str:
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            exit_code = main(argv)
+        self.assertEqual(exit_code, 0)
+        return buffer.getvalue()
+
+    def _prepare_workspace(self, tmpdir: str, *, include_rtt: bool = True) -> None:
+        workspace = Path(tmpdir)
+        session_dir = workspace / ".dbgoracle"
+        session_dir.mkdir()
+        bundle = build_bundle_from_files(
+            str(FIXTURES / "sample.mi"),
+            str(FIXTURES / "sample.rtt") if include_rtt else None,
+        )
+        save_bundle(bundle, str(session_dir / "latest_snapshot.json"))
+        (session_dir / "cortex-debug-shared-mi.log").write_text(
+            (FIXTURES / "sample.mi").read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        if include_rtt:
+            (session_dir / "session.rtt").write_text(
+                (FIXTURES / "sample.rtt").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+
+
+if __name__ == "__main__":
+    unittest.main()

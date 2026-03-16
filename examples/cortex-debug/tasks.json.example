@@ -2,7 +2,7 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "DebugOracle: prepare capture paths",
+      "label": "Prepare debug logs",
       "type": "shell",
       "command": "mkdir -p \"${workspaceFolder}/.dbgoracle\" && : > \"${workspaceFolder}/.dbgoracle/cortex-debug-shared-mi.log\" && : > \"${workspaceFolder}/.dbgoracle/session.rtt\"",
       "windows": {

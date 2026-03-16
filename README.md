@@ -57,6 +57,9 @@ Quick check after run:
 - `report` shows stop reason + frame + register/local context.
 - `prompt` includes evidence sections you can paste into ChatGPT.
 
+If `source .vscode/dump-registers.gdb` causes `Python is not supported`, remove that
+line from `postLaunchCommands` until you switch to a Python-enabled GDB binary.
+
 See full sample config and step-by-step checklist in [`examples/cortex-debug/README.md`](examples/cortex-debug/README.md).
 
 Typical Cortex-Debug flow:
@@ -84,6 +87,22 @@ printf "*stopped,reason=\"breakpoint-hit\",...\\n^done,register-values=[...]" | 
 - Attaching a machine-readable artifact to an issue or test case
 
 Raw JSON is not required for the everyday `observe -> report -> prompt` workflow.
+
+## Roadmap and low-level verification
+
+The ranked product roadmap lives in [`ROADMAP.md`](ROADMAP.md).
+
+This slice also adds read-only verification commands for the low-level foundation:
+
+```bash
+./dbgoracle status
+./dbgoracle live-status
+./dbgoracle live-registers
+./dbgoracle live-memory --address 0x20002000 --size 16
+```
+
+The live commands use the bundled `demo` backend for deterministic verification only.
+No real hardware adapter or MCP server is included in this slice.
 
 ## Notes and boundaries
 

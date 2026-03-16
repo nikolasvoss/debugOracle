@@ -2,33 +2,62 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "DebugOracle (template)",
+      // This example is specific to an STM32 + OpenOCD workflow.
+      // Adjust the target, executable, and debugger paths for your project.
+      "name": "Debug STM32 (OpenOCD)",
       "type": "cortex-debug",
       "request": "launch",
-
-      // ----- Fill these as needed for your project -----
-      "servertype": "openocd",
-      "cwd": "${workspaceFolder}",
-      "executable": "${workspaceFolder}/build/firmware.elf",
-
       "showDevDebugOutput": "raw",
-      "runToMain": true,
-      "gdbPath": "gdb-multiarch",
-      "preLaunchCommands": [],
-      "preLaunchTask": "DebugOracle: prepare capture paths",
-      "postRunCommands": [
-        "monitor reset halt"
+      "servertype": "openocd",
+      "serverpath": "${workspaceFolder}/.vscode/openocd-wrapper.sh",
+      "overrideGDBServerStartedRegex": "Info\\s*:\\s*Listening on port\\s+\\d+\\s+for\\s+gdb\\s+connections?",
+      "armToolchainPath": "/usr/bin",
+      "configFiles": [
+        "interface/stlink.cfg",
+        "target/stm32l4x.cfg"
+      ],
+      "openOCDLaunchCommands": [
+        "adapter speed 4000"
+      ],
+      "cwd": "${workspaceFolder}",
+      "executable": "${workspaceFolder}/build/app.elf",
+      "gdbPath": "/usr/bin/arm-none-eabi-gdb",
+      "runToEntryPoint": "main",
+      "preLaunchTask": "Prepare debug logs",
+
+      // Write MI log directly into .dbgoracle for DebugOracle.
+      "sharedMiLogFile": "${workspaceFolder}/.dbgoracle/cortex-debug-shared-mi.log",
+      "preLaunchCommands": [
+        "set pagination off",
+        "set logging overwrite on",
+        "set logging file ${workspaceFolder}/.dbgoracle/cortex-debug-shared-mi.log",
+        "set logging on"
+      ],
+      "postLaunchCommands": [
+        "set remotetimeout 20",
+        "monitor reset halt",
+        "set pagination off"
       ],
 
-      // Cortex-Debug MI logging (replace this key name with the one your installed
-      // Cortex-Debug version exposes, keeping the same value format):
-      "sharedMiLogFile": "${workspaceFolder}/.dbgoracle/cortex-debug-shared-mi.log",
-
-      // Cortex-Debug RTT logging support varies by version.
-      // If your version exposes a different key, replace this object block only.
+      // Optional: if your GDB supports Python and you want richer dumps, add:
+      // "source .vscode/dump-registers.gdb" to postLaunchCommands.
+      // This repo avoids Python-only post-launch scripts by default for compatibility.
       "rttConfig": {
         "enabled": true,
-        "logFile": "${workspaceFolder}/.dbgoracle/session.rtt"
+        "address": "auto",
+        "clearSearch": false,
+        "searchId": "SEGGER RTT",
+        "rtt_start_retry": 5000,
+        "polling_interval": 10,
+        "decoders": [
+          {
+            "label": "RTT",
+            "type": "console",
+            "port": 0,
+            "logFile": "${workspaceFolder}/.dbgoracle/session.rtt",
+            "timestamp": true
+          }
+        ]
       }
     }
   ]
