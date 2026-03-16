@@ -22,7 +22,7 @@
     {
       "label": "Start RTT capture",
       "type": "shell",
-      "command": "bash -lc 'mkdir -p \"${workspaceFolder}/.dbgoracle\"; rm -f \"${workspaceFolder}/.dbgoracle/session.rtt.pid\"; ./dbgoracle capture-rtt --port 60001 --output \"${workspaceFolder}/.dbgoracle/session.rtt\" --state \"${workspaceFolder}/.dbgoracle/session.rtt.state.json\" & echo $! > \"${workspaceFolder}/.dbgoracle/session.rtt.pid\"'",
+      "command": "bash -lc 'set -e\nmkdir -p \"${workspaceFolder}/.dbgoracle\"\npidfile=\"${workspaceFolder}/.dbgoracle/session.rtt.pid\"\nlogfile=\"${workspaceFolder}/.dbgoracle/session.rtt.launch.log\"\nstatefile=\"${workspaceFolder}/.dbgoracle/session.rtt.state.json\"\noutfile=\"${workspaceFolder}/.dbgoracle/session.rtt\"\nrm -f \"$pidfile\"\n\nif [ -x \"${workspaceFolder}/dbgoracle\" ]; then\n  dbgoracle_bin=\"${workspaceFolder}/dbgoracle\"\nelif command -v dbgoracle >/dev/null 2>&1; then\n  dbgoracle_bin=\"$(command -v dbgoracle)\"\nelse\n  echo \"dbgoracle not found in workspace or PATH\" >> \"$logfile\"\n  exit 127\nfi\n\nif command -v setsid >/dev/null 2>&1; then\n  setsid nohup \"$dbgoracle_bin\" capture-rtt --port 60001 --output \"$outfile\" --state-out \"$statefile\" >> \"$logfile\" 2>&1 < /dev/null &\nelse\n  nohup \"$dbgoracle_bin\" capture-rtt --port 60001 --output \"$outfile\" --state-out \"$statefile\" >> \"$logfile\" 2>&1 < /dev/null &\nfi\nprintf \"%s\\n\" \"$!\" > \"$pidfile\"'",
       "windows": {
         "command": "powershell -NoProfile -Command \"Write-Host 'RTT auto-capture is POSIX-only. Start ./dbgoracle capture-rtt manually if needed.'\""
       },
