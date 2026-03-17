@@ -5,8 +5,7 @@
       "label": "DebugOracle: Prelaunch",
       "dependsOn": [
         "Prepare debug logs",
-        "Start RTT capture",
-        "Verify RTT capture"
+        "DebugOracle: Start RTT run"
       ],
       "dependsOrder": "sequence",
       "problemMatcher": []
@@ -14,34 +13,28 @@
     {
       "label": "Prepare debug logs",
       "type": "shell",
-      "command": "mkdir -p \"${workspaceFolder}/.dbgoracle\" && : > \"${workspaceFolder}/.dbgoracle/cortex-debug-shared-mi.log\" && : > \"${workspaceFolder}/.dbgoracle/session.rtt\" && rm -f \"${workspaceFolder}/.dbgoracle/session.rtt.state.json\"",
+      "command": "mkdir -p \"${workspaceFolder}/.dbgoracle\" && : > \"${workspaceFolder}/.dbgoracle/cortex-debug-shared-mi.log\" && : > \"${workspaceFolder}/.dbgoracle/session.rtt\" && : > \"${workspaceFolder}/.dbgoracle/session.rtt.launch.log\" && rm -f \"${workspaceFolder}/.dbgoracle/session.rtt.state.json\"",
       "windows": {
-        "command": "New-Item -ItemType Directory -Force -Path \"${workspaceFolder}\\\\.dbgoracle\" | Out-Null; New-Item -ItemType File -Force -Path \"${workspaceFolder}\\\\.dbgoracle\\\\cortex-debug-shared-mi.log\" | Out-Null; New-Item -ItemType File -Force -Path \"${workspaceFolder}\\\\.dbgoracle\\\\session.rtt\" | Out-Null; Remove-Item -ErrorAction SilentlyContinue \"${workspaceFolder}\\\\.dbgoracle\\\\session.rtt.state.json\""
+        "command": "New-Item -ItemType Directory -Force -Path \"${workspaceFolder}\\\\.dbgoracle\" | Out-Null; New-Item -ItemType File -Force -Path \"${workspaceFolder}\\\\.dbgoracle\\\\cortex-debug-shared-mi.log\" | Out-Null; New-Item -ItemType File -Force -Path \"${workspaceFolder}\\\\.dbgoracle\\\\session.rtt\" | Out-Null; New-Item -ItemType File -Force -Path \"${workspaceFolder}\\\\.dbgoracle\\\\session.rtt.launch.log\" | Out-Null; Remove-Item -ErrorAction SilentlyContinue \"${workspaceFolder}\\\\.dbgoracle\\\\session.rtt.state.json\""
       },
       "problemMatcher": []
     },
     {
-      "label": "Start RTT capture",
+      "label": "DebugOracle: Start RTT run",
       "type": "shell",
-      "command": "bash -lc 'set -e; mkdir -p \"${workspaceFolder}/.dbgoracle\"; pidfile=\"${workspaceFolder}/.dbgoracle/session.rtt.pid\"; logfile=\"${workspaceFolder}/.dbgoracle/session.rtt.launch.log\"; statefile=\"${workspaceFolder}/.dbgoracle/session.rtt.state.json\"; outfile=\"${workspaceFolder}/.dbgoracle/session.rtt\"; rm -f \"$pidfile\"; if [ -x \"${workspaceFolder}/dbgoracle\" ]; then dbgoracle_bin=\"${workspaceFolder}/dbgoracle\"; elif command -v dbgoracle >/dev/null 2>&1; then dbgoracle_bin=\"$(command -v dbgoracle)\"; else echo \"dbgoracle not found in workspace or PATH\" >> \"$logfile\"; exit 127; fi; if command -v setsid >/dev/null 2>&1; then setsid nohup \"$dbgoracle_bin\" capture-rtt --port 60001 --output \"$outfile\" --state-out \"$statefile\" >> \"$logfile\" 2>&1 < /dev/null &; else nohup \"$dbgoracle_bin\" capture-rtt --port 60001 --output \"$outfile\" --state-out \"$statefile\" >> \"$logfile\" 2>&1 < /dev/null &; fi; printf \"%s\\n\" \"$!\" > \"$pidfile\"'",
+      "command": "dbgoracle run --detach --workspace-root \"${workspaceFolder}\" --port 60001 --output \"${workspaceFolder}/.dbgoracle/session.rtt\" --state-out \"${workspaceFolder}/.dbgoracle/session.rtt.state.json\"",
       "windows": {
-        "command": "powershell -NoProfile -Command \"Write-Host 'RTT auto-capture is POSIX-only. Start ./dbgoracle capture-rtt manually if needed.'\""
+        "command": "dbgoracle run --detach --workspace-root \"${workspaceFolder}\" --port 60001 --output \"${workspaceFolder}\\\\.dbgoracle\\\\session.rtt\" --state-out \"${workspaceFolder}\\\\.dbgoracle\\\\session.rtt.state.json\""
       },
       "problemMatcher": []
     },
     {
-      "label": "Verify RTT capture",
+      "label": "DebugOracle: Stop RTT run",
       "type": "shell",
-      "command": "bash -lc 'set -e; pidfile=\"${workspaceFolder}/.dbgoracle/session.rtt.pid\"; statefile=\"${workspaceFolder}/.dbgoracle/session.rtt.state.json\"; logfile=\"${workspaceFolder}/.dbgoracle/session.rtt.launch.log\"; outfile=\"${workspaceFolder}/.dbgoracle/session.rtt\"; for _ in $(seq 1 8); do [ -f \"$statefile\" ] && break; sleep 0.25; done; if [ ! -f \"$statefile\" ]; then echo \"Warning: RTT capture state file not found yet: $statefile\"; if [ -f \"$pidfile\" ]; then pid=\"$(cat \"$pidfile\" || true)\"; if [ -n \"$pid\" ] && ! kill -0 \"$pid\" 2>/dev/null; then echo \"Warning: RTT capture process is not running for pid $pid.\"; fi; fi; echo \"Check for detailed startup errors in $logfile.\"; exit 0; fi; status=\"$(grep -o '\"status\"[[:space:]]*:[[:space:]]*\"[^\"]*\"' \"$statefile\" | head -n1 | sed -e 's/.*\"status\"[[:space:]]*:[[:space:]]*\"//' -e 's/\"$//')\"; bytes=\"$(grep -o '\"bytes_captured\"[[:space:]]*:[[:space:]]*[0-9]\\+' \"$statefile\" | head -n1 | sed -e 's/.*\"bytes_captured\"[[:space:]]*:[[:space:]]*//')\"; error=\"$(grep -o '\"error\"[[:space:]]*:[[:space:]]*\"[^\"]*\"' \"$statefile\" | head -n1 | sed -e 's/.*\"error\"[[:space:]]*:[[:space:]]*\"//' -e 's/\"$//')\"; status=\"${status:-}\"; bytes=\"${bytes:-0}\"; error=\"${error:-}\"; if [ -z \"$status\" ]; then echo \"Warning: RTT state file is unreadable: unable to parse status.\"; echo \"Check whether the capture process could write JSON to $statefile.\"; exit 0; fi; if [ \"$status\" = \"error\" ]; then echo \"Warning: RTT capture reported an error: ${error:-\\\"unknown\\\"}\"; elif [ \"$status\" = \"waiting\" ]; then echo \"Warning: RTT capture is waiting for the OpenOCD RTT TCP server (status=$status).\"; echo \"Verify OpenOCD started the RTT endpoint and that this port is active before this debug stop.\"; elif [ \"$status\" = \"connected\" ] && [ \"$bytes\" -eq 0 ]; then echo \"Warning: RTT capture is connected but no bytes were recorded yet for $outfile.\"; elif [ \"$status\" = \"idle\" ]; then echo \"Warning: RTT capture is connected but currently idle. No bytes were captured.\"; fi'",
+      "command": "dbgoracle stop --workspace-root \"${workspaceFolder}\"",
       "windows": {
-        "command": "powershell -NoProfile -Command \"Write-Host 'RTT readiness checks are POSIX-only for this example workflow.'\""
+        "command": "dbgoracle stop --workspace-root \"${workspaceFolder}\""
       },
-      "problemMatcher": []
-    },
-    {
-      "label": "Stop RTT capture",
-      "type": "shell",
-      "command": "bash -lc 'pidfile=\"${workspaceFolder}/.dbgoracle/session.rtt.pid\"; if [ -f \"$pidfile\" ]; then pid=$(cat \"$pidfile\" || true); if [ -n \"$pid\" ] && kill -0 \"$pid\" 2>/dev/null; then kill \"$pid\" || true; fi; rm -f \"$pidfile\"; fi'",
       "problemMatcher": []
     }
   ]

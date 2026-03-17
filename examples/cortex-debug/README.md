@@ -21,7 +21,7 @@ but this example is not a generic Cortex-Debug template. Expect to edit the
 target-specific fields before using it on another project:
 
 - MI transcript output should write to `./cortex-debug-shared-mi.log` or `.dbgoracle/cortex-debug-shared-mi.log`
-- RTT should be captured by `./dbgoracle capture-rtt` into `.dbgoracle/session.rtt`
+- RTT should be captured by `./dbgoracle run` into `.dbgoracle/session.rtt`
 - If your Cortex-Debug version uses different MI/RTT key names, update only the
   logging lines.
 - `serverpath` in the sample is optional and commented out by default.
@@ -46,17 +46,20 @@ test -f .dbgoracle/session.rtt && echo "RTT file path exists" || echo "RTT log n
 
 ## 2) Run a bounded capture
 
-- Start your Cortex-Debug session.
 - Ensure `.dbgoracle` exists before starting by using the `DebugOracle: Prelaunch` task from `tasks.json.example`.
-- The example tasks auto-start `capture-rtt` and stop it when the debug session ends (POSIX shells only).
-- If you are not using the tasks, start the supported RTT capture path after Cortex-Debug/OpenOCD announces the RTT TCP port:
+- `DebugOracle: Prelaunch` runs `dbgoracle run --detach` so RTT capture can begin before the debug session reaches the first stop.
+- `DebugOracle: Stop RTT run` runs automatically as `postDebugTask`, and you can also run it manually.
+- If you are not using tasks, use this lifecycle directly:
 
 ```bash
-./dbgoracle capture-rtt --port 60001 --output .dbgoracle/session.rtt
+./dbgoracle run --detach --workspace-root . --port 60001 --output .dbgoracle/session.rtt
+# later, after your debug session:
+./dbgoracle stop --workspace-root .
 ```
 
+- Start your Cortex-Debug session.
 - Use the TCP port that Cortex-Debug/OpenOCD prints for the active RTT channel. Channel `0` is often exposed on `60001`.
-- Use only one RTT consumer at a time. Do not run `uScope` or a second RTT terminal while `capture-rtt` is attached.
+- Use only one RTT consumer at a time. Do not run `uScope` or a second RTT terminal while `dbgoracle run` is attached.
 - Reproduce the fault until the stop point you want to investigate.
 - Open/refresh **Call Stack**, **Registers**, and **Variables/Locals** after the stop.
 - Stop debugging for that run so the MI file stays bounded to one incident.
@@ -88,7 +91,7 @@ Then hand it to ChatGPT:
 
 - `observe` exits successfully and writes `latest_snapshot.json` in the detected artifact folder
   (workspace root or `.dbgoracle`).
-- `status` shows an `RTT Capture` section with the RTT transport state if you used `capture-rtt`.
+- `status` shows an `RTT Capture` section with the RTT transport state if you used `run`.
 - `report` includes:
   - stop reason
   - at least one stack frame
@@ -98,9 +101,22 @@ Then hand it to ChatGPT:
 ## Notes
 
 - Cortex-Debug launch JSON schemas vary slightly by extension/version; keep only the MI/RTT paths and shared-logging settings aligned with your installed version.
-- Treat Cortex-Debug `rttConfig.logFile` as best-effort only. The supported robust path is `./dbgoracle capture-rtt`.
-- If the RTT file stays empty, inspect `.dbgoracle/session.rtt.state.json` or run `./dbgoracle status` to see whether the helper connected, stayed idle, or hit an error.
-- If a debug session ends unexpectedly, run the `Stop RTT capture` task to clean up the PID file.
+- Treat Cortex-Debug `rttConfig.logFile` as best-effort only. The supported robust path is `./dbgoracle run`.
+- If the RTT file stays empty, inspect `.dbgoracle/session.rtt.state.json` or run `./dbgoracle status` to see whether capture connected, stayed idle, or hit an error.
+- If a debug session ends unexpectedly, run `./dbgoracle stop --workspace-root .` to clean up detached runtime metadata.
 - If logs are stale, remove old `.dbgoracle/*` files before next run.
 - For security, treat MI/RTT logs as potentially sensitive traces (register values,
   call frames, and firmware-related strings).
+
+## Which command when?
+
+- Incident capture (recommended): run `DebugOracle: Prelaunch`, debug one incident, then let `postDebugTask` call `DebugOracle: Stop RTT run`.
+- Manual workflow without VS Code: run `./dbgoracle run --detach ...` before debugging and `./dbgoracle stop --workspace-root .` after.
+- Continuous multi-session capture: add `--append` to `run --detach` and rotate or reset `.dbgoracle/session.rtt` between investigations.
+
+## Expected run/stop messages
+
+- `Started detached RTT run (pid ... )` means background capture is active.
+- `Detached RTT run already active` means a prior managed session is still running.
+- `Warning: Detached RTT run pid ... is not running. Cleaning up stale metadata.` means a stale runtime file was found and repaired.
+- `RTT run stopped because the RTT server closed the connection.` means capture auto-stopped without VS Code because the transport ended.

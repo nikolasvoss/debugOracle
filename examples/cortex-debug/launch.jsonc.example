@@ -9,14 +9,14 @@
       "request": "launch",
       "showDevDebugOutput": "raw",
       "servertype": "openocd",
+      // Keep this override only if your OpenOCD prints a matching "Listening on port ... for gdb connections" line.
+      // If launch hangs waiting for the server while OpenOCD is already running, remove or adapt this regex.
       "overrideGDBServerStartedRegex": "Info\\s*:\\s*Listening on port\\s+\\d+\\s+for\\s+gdb\\s+connections?",
       // PATH-based tool lookup is used by default.
       // Set these only when your environment needs fixed binaries:
       // "armToolchainPath": "${env:HOME}/.local/toolchains/arm-none-eabi/bin",
       // "gdbPath": "${env:HOME}/.local/toolchains/arm-none-eabi/bin/arm-none-eabi-gdb",
 
-      // Optional advanced override only (not shipped by default):
-      // "serverpath": "/absolute/path/to/openocd-wrapper.sh",
       "configFiles": [
         "interface/stlink.cfg",
         "target/stm32l4x.cfg"
@@ -25,13 +25,14 @@
         "adapter speed 4000"
       ],
       "cwd": "${workspaceFolder}",
+      // Update this to your firmware output path; missing/incorrect paths surface as launch-time errors.
       "executable": "${workspaceFolder}/build/app.elf",
-      "runToEntryPoint": "main",
+      // "runToEntryPoint": "main",
+      // Keep task labels in sync with tasks.json.
       "preLaunchTask": "DebugOracle: Prelaunch",
-      "postDebugTask": "Stop RTT capture",
+      "postDebugTask": "DebugOracle: Stop RTT run",
 
       // Write MI log directly into .dbgoracle for DebugOracle.
-      "sharedMiLogFile": "${workspaceFolder}/.dbgoracle/cortex-debug-shared-mi.log",
       "preLaunchCommands": [
         "set pagination off",
         "set logging overwrite on",
@@ -42,30 +43,10 @@
         "set remotetimeout 20",
         "monitor reset halt",
         "set pagination off"
-      ],
+      ]
 
       // Optional: if your GDB supports Python and you want richer dumps, add:
       // "source .vscode/dump-registers.gdb" to postLaunchCommands.
-      // This repo avoids Python-only post-launch scripts by default for compatibility.
-      "rttConfig": {
-        "enabled": true,
-        "address": "auto",
-        "clearSearch": false,
-        "searchId": "SEGGER RTT",
-        "rtt_start_retry": 5000,
-        "polling_interval": 10,
-        "decoders": [
-          {
-            // Keep this decoder for the RTT console/channel selection.
-            // DebugOracle should capture RTT into .dbgoracle/session.rtt via
-            // `./dbgoracle capture-rtt`, not via Cortex-Debug's best-effort logFile.
-            "label": "RTT",
-            "type": "console",
-            "port": 0,
-            "timestamp": true
-          }
-        ]
-      }
     }
   ]
 }

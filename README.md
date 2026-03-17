@@ -9,7 +9,7 @@ DebugOracle does not drive the probe or debugger. The intended v1 flow is:
 1. Start a Cortex-Debug session with shared MI logging available.
 2. Reproduce until the target reaches a meaningful stop.
 3. Open or refresh Call Stack, Registers, and Variables or Locals so Cortex-Debug emits the context you want to keep.
-4. If runtime breadcrumbs matter, capture RTT from the OpenOCD RTT TCP port with `capture-rtt`.
+4. If runtime breadcrumbs matter, capture RTT from the OpenOCD RTT TCP port with `run` (or low-level `capture-rtt`).
 5. Build a reusable snapshot with `observe`.
 6. Inspect it locally with `report`.
 7. Hand the same snapshot to ChatGPT with `prompt`.
@@ -29,7 +29,7 @@ Use the example below to make first capture quick:
 
 - Merge the entry from `examples/cortex-debug/launch.jsonc.example` into `.vscode/launch.json` (do not replace other launch configurations).
 - Merge `examples/cortex-debug/tasks.json.example` into `.vscode/tasks.json` so `.dbgoracle` is created automatically before each debug launch.
-- The example tasks auto-start `capture-rtt` and stop it when the debug session ends (POSIX shells only).
+- The example tasks start `run --detach` before launch and call `stop` when the debug session ends.
 
 - Run one focused debug stop.
 - Build once:
@@ -54,10 +54,10 @@ test -s cortex-debug-shared-mi.log && echo "MI log ready" || test -s .dbgoracle/
 What to configure in Cortex-Debug:
 
 - MI log path should point to `./cortex-debug-shared-mi.log` or `.dbgoracle/cortex-debug-shared-mi.log`.
-- RTT should stay enabled in Cortex-Debug/OpenOCD so the RTT TCP server comes up, but DebugOracle should write `.dbgoracle/session.rtt` via `capture-rtt`.
+- RTT should stay enabled in Cortex-Debug/OpenOCD so the RTT TCP server comes up, but DebugOracle should write `.dbgoracle/session.rtt` via `run` (or `capture-rtt`).
 - Keep captures bounded: stop at the event you care about and end the debug session to avoid mixing multiple stops.
 - Refresh Call Stack, Registers, and Variables/Locals before capture so the latest stop has rich context.
-- Use one RTT consumer only while `capture-rtt` is attached.
+- Use one RTT consumer only while `run`/`capture-rtt` is attached.
 
 Quick check after run:
 
@@ -75,10 +75,11 @@ See full sample config and step-by-step checklist in [`examples/cortex-debug/REA
 Typical Cortex-Debug flow:
 
 ```bash
-./dbgoracle capture-rtt --port 60001 --output /path/to/session.rtt
+./dbgoracle run --detach --workspace-root /path/to/workspace --port 60001 --output /path/to/session.rtt
 ./dbgoracle observe --workspace-root /path/to/workspace
 ./dbgoracle report --workspace-root /path/to/workspace
 ./dbgoracle prompt --workspace-root /path/to/workspace --goal "Explain why the target stopped here"
+./dbgoracle stop --workspace-root /path/to/workspace
 ./dbgoracle --version
 ```
 
@@ -122,7 +123,8 @@ This slice also adds read-only verification commands for the low-level foundatio
 
 ```bash
 ./dbgoracle status
-./dbgoracle capture-rtt --port 60001 --output .dbgoracle/session.rtt
+./dbgoracle run --detach --workspace-root . --port 60001 --output .dbgoracle/session.rtt
+./dbgoracle stop --workspace-root .
 ./dbgoracle live-status
 ./dbgoracle live-registers
 ./dbgoracle live-memory --address 0x20002000 --size 16
@@ -138,7 +140,7 @@ No real hardware adapter or MCP server is included in this slice.
 - If the MI log only contains `*stopped` without follow-up stack, register, or local queries, the snapshot is valid but thinner.
 - If the MI log spans several stops, DebugOracle packages the latest stop-context it finds. Keep captures tight and per-stop when possible.
 - RTT is optional. Missing RTT weakens the bundle but does not fail the run.
-- The supported robust RTT path is `capture-rtt` against the OpenOCD RTT TCP port. Cortex-Debug `rttConfig.logFile` is best-effort only.
+- The supported robust RTT path is `run` (or low-level `capture-rtt`) against the OpenOCD RTT TCP port. Cortex-Debug `rttConfig.logFile` is best-effort only.
 - `status` reports RTT transport health separately from the RTT file when `.dbgoracle/session.rtt.state.json` is present.
 - MI and RTT inputs are treated as untrusted text. v1 does not guarantee redaction or secret scrubbing.
 - Source-context enrichment is not yet collected in this version.
