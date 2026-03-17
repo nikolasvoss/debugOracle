@@ -483,6 +483,73 @@ class DebugOracleCliTests(unittest.TestCase):
         self.assertIn(".dbgoracle/latest_snapshot.json", message)
         self.assertIn(".dbgoracle/cortex-debug-shared-mi.log", message)
 
+    def test_snapshot_can_run_with_only_rtt_input(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            rtt_path = workspace / "session.rtt"
+            rtt_path.write_text((FIXTURES / "sample.rtt").read_text(encoding="utf-8"), encoding="utf-8")
+
+            output = self._run_cli(
+                [
+                    "snapshot",
+                    "--workspace-root",
+                    str(workspace),
+                    "--rtt",
+                    str(rtt_path),
+                    "--format",
+                    "json",
+                ]
+            )
+            payload = json.loads(output)
+
+        self.assertIn("No GDB/MI input was provided before building this snapshot.", " ".join(payload["parse_warnings"]))
+        self.assertEqual(payload["provenance"]["gdb_mi_source"], "<missing-gdb-mi>")
+
+    def test_observe_can_run_with_only_rtt_input(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            rtt_path = workspace / "session.rtt"
+            rtt_path.write_text((FIXTURES / "sample.rtt").read_text(encoding="utf-8"), encoding="utf-8")
+            snapshot_path = workspace / "snapshot.json"
+
+            output = self._run_cli(
+                [
+                    "observe",
+                    "--workspace-root",
+                    str(workspace),
+                    "--rtt",
+                    str(rtt_path),
+                    "--state-out",
+                    str(snapshot_path),
+                ]
+            )
+
+            payload = json.loads(snapshot_path.read_text(encoding="utf-8"))
+
+        self.assertIn("Saved snapshot", output)
+        self.assertIn("snapshot_id", payload)
+        self.assertIn("No GDB/MI input was provided before building this snapshot.", " ".join(payload["parse_warnings"]))
+
+    def test_prompt_can_run_with_only_rtt_input(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            rtt_path = workspace / "session.rtt"
+            rtt_path.write_text((FIXTURES / "sample.rtt").read_text(encoding="utf-8"), encoding="utf-8")
+            output = self._run_cli(
+                [
+                    "prompt",
+                    "--workspace-root",
+                    str(workspace),
+                    "--rtt",
+                    str(rtt_path),
+                    "--goal",
+                    "Summarize what this trace indicates.",
+                ]
+            )
+
+        self.assertIn("# DebugOracle Prompt Package", output)
+        self.assertIn("Summarize what this trace indicates.", output)
+
     def test_observe_writes_snapshot_next_to_explicit_inputs_when_no_state_out_given(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)

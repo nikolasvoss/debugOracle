@@ -52,7 +52,7 @@ class SessionStatusTests(unittest.TestCase):
                 SessionConfig.from_workspace(workspace, stale_after_seconds=60)
             )
 
-        self.assertEqual(status.health, "degraded")
+        self.assertEqual(status.health, "healthy")
         self.assertTrue(status.snapshot.stale)
         self.assertTrue(status.gdb_mi.stale)
         self.assertTrue(status.rtt.stale)
@@ -119,6 +119,34 @@ class SessionStatusTests(unittest.TestCase):
 
         self.assertEqual(status.health, "healthy")
         self.assertGreater(status.parse_warning_count, 0)
+
+    def test_collect_session_status_treats_mi_parse_warnings_as_non_health_issues(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            session_dir = Path(tmpdir) / ".dbgoracle"
+            session_dir.mkdir()
+            noisy_log = (
+                (FIXTURES / "sample.mi").read_text(encoding="utf-8")
+                + "\n"
+                + "2*not-a-record\n"
+            )
+            (session_dir / "cortex-debug-shared-mi.log").write_text(
+                noisy_log,
+                encoding="utf-8",
+            )
+            (session_dir / "session.rtt").write_text(
+                (FIXTURES / "sample.rtt").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            bundle = build_bundle_from_files(
+                str(session_dir / "cortex-debug-shared-mi.log"),
+                str(session_dir / "session.rtt"),
+            )
+            save_bundle(bundle, str(session_dir / "latest_snapshot.json"))
+
+            status = collect_session_status(SessionConfig.from_workspace(tmpdir))
+
+        self.assertEqual(status.health, "healthy")
+        self.assertTrue(any("unable to parse MI record" in message for message in status.parse_warnings))
 
     def test_collect_session_status_reads_rtt_capture_sidecar(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

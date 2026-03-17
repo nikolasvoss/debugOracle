@@ -353,8 +353,6 @@ def _is_health_issue_warning(message: str) -> bool:
         for marker in (
             "could not read snapshot file",
             "could not parse snapshot json",
-            "unable to parse mi record",
-            "no gdb/mi input was provided",
             "evidence quality is reduced",
         )
     )

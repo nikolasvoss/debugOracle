@@ -542,7 +542,12 @@ def _resolve_bundle(
         )
         return load_bundle(resolved_snapshot)
 
-    if allow_snapshot_fallback and not args.gdb_mi_stream and not explicit_gdb:
+    if (
+        allow_snapshot_fallback
+        and not args.gdb_mi_stream
+        and not explicit_gdb
+        and not explicit_rtt
+    ):
         if config.snapshot_file.exists():
             _emit_discovery_summary(
                 command_name,
@@ -555,7 +560,23 @@ def _resolve_bundle(
             )
             return load_bundle(str(config.snapshot_file))
 
-    if not args.gdb_mi_stream and not explicit_gdb and not config.gdb_mi_file.is_file():
+    resolved_gdb = None
+    resolved_rtt = None
+    gdb_discovered = False
+    rtt_discovered = False
+
+    if explicit_gdb:
+        resolved_gdb = _resolve_workspace_path(requested_gdb, workspace_root)
+    elif config.gdb_mi_file.is_file():
+        resolved_gdb = str(config.gdb_mi_file)
+        gdb_discovered = True
+    if explicit_rtt:
+        resolved_rtt = _resolve_workspace_path(requested_rtt, workspace_root)
+    elif config.rtt_file.is_file():
+        resolved_rtt = str(config.rtt_file)
+        rtt_discovered = True
+
+    if not args.gdb_mi_stream and resolved_gdb is None and resolved_rtt is None:
         raise SystemExit(
             _missing_inputs_error(
                 command_name,
@@ -564,19 +585,8 @@ def _resolve_bundle(
             )
         )
 
-    gdb_discovered = False
-    if explicit_gdb:
-        gdb_mi = _resolve_workspace_path(requested_gdb, workspace_root)
-    else:
-        gdb_mi = str(config.gdb_mi_file)
-        gdb_discovered = True
-
-    rtt_discovered = False
-    if explicit_rtt:
-        rtt = _resolve_workspace_path(requested_rtt, workspace_root)
-    elif config.rtt_file.is_file():
-        rtt = str(config.rtt_file)
-        rtt_discovered = True
+    gdb_mi = resolved_gdb
+    rtt = resolved_rtt
 
     rtt_window = FULL_RTT_WINDOW if full else getattr(args, "rtt_window", DEFAULT_RTT_WINDOW)
     discovered_inputs = {
@@ -686,7 +696,7 @@ def _resolve_observe_inputs(
     gdb_mi_discovered = False
     rtt_discovered = False
 
-    if gdb_mi is None:
+    if gdb_mi is None and config.gdb_mi_file.is_file():
         gdb_mi = str(config.gdb_mi_file)
         gdb_mi_discovered = True
     if rtt is None and config.rtt_file.exists():
@@ -722,16 +732,17 @@ def _missing_inputs_error(
     ]
     lines = [
         f"{command_name} could not auto-resolve an input source.",
-        "Either provide --snapshot-file / --gdb-mi, or run from a workspace with:",
+        "Either provide --snapshot-file, --gdb-mi, or --rtt, or run from a workspace with:",
         "  - Snapshot:",
         f"    - {snapshot_candidates[0]}",
         f"    - {snapshot_candidates[1]}",
         "  - GDB/MI:",
         f"    - {gdb_candidates[0]}",
         f"    - {gdb_candidates[1]}",
-        "  - RTT: (optional)",
+        "  - RTT:",
         f"    - {rtt_candidates[0]}",
         f"    - {rtt_candidates[1]}",
+        "  - At least one of GDB/MI or RTT must be available.",
         f"Workspace root: {workspace_root}",
     ]
     if allow_snapshot_fallback:
@@ -741,8 +752,8 @@ def _missing_inputs_error(
         )
     else:
         lines.append(
-            "Tip: set --gdb-mi (and optional --rtt) or run from a workspace with "
-            "cortex-debug-shared-mi.log (at workspace root or inside .dbgoracle)."
+            "Tip: set --gdb-mi, --rtt, or both and run from a workspace with "
+            "cortex-debug-shared-mi.log or session.rtt (at workspace root or inside .dbgoracle)."
         )
     return "\n".join(lines)
 

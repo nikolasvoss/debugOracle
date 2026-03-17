@@ -23,19 +23,23 @@ def utc_now() -> str:
 
 
 def build_bundle_from_files(
-    gdb_mi_path: str,
+    gdb_mi_path: str | None = None,
     rtt_path: str | None = None,
     rtt_window: int = DEFAULT_RTT_WINDOW,
     *,
     export_raw: bool = False,
     export_dir: str | Path | None = None,
 ) -> EvidenceBundle:
-    gdb_text = _read_text_file(gdb_mi_path, errors="replace", required=True)
+    gdb_text = (
+        _read_text_file(gdb_mi_path, errors="replace", required=True)
+        if gdb_mi_path
+        else ""
+    )
     rtt_text = _read_text_file(rtt_path, errors="replace") if rtt_path else ""
     return build_bundle_from_text(
         gdb_text=gdb_text,
         rtt_text=rtt_text,
-        gdb_source=gdb_mi_path,
+        gdb_source=gdb_mi_path or "<missing-gdb-mi>",
         rtt_source=rtt_path,
         rtt_window=rtt_window,
         export_raw=export_raw,
@@ -255,10 +259,6 @@ def build_bundle_from_text(
         parse_event_severity["warn"] += 1
     if latest_stop is None:
         critical_events.append("Could not recover a stop context from the transcript.")
-    if mi_parse_error_count:
-        critical_events.append(f"Encountered {mi_parse_error_count} MI parse errors.")
-        parse_event_counts["critical-mi-parse-errors"] += mi_parse_error_count
-        parse_event_severity["warn"] += 1
     critical_warning_count = len(critical_events)
     quality_score = _compute_evidence_quality_score(
         latest_stop=latest_stop,
