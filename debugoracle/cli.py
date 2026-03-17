@@ -530,7 +530,7 @@ def _resolve_bundle(
     explicit_rtt = explicit_rtt or (getattr(args, "rtt", None) is not None)
 
     if requested_snapshot_file:
-        resolved_snapshot = str(Path(requested_snapshot_file))
+        resolved_snapshot = _resolve_workspace_path(requested_snapshot_file, workspace_root)
         _emit_discovery_summary(
             command_name,
             {
@@ -540,7 +540,7 @@ def _resolve_bundle(
                 "snapshot-file": False,
             },
         )
-        return load_bundle(requested_snapshot_file)
+        return load_bundle(resolved_snapshot)
 
     if allow_snapshot_fallback and not args.gdb_mi_stream and not explicit_gdb:
         if config.snapshot_file.exists():

@@ -68,7 +68,7 @@ class SessionConfig:
                 rtt_state_file,
                 default_rtt_state_path(rtt_path),
             ),
-            stale_after_seconds=max(0, stale_after_seconds),
+            stale_after_seconds=stale_after_seconds,
         )
 
     def to_dict(self) -> dict[str, object]:
