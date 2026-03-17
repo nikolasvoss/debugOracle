@@ -56,5 +56,10 @@ The current slice focuses only on the low-level-first foundation:
 - a pluggable live backend contract
 - a deterministic demo backend
 - CLI verification commands
+- strict snapshot integrity for user-facing rendering (`report`, `prompt`, `snapshot`) with hard-fail on unreadable or malformed snapshot JSON
+- `dbgoracle --version` contract with fixed output `0.1.0`
+- placeholder source-context cleanup from `future.py` and related placeholder output
+
+Current release framing: **0.1.0**.
 
 MCP integration and real hardware adapters are intentionally deferred to the next slice.

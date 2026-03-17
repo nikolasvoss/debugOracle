@@ -40,6 +40,11 @@ Use the example below to make first capture quick:
 ./dbgoracle prompt --goal "Explain why the target stopped here"
 ```
 
+Observe output path behavior:
+- `--state-out` always wins when provided.
+- Without `--state-out`, observe writes `latest_snapshot.json` next to the resolved GDB/MI input when available,
+  or next to the resolved RTT input, or finally to `<workspace>/.dbgoracle/latest_snapshot.json`.
+
 Before running `observe`, verify the MI file is receiving output:
 
 ```bash
@@ -56,8 +61,9 @@ What to configure in Cortex-Debug:
 
 Quick check after run:
 
-- `observe` succeeds and writes `latest_snapshot.json` in the detected artifact folder
-  (workspace root or `.dbgoracle`).
+- `observe` succeeds and writes `latest_snapshot.json` in the resolved artifact folder
+  (next to explicit/auto-resolved GDB/MI input when present, otherwise next to explicit/auto-resolved RTT,
+  otherwise `<workspace>/.dbgoracle`).
 - `report` shows stop reason + frame + register/local context.
 - `prompt` includes evidence sections you can paste into ChatGPT.
 
@@ -73,6 +79,7 @@ Typical Cortex-Debug flow:
 ./dbgoracle observe --workspace-root /path/to/workspace
 ./dbgoracle report --workspace-root /path/to/workspace
 ./dbgoracle prompt --workspace-root /path/to/workspace --goal "Explain why the target stopped here"
+./dbgoracle --version
 ```
 
 Advanced or automation-oriented rendering:
@@ -127,4 +134,4 @@ No real hardware adapter or MCP server is included in this slice.
 - The supported robust RTT path is `capture-rtt` against the OpenOCD RTT TCP port. Cortex-Debug `rttConfig.logFile` is best-effort only.
 - `status` reports RTT transport health separately from the RTT file when `.dbgoracle/session.rtt.state.json` is present.
 - MI and RTT inputs are treated as untrusted text. v1 does not guarantee redaction or secret scrubbing.
-- Source-code enrichment and agentic capabilities are placeholders in this version.
+- Source-context enrichment is not yet collected in this version.

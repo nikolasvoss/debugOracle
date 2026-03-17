@@ -10,6 +10,12 @@ Do **not** run `dbgoracle observe` as part of routine verification.
 
 `observe` is a snapshot rebuild action (it writes `latest_snapshot.json` and optional raw sidecars).
 Use it only when you need to regenerate the snapshot after collecting new MI/RTT logs.
+When provided, `--state-out` is always authoritative for the snapshot output location.
+Without `--state-out`, `observe` resolves output to:
+1. next to the resolved GDB/MI input (if available),
+2. next to the resolved RTT input (if available),
+3. `<workspace>/.dbgoracle/latest_snapshot.json` (default fallback).
+`status` and discovery checks remain warning-oriented for malformed snapshots; they are not hard-failed.
 
 ## Workspace defaults (fixed for this workflow)
 
