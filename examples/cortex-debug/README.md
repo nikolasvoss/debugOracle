@@ -5,6 +5,8 @@ first-time capture fast.
 
 ## 1) Copy example launch configuration
 
+For offline agent-oriented verification, see [AGENT_INSTRUCTIONS.md](AGENT_INSTRUCTIONS.md).
+
 Create or update:
 
 - `.vscode/launch.json`
