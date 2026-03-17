@@ -34,18 +34,20 @@ This roadmap is ranked by product impact for the current direction:
    Add memory, RTT, and serial scrubbing before wider use on real firmware and customer codebases.
 11. Shareable debug bundles
    Package portable evidence bundles for handoff, bug reports, and offline replay.
+12. Add better CLI descriptions and examples for human understanding.
+13. Add CLI short commands, like -h for --help or -o for --output for more efficient usage.
 
 ## Later leverage and UX work
 
-12. Agent guidance layer
+14. Agent guidance layer
    Suggest the next best evidence request instead of relying only on free-form prompting.
-13. VS Code-specific bridge
+15. VS Code-specific bridge
    Bring the experience closer to an in-editor chat flow after the backend and tool contract are stable.
-14. Multi-session and multi-target support
+16. Multi-session and multi-target support
    Handle more advanced probe and workspace setups without breaking the single-session default.
-15. Recorded replay and offline investigation mode
+17. Recorded replay and offline investigation mode
     Reuse the same tool surface with saved sessions when hardware is unavailable.
-16. Advanced live tools
+18. Advanced live tools
     Add watch expressions, structured fault-register decoding, and RTOS-aware views after safety and trust are mature.
 
 ## Current implementation priority

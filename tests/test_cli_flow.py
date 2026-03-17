@@ -132,6 +132,14 @@ class DebugOracleCliTests(unittest.TestCase):
         self.assertEqual(payload["provenance"]["parse_warning_count"], 1)
         self.assertEqual(payload["provenance"]["parse_event_counts"]["prompt-marker"], 1)
         self.assertEqual(payload["provenance"]["parse_event_counts"]["console-output"], 8)
+        self.assertIn("non_mi_pattern_counts", payload["provenance"])
+        self.assertNotIn("non_mi_patterns", payload["provenance"])
+        top_pattern = payload["provenance"]["non_mi_pattern_counts"][0]
+        self.assertEqual(
+            top_pattern["pattern"],
+            "Unable to match requested speed 500 kHz, using 480 kHz\\n",
+        )
+        self.assertEqual(top_pattern["count"], 8)
 
     def test_report_raw_non_mi_excerpt_is_compacted(self) -> None:
         noisy_log = (
@@ -163,7 +171,65 @@ class DebugOracleCliTests(unittest.TestCase):
             raw_section.count("Unable to match requested speed 500 kHz, using 480 kHz"),
             2,
         )
+        self.assertIn("(repeated 10 times)", raw_section)
+        self.assertNotIn("x10", raw_section)
         self.assertIn("(gdb)", raw_section)
+
+    def test_report_sanitizes_control_characters_in_non_mi_patterns(self) -> None:
+        noisy_log = (
+            '(gdb)\n'
+            '@"first line\\nsecond line\\tindent\\rreturn\\n"\n'
+            '@"first line\\nsecond line\\tindent\\rreturn\\n"\n'
+            + (FIXTURES / "sample.mi").read_text(encoding="utf-8")
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            noisy_path = Path(tmpdir) / "control.mi"
+            noisy_path.write_text(noisy_log, encoding="utf-8")
+            snapshot_path = Path(tmpdir) / "snapshot.json"
+            self._run_cli(
+                [
+                    "observe",
+                    "--gdb-mi",
+                    str(noisy_path),
+                    "--rtt",
+                    str(FIXTURES / "sample.rtt"),
+                    "--state-out",
+                    str(snapshot_path),
+                ]
+            )
+            report_output = self._run_cli(["report", "--snapshot-file", str(snapshot_path)])
+            payload = json.loads(snapshot_path.read_text(encoding="utf-8"))
+
+        self.assertIn("first line\\nsecond line\\tindent\\rreturn\\n", report_output)
+        self.assertIn("(repeated 2 times)", report_output)
+        self.assertNotIn("first line\nsecond line", report_output)
+        self.assertEqual(
+            payload["provenance"]["non_mi_pattern_counts"][0]["pattern"],
+            "first line\\nsecond line\\tindent\\rreturn\\n",
+        )
+
+    def test_report_handles_snapshots_missing_non_mi_pattern_counts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            snapshot_path = Path(tmpdir) / "snapshot.json"
+            self._run_cli(
+                [
+                    "observe",
+                    "--gdb-mi",
+                    str(FIXTURES / "sample.mi"),
+                    "--rtt",
+                    str(FIXTURES / "sample.rtt"),
+                    "--state-out",
+                    str(snapshot_path),
+                ]
+            )
+            payload = json.loads(snapshot_path.read_text(encoding="utf-8"))
+            payload["provenance"].pop("non_mi_pattern_counts", None)
+            snapshot_path.write_text(json.dumps(payload), encoding="utf-8")
+            report_output = self._run_cli(["report", "--snapshot-file", str(snapshot_path)])
+
+        self.assertNotIn("Top non-MI patterns", report_output)
+        self.assertIn("## Parsing Summary", report_output)
+        self.assertIn("DebugOracle Evidence Report", report_output)
 
     def test_prompt_markdown_contains_goal_intent_and_citations(self) -> None:
         output = self._run_cli(

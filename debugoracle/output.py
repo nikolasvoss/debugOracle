@@ -417,7 +417,7 @@ def _parsing_summary_section(bundle: EvidenceBundle, plain: bool = False) -> str
     parse_event_severity_counts = _coerce_count_map(
         bundle.provenance.get("parse_event_severity_counts")
     )
-    parse_patterns = _coerce_str_list(bundle.provenance.get("non_mi_patterns"))
+    parse_patterns = _coerce_pattern_counts(bundle.provenance.get("non_mi_pattern_counts"))
     quality_score = _evidence_quality_score(bundle)
     lines = [
         f"- MI records parsed: {mi_record_count}",
@@ -431,7 +431,13 @@ def _parsing_summary_section(bundle: EvidenceBundle, plain: bool = False) -> str
         info_count = parse_event_severity_counts.get("info", 0)
         lines.append(f"- Event severity: info={info_count}, warn={warn_count}")
     if parse_patterns:
-        lines.extend(["- Top non-MI patterns:"] + [f"  - {item}" for item in parse_patterns[:6]])
+        lines.extend(
+            ["- Top non-MI patterns:"]
+            + [
+                f"  - {item['pattern']} (repeated {item['count']} times)"
+                for item in parse_patterns[:6]
+            ]
+        )
     if parse_event_counts:
         lines.append("- Event types:")
         for kind in sorted(parse_event_counts):
@@ -472,10 +478,15 @@ def _non_mi_excerpt(bundle: EvidenceBundle, limit: int = 50) -> list[str]:
     noise_lines.reverse()
 
     lines: list[str] = []
-    noise_patterns = _coerce_str_list(bundle.provenance.get("non_mi_patterns"))
+    noise_patterns = _coerce_pattern_counts(bundle.provenance.get("non_mi_pattern_counts"))
     if noise_patterns:
         lines.append("Top non-MI patterns:")
-        lines.extend([f"  {item}" for item in noise_patterns[:3]])
+        lines.extend(
+            [
+                f"  {item['pattern']} (repeated {item['count']} times)"
+                for item in noise_patterns[:3]
+            ]
+        )
     if noise_lines:
         lines.append("Latest distinct non-MI samples:")
         lines.extend(noise_lines)
@@ -511,10 +522,39 @@ def _coerce_count_map(value: object) -> dict[str, int]:
     return counts
 
 
-def _coerce_str_list(value: object) -> list[str]:
+def _coerce_pattern_counts(value: object) -> list[dict[str, int | str]]:
     if not isinstance(value, list):
         return []
-    return [item for item in value if isinstance(item, str)]
+    patterns: list[dict[str, int | str]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        pattern = item.get("pattern")
+        count = item.get("count")
+        if not isinstance(pattern, str):
+            continue
+        try:
+            parsed_count = int(count)
+        except (TypeError, ValueError):
+            continue
+        if parsed_count <= 0:
+            continue
+        patterns.append(
+            {
+                "pattern": _sanitize_pattern_for_display(pattern),
+                "count": parsed_count,
+            }
+        )
+    return patterns
+
+
+def _sanitize_pattern_for_display(value: str) -> str:
+    normalized = (
+        value.replace("\r", "\\r")
+        .replace("\n", "\\n")
+        .replace("\t", "\\t")
+    )
+    return " ".join(normalized.split()) or "<empty>"
 
 
 def _with_parse_warnings(

@@ -107,6 +107,13 @@ snapshot/session artifacts and records their paths in the snapshot provenance. Y
 also force a raw export with `--export-raw` on `observe`, `snapshot`, `report`, or `prompt`.
 Raw exports may include sensitive data from your debug logs.
 
+`report` and `prompt` now render non-MI frequency summaries in explicit form, for example:
+
+- `Unable to match requested speed 500 kHz, using 480 kHz\n (repeated 6 times)`
+
+Note: historical snapshots that only contain the old non-MI pattern format will not show a
+top-pattern summary. Rebuild snapshots to use the current structured pattern contract.
+
 ## Roadmap and low-level verification
 
 The ranked product roadmap lives in [`ROADMAP.md`](ROADMAP.md).

@@ -273,7 +273,7 @@ def build_bundle_from_text(
     )
 
     non_mi_top_patterns = [
-        f"{pattern} x{count}"
+        {"pattern": _normalize_non_mi_pattern_key(pattern), "count": int(count)}
         for pattern, count in noise_pattern_counts.most_common(8)
     ]
     known_event_counts = {key: int(value) for key, value in parse_event_counts.items()}
@@ -320,7 +320,7 @@ def build_bundle_from_text(
             "parse_event_severity_counts": severity_counts,
             "critical_warnings": critical_events,
             "critical_warning_count": critical_warning_count,
-            "non_mi_patterns": non_mi_top_patterns,
+            "non_mi_pattern_counts": non_mi_top_patterns,
             "raw_line_warning_count": non_mi_line_count,
             **raw_export,
         },
@@ -508,6 +508,16 @@ def _strip_console_output(line: str) -> str:
         chars.append(char)
         cursor += 1
     return "".join(chars)
+
+
+def _normalize_non_mi_pattern_key(value: str) -> str:
+    normalized = (
+        value.replace("\\", "\\\\")
+        .replace("\r", "\\r")
+        .replace("\n", "\\n")
+        .replace("\t", "\\t")
+    )
+    return " ".join(normalized.split()) or "<empty>"
 
 
 def _compute_evidence_quality_score(
