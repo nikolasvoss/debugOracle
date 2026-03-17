@@ -901,10 +901,20 @@ class DebugOracleCliTests(unittest.TestCase):
         with self.assertRaises(SystemExit) as error:
             with redirect_stdout(stdout), redirect_stderr(stderr):
                 main(argv)
+        exit_payload = error.exception.code
+        stderr_text = stderr.getvalue()
+        if not isinstance(exit_payload, int) and exit_payload is not None:
+            exit_text = str(exit_payload)
+            if exit_text:
+                stderr_text = (
+                    f"{stderr_text.rstrip()}\n{exit_text}\n"
+                    if stderr_text
+                    else f"{exit_text}\n"
+                )
         return (
-            error.exception.code if isinstance(error.exception.code, int) else 1,
+            exit_payload if isinstance(exit_payload, int) else 1,
             stdout.getvalue(),
-            stderr.getvalue(),
+            stderr_text,
         )
 
 

@@ -52,7 +52,7 @@ class SessionStatusTests(unittest.TestCase):
                 SessionConfig.from_workspace(workspace, stale_after_seconds=60)
             )
 
-        self.assertEqual(status.health, "healthy")
+        self.assertEqual(status.health, "degraded")
         self.assertTrue(status.snapshot.stale)
         self.assertTrue(status.gdb_mi.stale)
         self.assertTrue(status.rtt.stale)
@@ -127,7 +127,7 @@ class SessionStatusTests(unittest.TestCase):
             noisy_log = (
                 (FIXTURES / "sample.mi").read_text(encoding="utf-8")
                 + "\n"
-                + "2*not-a-record\n"
+                + '*stopped,reason="unterminated\n'
             )
             (session_dir / "cortex-debug-shared-mi.log").write_text(
                 noisy_log,
