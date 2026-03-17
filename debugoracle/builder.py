@@ -8,7 +8,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .future import CapabilityRegistry, SourceContextProvider
 from .mi import MIParseError, parse_mi_record
 from .models import EvidenceBundle, SessionEvent, StackFrame
 
@@ -16,6 +15,12 @@ DEFAULT_RTT_WINDOW = 40
 FULL_RTT_WINDOW = 200
 RAW_GDB_MI_FILENAME = "raw-gdb-mi.log"
 RAW_RTT_FILENAME = "raw-rtt.log"
+
+DEFAULT_SOURCE_CONTEXT: dict[str, object] = {}
+
+
+class SnapshotLoadError(RuntimeError):
+    """Raised when a snapshot cannot be loaded with strict integrity checks."""
 
 
 def utc_now() -> str:
@@ -80,8 +85,6 @@ def build_bundle_from_text(
     export_dir: str | Path | None = None,
 ) -> EvidenceBundle:
     captured_at = utc_now()
-    registry = CapabilityRegistry()
-    source_context_provider = SourceContextProvider()
 
     latest_stop: dict[str, Any] | None = None
     latest_stack: list[StackFrame] = []
@@ -300,12 +303,7 @@ def build_bundle_from_text(
         registers=latest_registers,
         watched_values=latest_watched,
         recent_rtt=recent_rtt,
-        source_context={
-            **source_context_provider.enrich_placeholder(),
-            "planned_capabilities": [
-                capability.name for capability in registry.list_capabilities()
-            ],
-        },
+        source_context=dict(DEFAULT_SOURCE_CONTEXT),
         provenance={
             "gdb_mi_source": gdb_source,
             "rtt_source": rtt_source,
@@ -331,14 +329,20 @@ def build_bundle_from_text(
     )
 
 
-def load_bundle(path: str) -> EvidenceBundle:
+def load_bundle(path: str, *, strict: bool = False) -> EvidenceBundle:
     try:
         raw_text = Path(path).read_text(encoding="utf-8", errors="replace")
     except OSError as error:
+        message = f"Could not read snapshot file '{path}': {error}"
+        if strict:
+            raise SnapshotLoadError(message) from error
         return _empty_bundle_from_load_error(path, f"Could not read snapshot file: {error}")
     try:
         raw = json.loads(raw_text)
     except json.JSONDecodeError as error:
+        message = f"Could not parse snapshot JSON in '{path}': {error}"
+        if strict:
+            raise SnapshotLoadError(message) from error
         return _empty_bundle_from_load_error(path, f"Could not parse snapshot JSON: {error}")
     return EvidenceBundle.from_dict(raw)
 

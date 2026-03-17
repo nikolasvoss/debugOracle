@@ -11,6 +11,7 @@ from .builder import (
     build_bundle_from_stream,
     build_bundle_from_files,
     load_bundle,
+    SnapshotLoadError,
     save_bundle,
 )
 from .live import (
@@ -22,7 +23,7 @@ from .live import (
     render_register_result,
     validate_memory_request,
 )
-from .models import InvestigationRequest
+from .models import EvidenceBundle, InvestigationRequest
 from .output import render_prompt, render_report, render_snapshot
 from .rtt import (
     DEFAULT_RTT_CONNECT_TIMEOUT,
@@ -53,11 +54,18 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    cli_version = "0.1.0"
+
     parser = argparse.ArgumentParser(
         prog="dbgoracle",
         description=(
             "Passive embedded debug evidence packager for Cortex-Debug and GDB/MI sessions"
         ),
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=cli_version,
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -179,7 +187,8 @@ def _build_parser() -> argparse.ArgumentParser:
         "--state-out",
         default=None,
         help=(
-            "Path for the reusable snapshot JSON written by observe. When omitted, "
+            "Path for the reusable snapshot JSON written by observe. When provided, this "
+            "path is authoritative. When omitted, "
             "defaults to the latest_snapshot.json file beside the GDB/MI input, "
             "or falls back to <workspace>/latest_snapshot.json or "
             "<workspace>/.dbgoracle/latest_snapshot.json."
@@ -477,6 +486,7 @@ def _cmd_snapshot(args: argparse.Namespace) -> int:
     bundle = _resolve_bundle(
         args,
         command_name="snapshot",
+        strict_snapshot=True,
     )
     output = render_snapshot(bundle, fmt=args.format)
     return _emit(output, args.output)
@@ -487,6 +497,7 @@ def _cmd_prompt(args: argparse.Namespace) -> int:
         args,
         full=args.full,
         command_name="prompt",
+        strict_snapshot=True,
     )
     intent = _read_intent(args.intent, args.intent_file)
     request = InvestigationRequest(
@@ -504,6 +515,7 @@ def _cmd_report(args: argparse.Namespace) -> int:
     bundle = _resolve_bundle(
         args,
         command_name="report",
+        strict_snapshot=True,
     )
     output = render_report(bundle, fmt=args.format)
     return _emit(output, args.output)
@@ -517,6 +529,7 @@ def _resolve_bundle(
     *,
     allow_snapshot_fallback: bool = True,
     command_name: str = "snapshot",
+    strict_snapshot: bool = False,
     explicit_gdb: bool = False,
     explicit_rtt: bool = False,
     export_dir: Path | None = None,
@@ -540,7 +553,11 @@ def _resolve_bundle(
                 "snapshot-file": False,
             },
         )
-        return load_bundle(resolved_snapshot)
+        return _load_snapshot(
+            command_name=command_name,
+            path=resolved_snapshot,
+            strict=strict_snapshot,
+        )
 
     if (
         allow_snapshot_fallback
@@ -558,7 +575,11 @@ def _resolve_bundle(
                     "snapshot-file": True,
                 },
             )
-            return load_bundle(str(config.snapshot_file))
+            return _load_snapshot(
+                command_name=command_name,
+                path=str(config.snapshot_file),
+                strict=strict_snapshot,
+            )
 
     resolved_gdb = None
     resolved_rtt = None
@@ -663,6 +684,20 @@ def _resolve_bundle(
         return bundle
     except OSError as error:
         raise SystemExit(f"Unable to read one of the required input files: {error}") from error
+
+
+def _load_snapshot(
+    *,
+    command_name: str,
+    path: str | None,
+    strict: bool,
+) -> EvidenceBundle:
+    if not path:
+        raise SystemExit(f"{command_name} could not resolve a snapshot file path.")
+    try:
+        return load_bundle(path, strict=strict)
+    except SnapshotLoadError as error:
+        raise SystemExit(f"{command_name} failed to load snapshot: {error}") from error
 
 
 def _resolve_session_config(

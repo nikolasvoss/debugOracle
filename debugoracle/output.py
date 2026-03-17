@@ -246,7 +246,7 @@ def _appendix(bundle: EvidenceBundle, request: InvestigationRequest) -> str:
         "### Raw Non-MI Excerpt",
         _lines_section(_non_mi_excerpt(bundle)),
         "",
-        "### Source Context Placeholder",
+        "### Source Context",
         _mapping_section(bundle.source_context),
         "",
         "### Provenance",
@@ -289,7 +289,6 @@ def _citations(bundle: EvidenceBundle) -> list[str]:
         citations.append(f"C5 Recent RTT lines from: {rtt_source}")
     else:
         citations.append("C5 RTT evidence unavailable in this snapshot")
-    citations.append("C6 Source context is a placeholder and was not collected in v1")
     return citations
 
 

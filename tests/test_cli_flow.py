@@ -819,17 +819,60 @@ class DebugOracleCliTests(unittest.TestCase):
         self.assertIn("No watched values or locals were captured", output)
         self.assertIn("No RTT lines were available for this snapshot.", output)
 
-    def test_corrupt_snapshot_file_still_renders_report(self) -> None:
+    def test_report_fails_with_corrupt_snapshot_file(self) -> None:
         with tempfile.NamedTemporaryFile("w", delete=False) as handle:
             handle.write("{ not json")
             path = handle.name
         try:
-            output = self._run_cli(["report", "--snapshot-file", path])
+            code, stdout, stderr = self._run_cli_expect_system_exit(["report", "--snapshot-file", path])
         finally:
             Path(path).unlink()
-        self.assertIn("DebugOracle Evidence Report", output)
-        self.assertIn("Parse Warnings", output)
-        self.assertIn("Could not parse snapshot JSON", output)
+        self.assertNotEqual(code, 0)
+        message = (stdout + stderr).strip()
+        self.assertIn("Could not parse snapshot JSON", message)
+        self.assertIn("report failed to load snapshot", message)
+
+    def test_prompt_fails_with_corrupt_snapshot_file(self) -> None:
+        with tempfile.NamedTemporaryFile("w", delete=False) as handle:
+            handle.write("{ not json")
+            path = handle.name
+        try:
+            code, stdout, stderr = self._run_cli_expect_system_exit(
+                [
+                    "prompt",
+                    "--snapshot-file",
+                    path,
+                    "--goal",
+                    "Summarize what this trace indicates.",
+                ]
+            )
+        finally:
+            Path(path).unlink()
+        self.assertNotEqual(code, 0)
+        message = (stdout + stderr).strip()
+        self.assertIn("Could not parse snapshot JSON", message)
+        self.assertIn("prompt failed to load snapshot", message)
+
+    def test_snapshot_fails_with_corrupt_snapshot_file(self) -> None:
+        with tempfile.NamedTemporaryFile("w", delete=False) as handle:
+            handle.write("{ not json")
+            path = handle.name
+        try:
+            code, stdout, stderr = self._run_cli_expect_system_exit(
+                ["snapshot", "--snapshot-file", path, "--format", "json"]
+            )
+        finally:
+            Path(path).unlink()
+        self.assertNotEqual(code, 0)
+        message = (stdout + stderr).strip()
+        self.assertIn("Could not parse snapshot JSON", message)
+        self.assertIn("snapshot failed to load snapshot", message)
+
+    def test_cli_version_reports_expected_value(self) -> None:
+        code, stdout, stderr = self._run_cli_expect_system_exit(["--version"])
+        self.assertEqual(code, 0)
+        self.assertEqual(stdout.strip(), "0.1.0")
+        self.assertEqual(stderr, "")
 
     def _run_cli(
         self,
@@ -848,6 +891,21 @@ class DebugOracleCliTests(unittest.TestCase):
             exit_code = main(argv)
         self.assertEqual(exit_code, 0)
         return buffer.getvalue()
+
+    def _run_cli_expect_system_exit(
+        self,
+        argv: list[str],
+    ) -> tuple[int, str, str]:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with self.assertRaises(SystemExit) as error:
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                main(argv)
+        return (
+            error.exception.code if isinstance(error.exception.code, int) else 1,
+            stdout.getvalue(),
+            stderr.getvalue(),
+        )
 
 
 if __name__ == "__main__":
