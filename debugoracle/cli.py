@@ -15,20 +15,10 @@ from pathlib import Path
 from .builder import (
     DEFAULT_RTT_WINDOW,
     FULL_RTT_WINDOW,
-    build_bundle_from_stream,
     build_bundle_from_files,
     load_bundle,
     SnapshotLoadError,
     save_bundle,
-)
-from .live import (
-    DEFAULT_LIVE_BACKEND,
-    available_backends,
-    build_live_backend,
-    render_live_status,
-    render_memory_result,
-    render_register_result,
-    validate_memory_request,
 )
 from .models import EvidenceBundle, InvestigationRequest
 from .output import render_prompt, render_report, render_snapshot
@@ -98,41 +88,6 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     status.add_argument("--output", help="Optional output file path")
     status.set_defaults(func=_cmd_status)
-
-    live_status = subparsers.add_parser(
-        "live-status",
-        help="Inspect the selected live backend without touching real hardware",
-        description="Inspect the configured read-only live backend.",
-    )
-    _add_live_arguments(live_status)
-    live_status.set_defaults(func=_cmd_live_status)
-
-    live_registers = subparsers.add_parser(
-        "live-registers",
-        help="Read registers from the selected live backend",
-        description="Read registers from the selected read-only live backend.",
-    )
-    _add_live_arguments(live_registers)
-    live_registers.set_defaults(func=_cmd_live_registers)
-
-    live_memory = subparsers.add_parser(
-        "live-memory",
-        help="Read bounded memory from the selected live backend",
-        description="Read a bounded memory range from the selected read-only live backend.",
-    )
-    _add_live_arguments(live_memory)
-    live_memory.add_argument(
-        "--address",
-        required=True,
-        help="Memory address in decimal or hex notation",
-    )
-    live_memory.add_argument(
-        "--size",
-        required=True,
-        type=int,
-        help="Number of bytes to read",
-    )
-    live_memory.set_defaults(func=_cmd_live_memory)
 
     capture = subparsers.add_parser(
         "capture-rtt",
@@ -411,21 +366,6 @@ def _add_session_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def _add_live_arguments(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument(
-        "--backend",
-        default=DEFAULT_LIVE_BACKEND,
-        help=f"Live backend selector (available: {', '.join(available_backends())})",
-    )
-    parser.add_argument(
-        "--format",
-        choices=["text", "json"],
-        default="text",
-        help="Output format",
-    )
-    parser.add_argument("--output", help="Optional output file path")
-
-
 def _add_input_arguments(
     parser: argparse.ArgumentParser,
     include_snapshot_file: bool,
@@ -437,12 +377,7 @@ def _add_input_arguments(
         )
     parser.add_argument(
         "--gdb-mi",
-        help="Path to a bounded GDB/MI transcript (relative paths resolve from --workspace-root; use - for stdin once)",
-    )
-    parser.add_argument(
-        "--gdb-mi-stream",
-        action="store_true",
-        help="Read bounded GDB/MI data from stdin until EOF (not live-follow mode)",
+        help="Path to a bounded GDB/MI transcript (relative paths resolve from --workspace-root)",
     )
     parser.add_argument(
         "--rtt",
@@ -474,28 +409,6 @@ def _cmd_status(args: argparse.Namespace) -> int:
     )
     status = collect_session_status(config)
     output = render_session_status(status, fmt=args.format)
-    return _emit(output, args.output)
-
-
-def _cmd_live_status(args: argparse.Namespace) -> int:
-    backend = _resolve_live_backend(args.backend)
-    output = render_live_status(backend.get_status(), fmt=args.format)
-    return _emit(output, args.output)
-
-
-def _cmd_live_registers(args: argparse.Namespace) -> int:
-    backend = _resolve_live_backend(args.backend)
-    output = render_register_result(backend.read_registers(), fmt=args.format)
-    return _emit(output, args.output)
-
-
-def _cmd_live_memory(args: argparse.Namespace) -> int:
-    backend = _resolve_live_backend(args.backend)
-    try:
-        address, size = validate_memory_request(args.address, args.size)
-    except ValueError as error:
-        raise SystemExit(str(error)) from error
-    output = render_memory_result(backend.read_memory(address, size), fmt=args.format)
     return _emit(output, args.output)
 
 
@@ -989,12 +902,7 @@ def _resolve_bundle(
             strict=strict_snapshot,
         )
 
-    if (
-        allow_snapshot_fallback
-        and not args.gdb_mi_stream
-        and not explicit_gdb
-        and not explicit_rtt
-    ):
+    if allow_snapshot_fallback and not explicit_gdb and not explicit_rtt:
         if config.snapshot_file.exists():
             _emit_discovery_summary(
                 command_name,
@@ -1027,7 +935,7 @@ def _resolve_bundle(
         resolved_rtt = str(config.rtt_file)
         rtt_discovered = True
 
-    if not args.gdb_mi_stream and resolved_gdb is None and resolved_rtt is None:
+    if resolved_gdb is None and resolved_rtt is None:
         raise SystemExit(
             _missing_inputs_error(
                 command_name,
@@ -1045,49 +953,6 @@ def _resolve_bundle(
         "gdb-mi": gdb_discovered,
         "rtt": rtt_discovered,
     }
-
-    if args.gdb_mi_stream:
-        rtt_text = _read_rtt(rtt)
-        _emit_discovery_summary(
-            command_name,
-            {
-                "gdb-mi": gdb_mi,
-                "rtt": rtt,
-            },
-            discovered_inputs,
-        )
-        bundle = build_bundle_from_stream(
-            sys.stdin,
-            rtt_text=rtt_text,
-            gdb_source=gdb_mi if gdb_mi else "<stdin>",
-            rtt_source=rtt,
-            rtt_window=rtt_window,
-            export_raw=args.export_raw,
-            export_dir=export_dir or config.snapshot_file.parent,
-        )
-        _emit_raw_export_notice(command_name, bundle.provenance)
-        return bundle
-    if gdb_mi in {"-", "/dev/stdin", "stdin"}:
-        rtt_text = _read_rtt(rtt)
-        _emit_discovery_summary(
-            command_name,
-            {
-                "gdb-mi": gdb_mi,
-                "rtt": rtt,
-            },
-            discovered_inputs,
-        )
-        bundle = build_bundle_from_stream(
-            sys.stdin,
-            rtt_text=rtt_text,
-            gdb_source=gdb_mi,
-            rtt_source=rtt,
-            rtt_window=rtt_window,
-            export_raw=args.export_raw,
-            export_dir=export_dir or config.snapshot_file.parent,
-        )
-        _emit_raw_export_notice(command_name, bundle.provenance)
-        return bundle
 
     if gdb_mi is not None:
         _require_readable_file(gdb_mi, "GDB/MI")
@@ -1279,8 +1144,6 @@ def _require_readable_file(path: str, label: str) -> None:
 def _resolve_workspace_path(value: str | None, workspace_root: Path) -> str | None:
     if not value:
         return None
-    if value in {"-", "/dev/stdin", "stdin"}:
-        return value
     path = Path(value).expanduser()
     if path.is_absolute():
         return str(path)
@@ -1296,7 +1159,7 @@ def _resolve_state_out_path(
     if requested_state_out:
         return _resolve_workspace_path(requested_state_out, workspace_root)
 
-    if gdb_mi and gdb_mi not in {"-", "/dev/stdin", "stdin"}:
+    if gdb_mi:
         return str(Path(gdb_mi).parent / DEFAULT_SNAPSHOT_FILENAME)
 
     if rtt:
@@ -1313,13 +1176,6 @@ def _read_intent(intent: str | None, intent_file: str | None) -> str | None:
             return sys.stdin.read().strip()
         return Path(intent_file).read_text(encoding="utf-8").strip()
     return None
-
-
-def _resolve_live_backend(name: str):
-    try:
-        return build_live_backend(name)
-    except ValueError as error:
-        raise SystemExit(str(error)) from error
 
 
 def _emit(output: str, path: str | None) -> int:

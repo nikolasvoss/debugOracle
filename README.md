@@ -2,6 +2,8 @@
 
 DebugOracle is a passive embedded-debug evidence packager for ChatGPT. It reads a bounded GDB/MI transcript plus optional RTT logs, builds a reusable evidence bundle, and renders either a local evidence report or a ChatGPT-ready prompt.
 
+Module specifications live under [`docs/specs/README.md`](docs/specs/README.md). The spec filename matches the module filename so agents have one predictable place to look for architecture notes.
+
 ## Default workflow
 
 DebugOracle does not drive the probe or debugger. The intended v1 flow is:
@@ -87,11 +89,8 @@ Advanced or automation-oriented rendering:
 
 ```bash
 ./dbgoracle snapshot --format json
-cat /path/to/cortex-debug-shared-mi.log | ./dbgoracle snapshot --gdb-mi-stream --format json
-printf "*stopped,reason=\"breakpoint-hit\",...\\n^done,register-values=[...]" | ./dbgoracle snapshot --gdb-mi - --format json
+./dbgoracle snapshot --gdb-mi /path/to/cortex-debug-shared-mi.log --format json
 ```
-
-`--gdb-mi-stream` reads stdin until EOF. It is a bounded stdin capture mode, not a live `tail -f` follow mode.
 
 ## When raw JSON is useful
 
@@ -125,13 +124,11 @@ This slice also adds read-only verification commands for the low-level foundatio
 ./dbgoracle status
 ./dbgoracle run --detach --workspace-root . --port 60001 --output .dbgoracle/session.rtt
 ./dbgoracle stop --workspace-root .
-./dbgoracle live-status
-./dbgoracle live-registers
-./dbgoracle live-memory --address 0x20002000 --size 16
 ```
 
-The live commands use the bundled `demo` backend for deterministic verification only.
-No real hardware adapter or MCP server is included in this slice.
+Future live reads are still part of the product direction, but not as public CLI commands in
+this slice. The intended path is a read-only agent-facing tool surface for gathering additional
+evidence after a snapshot has been inspected.
 
 ## Notes and boundaries
 

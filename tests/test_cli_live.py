@@ -9,8 +9,6 @@ from pathlib import Path
 
 from debugoracle.builder import build_bundle_from_files, save_bundle
 from debugoracle.cli import main
-
-
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
@@ -84,31 +82,6 @@ class DebugOracleLiveCliTests(unittest.TestCase):
         self.assertIn("Transport Status: connected", output)
         self.assertIn("Bytes Captured: 0", output)
         self.assertIn("RTT capture connected but no bytes were captured yet.", output)
-
-    def test_live_status_command_uses_demo_backend(self) -> None:
-        output = self._run_cli(["live-status"])
-        self.assertIn("DebugOracle Live Backend Status", output)
-        self.assertIn("Backend: demo", output)
-        self.assertIn("Available: yes", output)
-
-    def test_live_registers_command_renders_registers(self) -> None:
-        output = self._run_cli(["live-registers"])
-        self.assertIn("DebugOracle Live Registers", output)
-        self.assertIn("pc: 0x08000100", output)
-        self.assertIn("sp: 0x20002000", output)
-
-    def test_live_memory_command_renders_memory_payload(self) -> None:
-        output = self._run_cli(
-            ["live-memory", "--address", "0x20002000", "--size", "8"]
-        )
-        self.assertIn("DebugOracle Live Memory", output)
-        self.assertIn("Address: 0x20002000", output)
-        self.assertIn("DebugOra", output)
-
-    def test_live_status_command_rejects_unknown_backend(self) -> None:
-        with self.assertRaises(SystemExit) as error:
-            main(["live-status", "--backend", "missing"])
-        self.assertIn("Unknown live backend", str(error.exception))
 
     def _run_cli(self, argv: list[str]) -> str:
         buffer = io.StringIO()

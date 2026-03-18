@@ -55,9 +55,7 @@ This roadmap is ranked by product impact for the current direction:
 The current slice focuses only on the low-level-first foundation:
 
 - session and freshness inspection
-- a pluggable live backend contract
-- a deterministic demo backend
-- CLI verification commands
+- managed RTT capture and workspace status
 - strict snapshot integrity for user-facing rendering (`report`, `prompt`, `snapshot`) with hard-fail on unreadable or malformed snapshot JSON
 - `dbgoracle --version` contract with fixed output `0.1.0`
 - placeholder source-context cleanup from `future.py` and related placeholder output
@@ -65,3 +63,6 @@ The current slice focuses only on the low-level-first foundation:
 Current release framing: **0.1.0**.
 
 MCP integration and real hardware adapters are intentionally deferred to the next slice.
+The high-level direction for live reads remains: an agent-facing, read-only tool surface for
+requesting extra target state after snapshot-based evidence is exhausted, rather than public
+ad hoc CLI commands.

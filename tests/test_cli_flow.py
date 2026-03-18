@@ -698,35 +698,6 @@ class DebugOracleCliTests(unittest.TestCase):
             )
         self.assertIn("The system should remain in READY state.", output)
 
-    def test_snapshot_can_read_gdb_mi_from_stdin_stream(self) -> None:
-        stdin = io.StringIO((FIXTURES / "sample.mi").read_text(encoding="utf-8"))
-        with patch.object(sys, "stdin", stdin):
-            output = self._run_cli(
-                [
-                    "snapshot",
-                    "--gdb-mi-stream",
-                    "--format",
-                    "json",
-                ]
-            )
-        payload = json.loads(output)
-        self.assertEqual(payload["stop_reason"], "breakpoint-hit")
-
-    def test_snapshot_can_read_gdb_mi_dash(self) -> None:
-        stdin = io.StringIO((FIXTURES / "sample.mi").read_text(encoding="utf-8"))
-        with patch.object(sys, "stdin", stdin):
-            output = self._run_cli(
-                [
-                    "snapshot",
-                    "--gdb-mi",
-                    "-",
-                    "--format",
-                    "json",
-                ]
-            )
-        payload = json.loads(output)
-        self.assertEqual(payload["frames"][0]["func"], "main")
-
     def test_snapshot_exports_raw_inputs_on_parse_warning(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
