@@ -177,16 +177,17 @@ This is the intended package shape as the current flat implementation evolves:
 ```text
 debugoracle/
   cli/
+    __init__.py
     main.py
     commands/
+      status_capture.py
+      run_stop.py
+      evidence.py
 
   sources/
     base.py
     streams/
       rtt.py
-      serial.py
-    snapshots/
-      base.py
     debuggers/
       gdb/
         transcript.py
@@ -195,16 +196,9 @@ debugoracle/
         memory.py
 
   pipeline/
-    normalize.py
-    reduce.py
-    provenance.py
     storage.py
 
-  session/
-    workspace.py
-    halt.py
-    freshness.py
-    model.py
+  session.py
 
   artifacts/
     models.py
@@ -227,8 +221,9 @@ debugoracle/
 
 ### `cli/`
 
+- preserve the compatibility-facing `debugoracle.cli.main` entrypoint
 - parse user input
-- select use cases
+- dispatch command families from `main.py` into `cli/commands/`
 - orchestrate calls into the core
 - avoid owning product rules
 

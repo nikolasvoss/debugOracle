@@ -25,7 +25,7 @@ class StackFrame:
 
 
 @dataclass
-class EvidenceBundle:
+class InvestigationArtifact:
     snapshot_id: str
     captured_at: str
     stop_reason: str | None
@@ -47,7 +47,7 @@ class EvidenceBundle:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, raw: dict[str, Any]) -> "EvidenceBundle":
+    def from_dict(cls, raw: dict[str, Any]) -> "InvestigationArtifact":
         raw = raw or {}
         if not isinstance(raw, dict):
             raw = {}
@@ -119,6 +119,19 @@ class PromptPackage:
     unknowns_and_gaps: list[str]
     instructions: str
     citations: list[str]
+
+
+EvidenceBundle = InvestigationArtifact
+
+__all__ = [
+    "CURRENT_BUNDLE_SCHEMA_VERSION",
+    "EvidenceBundle",
+    "InvestigationArtifact",
+    "InvestigationRequest",
+    "PromptPackage",
+    "SessionEvent",
+    "StackFrame",
+]
 
 
 def _as_list(value: object, default: list[Any] | None = None) -> list[Any]:

@@ -5,11 +5,51 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from debugoracle.artifacts.models import CURRENT_BUNDLE_SCHEMA_VERSION, EvidenceBundle
+from debugoracle.renderers.report import render_report
 from debugoracle.builder import SnapshotLoadError, build_bundle_from_text, load_bundle, save_bundle
-from debugoracle.output import render_report
 
 
 class ArtifactSchemaTests(unittest.TestCase):
+    def test_canonical_artifact_api_supports_round_trip_without_legacy_bundle_names(self) -> None:
+        from debugoracle.artifacts.models import InvestigationArtifact
+        from debugoracle.artifacts.repository import load_artifact, save_artifact
+
+        artifact = build_bundle_from_text("", "")
+        artifact.live_state = {"source": "canonical-artifact"}
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "artifact.json"
+            save_artifact(artifact, str(path))
+            loaded = load_artifact(str(path))
+
+        self.assertIs(InvestigationArtifact, type(artifact))
+        self.assertIsInstance(loaded, InvestigationArtifact)
+        self.assertEqual(loaded.live_state["source"], "canonical-artifact")
+
+    def test_builder_compatibility_exports_match_canonical_artifact_boundary(self) -> None:
+        from debugoracle.artifacts.bundle import load_bundle as canonical_load_bundle
+        from debugoracle.artifacts.bundle import save_bundle as canonical_save_bundle
+        from debugoracle.artifacts.models import (
+            CURRENT_BUNDLE_SCHEMA_VERSION as canonical_schema_version,
+        )
+        from debugoracle.artifacts.models import EvidenceBundle as CanonicalEvidenceBundle
+        from debugoracle.artifacts.models import InvestigationArtifact
+
+        bundle = build_bundle_from_text("", "")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "snapshot.json"
+            save_bundle(bundle, str(path))
+            loaded = load_bundle(str(path))
+
+        self.assertIs(EvidenceBundle, CanonicalEvidenceBundle)
+        self.assertIs(CanonicalEvidenceBundle, InvestigationArtifact)
+        self.assertIs(load_bundle, canonical_load_bundle)
+        self.assertIs(save_bundle, canonical_save_bundle)
+        self.assertEqual(CURRENT_BUNDLE_SCHEMA_VERSION, canonical_schema_version)
+        self.assertIsInstance(loaded, CanonicalEvidenceBundle)
+
     def test_save_bundle_writes_schema_version_and_live_state(self) -> None:
         bundle = build_bundle_from_text("", "")
         bundle.live_state = {
@@ -69,6 +109,19 @@ class ArtifactSchemaTests(unittest.TestCase):
             path.write_text(json.dumps(payload), encoding="utf-8")
             with self.assertRaises(SnapshotLoadError):
                 load_bundle(str(path), strict=True)
+
+    def test_canonical_repository_preserves_strict_schema_checks(self) -> None:
+        from debugoracle.artifacts.repository import ArtifactLoadError, load_artifact
+
+        bundle = build_bundle_from_text("", "")
+        payload = bundle.to_dict()
+        payload["schema_version"] = "99"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "future.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            with self.assertRaises(ArtifactLoadError):
+                load_artifact(str(path), strict=True)
 
     def test_round_trip_preserves_provenance_and_minimal_live_state(self) -> None:
         bundle = build_bundle_from_text("", "")

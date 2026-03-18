@@ -376,7 +376,9 @@ class DebugOracleCliTests(unittest.TestCase):
                 os.chdir(previous)
 
             payload = json.loads(output)
-            self.assertEqual(payload["snapshot_id"], auto_bundle.snapshot_id)
+            self.assertEqual(payload["stop_reason"], auto_bundle.stop_reason)
+            self.assertEqual(payload["pc"], auto_bundle.pc)
+            self.assertEqual(payload["recent_rtt"], auto_bundle.recent_rtt)
             self.assertIn("Auto-discovered input paths for snapshot:", stderr)
             self.assertIn(f"- gdb-mi: {workspace / 'cortex-debug-shared-mi.log'}", stderr)
             self.assertIn(f"- rtt: {workspace / 'session.rtt'}", stderr)

@@ -13,8 +13,8 @@ Parse individual GDB/MI records into structured Python data.
 
 - Identify supported MI record prefixes.
 - Parse tuples, lists, strings, and repeated keys from MI payloads.
-- Raise clear parser errors for malformed MI fragments.
+- Stay as the small parser boundary used by `debugoracle/sources/debuggers/gdb/transcript.py`.
 
 ## Notes
 
-- This module should stay small and deterministic because higher-level evidence building depends on it heavily.
+- This module remains parser-focused; transcript classification and halt-snapshot extraction now live under the GDB source area.

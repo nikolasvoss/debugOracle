@@ -13,6 +13,16 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 
 class DebugOracleLiveCliTests(unittest.TestCase):
+    def test_legacy_cli_main_boundary_remains_callable(self) -> None:
+        import debugoracle.cli as cli_module
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._prepare_workspace(tmpdir)
+            output = self._run_cli_with(cli_module.main, ["status", "--workspace-root", tmpdir])
+
+        self.assertIn("DebugOracle Session Status", output)
+        self.assertIn("Health: healthy", output)
+
     def test_status_command_reports_session_health(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             self._prepare_workspace(tmpdir)
@@ -84,9 +94,12 @@ class DebugOracleLiveCliTests(unittest.TestCase):
         self.assertIn("RTT capture connected but no bytes were captured yet.", output)
 
     def _run_cli(self, argv: list[str]) -> str:
+        return self._run_cli_with(main, argv)
+
+    def _run_cli_with(self, entrypoint: object, argv: list[str]) -> str:
         buffer = io.StringIO()
         with redirect_stdout(buffer):
-            exit_code = main(argv)
+            exit_code = entrypoint(argv)
         self.assertEqual(exit_code, 0)
         return buffer.getvalue()
 

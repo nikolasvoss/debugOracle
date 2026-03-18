@@ -1,7 +1,7 @@
 # cli
 
 - Module: `cli`
-- Code Path: `debugoracle/cli.py`
+- Code Path: `debugoracle/cli/__init__.py`
 - Public Entrypoints: `main`
 - Last Updated: `2026-03-18`
 
@@ -36,7 +36,15 @@ workspace context to produce a good answer.
 
 ## Product Model
 
-The CLI has three layers:
+The compatibility package exposes the stable `debugoracle.cli.main` entrypoint while the
+implementation lives in:
+
+- `debugoracle/cli/main.py` for parser construction and dispatch
+- `debugoracle/cli/commands/status_capture.py` for `status` and `capture-rtt`
+- `debugoracle/cli/commands/run_stop.py` for `run` and `stop`
+- `debugoracle/cli/commands/evidence.py` for `observe`, `snapshot`, `report`, and `prompt`
+
+The CLI has three behavioral layers:
 
 1. Transport and workspace health
    Commands: `status`, `capture-rtt`, `run`, `stop`

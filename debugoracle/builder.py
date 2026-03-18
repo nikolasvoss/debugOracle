@@ -2,26 +2,29 @@ from __future__ import annotations
 
 import hashlib
 from collections import Counter
-import json
 from io import TextIOBase
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .mi import MIParseError, parse_mi_record
-from .models import CURRENT_BUNDLE_SCHEMA_VERSION, EvidenceBundle, SessionEvent, StackFrame
+from .artifacts.bundle import SnapshotLoadError, load_bundle, save_bundle
+from .artifacts.models import CURRENT_BUNDLE_SCHEMA_VERSION, EvidenceBundle, SessionEvent, StackFrame
+from .pipeline.storage import build_artifact_from_sources
+from .sources.debuggers.gdb.halt_snapshot import (
+    GDB_HALT_SNAPSHOT_SOURCE,
+    build_halt_snapshot,
+)
+from .sources.debuggers.gdb.transcript import (
+    GDB_TRANSCRIPT_SOURCE,
+    parse_gdb_transcript,
+)
 
 DEFAULT_RTT_WINDOW = 40
 FULL_RTT_WINDOW = 200
 RAW_GDB_MI_FILENAME = "raw-gdb-mi.log"
 RAW_RTT_FILENAME = "raw-rtt.log"
-SUPPORTED_BUNDLE_SCHEMA_VERSIONS = {CURRENT_BUNDLE_SCHEMA_VERSION}
 
 DEFAULT_SOURCE_CONTEXT: dict[str, object] = {}
-
-
-class SnapshotLoadError(RuntimeError):
-    """Raised when a snapshot cannot be loaded with strict integrity checks."""
 
 
 def utc_now() -> str:
@@ -86,337 +89,28 @@ def build_bundle_from_text(
     export_dir: str | Path | None = None,
 ) -> EvidenceBundle:
     captured_at = utc_now()
-
-    latest_stop: dict[str, Any] | None = None
-    latest_stack: list[StackFrame] = []
-    latest_registers: dict[str, str] = {}
-    latest_watched: dict[str, str] = {}
-    session_events: list[SessionEvent] = []
-    parse_warnings: list[str] = []
-    mi_record_count = 0
-    non_mi_line_count = 0
-    mi_parse_error_count = 0
-    noise_line_counts = Counter[str]()
-
-    if not gdb_text:
-        parse_warnings.append("No GDB/MI input was provided before building this snapshot.")
-
-    parse_event_counts = Counter[str]()
-    parse_event_severity = Counter[str]()
-    noise_pattern_counts = Counter[str]()
-    for line_number, raw_line in enumerate(gdb_text.splitlines(), start=1):
-        timestamp = utc_now()
-        stripped = raw_line.strip()
-        if stripped.startswith("(gdb)") and stripped == "(gdb)":
-            parse_event_counts["prompt-marker"] += 1
-            parse_event_severity["info"] += 1
-            non_mi_line_count += 1
-            noise_line_counts["prompt-marker"] += 1
-            session_events.append(
-                SessionEvent(
-                    source="gdb_mi",
-                    timestamp=timestamp,
-                    kind="prompt-marker",
-                    payload={
-                        "line": line_number,
-                        "raw": stripped,
-                        "normalized": stripped,
-                        "dedupe_key": stripped,
-                        "severity": "info",
-                    },
-                )
-            )
-            noise_pattern_counts[stripped] += 1
-            continue
-
-        if stripped.startswith("@\"") or stripped.startswith("~\""):
-            parse_event_counts["console-output"] += 1
-            parse_event_severity["info"] += 1
-            non_mi_line_count += 1
-            normalized = _strip_console_output(stripped)
-            noise_line_counts["console-output"] += 1
-            session_events.append(
-                SessionEvent(
-                    source="gdb_mi",
-                    timestamp=timestamp,
-                    kind="console-output",
-                    payload={
-                        "line": line_number,
-                        "raw": stripped,
-                        "normalized": normalized,
-                        "dedupe_key": normalized,
-                        "severity": "info",
-                    },
-                )
-            )
-            noise_pattern_counts[normalized[:64]] += 1
-            continue
-
-        try:
-            record = parse_mi_record(raw_line)
-        except MIParseError as error:
-            mi_parse_error_count += 1
-            kind = "mi-parse-error-unhandled"
-            severity = "warn"
-            if _is_likely_mi_line(raw_line):
-                kind = "mi-parse-error-known"
-            parse_event_counts[kind] += 1
-            parse_event_severity[severity] += 1
-            parse_warnings.append(
-                f"Line {line_number}: unable to parse MI record: {error}"
-            )
-            session_events.append(
-                SessionEvent(
-                    source="gdb_mi",
-                    timestamp=timestamp,
-                    kind=kind,
-                    payload={
-                        "line": line_number,
-                        "raw": raw_line,
-                        "error": str(error),
-                        "severity": severity,
-                    },
-                )
-            )
-            continue
-
-        if record is None:
-            if stripped:
-                parse_event_counts["non_mi_line"] += 1
-                parse_event_severity["info"] += 1
-                non_mi_line_count += 1
-                noise_line_counts["non_mi_line"] += 1
-                session_events.append(
-                    SessionEvent(
-                        source="gdb_mi",
-                        timestamp=timestamp,
-                        kind="non_mi_line",
-                        payload={
-                            "line": line_number,
-                            "raw": stripped,
-                            "normalized": stripped,
-                            "dedupe_key": stripped,
-                            "severity": "info",
-                        },
-                    )
-                )
-                noise_pattern_counts[stripped[:64]] += 1
-            continue
-
-        mi_record_count += 1
-        parse_event_counts[f"{record.prefix}{record.kind}"] += 1
-        parse_event_severity["info"] += 1
-        event = SessionEvent(
-            source="gdb_mi",
-            timestamp=timestamp,
-            kind=f"{record.prefix}{record.kind}",
-            payload={"line": line_number, "severity": "info", **record.data},
-        )
-        session_events.append(event)
-
-        if record.prefix == "*" and record.kind == "stopped":
-            latest_stop = dict(record.data)
-            frame = record.data.get("frame")
-            if isinstance(frame, dict):
-                latest_stack = [_normalize_frame(frame, default_level=0)]
-
-        if record.prefix == "^" and record.kind == "done":
-            if "stack" in record.data:
-                latest_stack = _extract_stack(record.data["stack"])
-            if "register-values" in record.data:
-                latest_registers = _extract_registers(record.data["register-values"])
-            if "locals" in record.data:
-                latest_watched.update(_extract_named_values(record.data["locals"]))
-            if "variables" in record.data:
-                latest_watched.update(_extract_named_values(record.data["variables"]))
-
-    stop_reason = _as_text(latest_stop.get("reason")) if latest_stop else None
-    pc = _extract_pc(latest_stop, latest_registers, latest_stack)
-    lr = latest_registers.get("14")
-    sp = latest_registers.get("13")
-    recent_rtt = _select_recent_rtt(rtt_text, rtt_window)
-    snapshot_id = _make_snapshot_id(gdb_text, rtt_text, captured_at)
-
-    if not latest_stack and latest_stop:
-        frame = latest_stop.get("frame")
-        if isinstance(frame, dict):
-            latest_stack = [_normalize_frame(frame, default_level=0)]
-
-    if not recent_rtt:
-        parse_warnings.append("No RTT lines were available for this snapshot.")
-        parse_event_counts["missing-rtt"] += 1
-        parse_event_severity["warn"] += 1
-
-    if non_mi_line_count:
-        parse_warnings.append(
-            "Transcript noise retained as context: "
-            f"{noise_line_counts.get('prompt-marker', 0)} prompt markers, "
-            f"{noise_line_counts.get('console-output', 0)} console-output lines, "
-            f"{noise_line_counts.get('non_mi_line', 0)} other non-MI lines. "
-            "Raw sidecar export provides the full transcript."
-        )
-
-    critical_events: list[str] = []
-    if not gdb_text:
-        critical_events.append("No GDB/MI input was provided before building this snapshot.")
-        parse_event_counts["critical-missing-input"] += 1
-        parse_event_severity["warn"] += 1
-    if latest_stop is None:
-        critical_events.append("Could not recover a stop context from the transcript.")
-    critical_warning_count = len(critical_events)
-    quality_score = _compute_evidence_quality_score(
-        latest_stop=latest_stop,
-        latest_stack=latest_stack,
-        latest_registers=latest_registers,
-        latest_watched=latest_watched,
-        parse_error_count=mi_parse_error_count,
-        warning_count=len(parse_warnings),
+    transcript = parse_gdb_transcript(gdb_text, now_text=utc_now)
+    halt_snapshot = build_halt_snapshot(
+        latest_stop=transcript.latest_stop,
+        latest_stack=transcript.latest_stack,
+        latest_registers=transcript.latest_registers,
+        latest_watched=transcript.latest_watched,
     )
-
-    non_mi_top_patterns = [
-        {"pattern": _normalize_non_mi_pattern_key(pattern), "count": int(count)}
-        for pattern, count in noise_pattern_counts.most_common(8)
-    ]
-    known_event_counts = {key: int(value) for key, value in parse_event_counts.items()}
-    severity_counts = {key: int(value) for key, value in parse_event_severity.items()}
-
-    raw_export: dict[str, Any] = {}
-    if export_dir is not None:
-        should_export = export_raw or bool(non_mi_line_count or mi_parse_error_count or not gdb_text)
-        raw_export["raw_exported"] = should_export
-        if should_export:
-            raw_export.update(
-                _export_raw_inputs(
-                    gdb_text=gdb_text,
-                    rtt_text=rtt_text,
-                    export_dir=Path(export_dir),
-                )
-            )
-
-    return EvidenceBundle(
-        snapshot_id=snapshot_id,
+    artifact = build_artifact_from_sources(
         captured_at=captured_at,
-        stop_reason=stop_reason,
-        pc=pc,
-        lr=lr,
-        sp=sp,
-        schema_version=CURRENT_BUNDLE_SCHEMA_VERSION,
-        frames=latest_stack,
-        registers=latest_registers,
-        watched_values=latest_watched,
-        recent_rtt=recent_rtt,
-        source_context=dict(DEFAULT_SOURCE_CONTEXT),
-        provenance={
-            "gdb_mi_source": gdb_source,
-            "rtt_source": rtt_source,
-            "gdb_event_count": len(session_events),
-            "rtt_line_count": len(recent_rtt),
-            "rtt_total_line_count": len([line for line in rtt_text.splitlines()]),
-            "rtt_window": rtt_window,
-            "parse_warning_count": len(parse_warnings),
-            "mi_record_count": mi_record_count,
-            "non_mi_line_count": non_mi_line_count,
-            "mi_parse_error_count": mi_parse_error_count,
-            "evidence_quality_score": quality_score,
-            "parse_event_counts": known_event_counts,
-            "parse_event_severity_counts": severity_counts,
-            "critical_warnings": critical_events,
-            "critical_warning_count": critical_warning_count,
-            "non_mi_pattern_counts": non_mi_top_patterns,
-            "raw_line_warning_count": non_mi_line_count,
-            **raw_export,
-        },
-        session_events=session_events,
-        parse_warnings=parse_warnings,
+        gdb_text=gdb_text,
+        rtt_text=rtt_text,
+        gdb_source=gdb_source,
+        rtt_source=rtt_source,
+        transcript=transcript,
+        halt_snapshot=halt_snapshot,
+        rtt_window=rtt_window,
+        export_raw=export_raw,
+        export_dir=export_dir,
     )
-
-
-def load_bundle(path: str, *, strict: bool = False) -> EvidenceBundle:
-    try:
-        raw_text = Path(path).read_text(encoding="utf-8", errors="replace")
-    except OSError as error:
-        message = f"Could not read snapshot file '{path}': {error}"
-        if strict:
-            raise SnapshotLoadError(message) from error
-        return _empty_bundle_from_load_error(path, f"Could not read snapshot file: {error}")
-    try:
-        raw = json.loads(raw_text)
-    except json.JSONDecodeError as error:
-        message = f"Could not parse snapshot JSON in '{path}': {error}"
-        if strict:
-            raise SnapshotLoadError(message) from error
-        return _empty_bundle_from_load_error(path, f"Could not parse snapshot JSON: {error}")
-    bundle = EvidenceBundle.from_dict(raw)
-    return _apply_schema_compatibility(
-        bundle,
-        raw=raw,
-        path=path,
-        strict=strict,
-    )
-
-
-def _empty_bundle_from_load_error(path: str, message: str) -> EvidenceBundle:
-    return EvidenceBundle(
-        snapshot_id="invalid-snapshot",
-        captured_at=utc_now(),
-        stop_reason=None,
-        pc=None,
-        lr=None,
-        sp=None,
-        schema_version=CURRENT_BUNDLE_SCHEMA_VERSION,
-        parse_warnings=[message],
-        provenance={
-            "gdb_mi_source": path,
-            "rtt_source": None,
-            "gdb_event_count": 0,
-            "rtt_line_count": 0,
-            "rtt_total_line_count": 0,
-            "rtt_window": 0,
-            "parse_warning_count": 1,
-        },
-    )
-
-
-def save_bundle(bundle: EvidenceBundle, path: str) -> None:
-    target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    if not bundle.schema_version:
-        bundle.schema_version = CURRENT_BUNDLE_SCHEMA_VERSION
-    target.write_text(json.dumps(bundle.to_dict(), indent=2), encoding="utf-8")
-
-
-def _apply_schema_compatibility(
-    bundle: EvidenceBundle,
-    *,
-    raw: object,
-    path: str,
-    strict: bool,
-) -> EvidenceBundle:
-    if not isinstance(raw, dict):
-        bundle.schema_version = CURRENT_BUNDLE_SCHEMA_VERSION
-        return bundle
-
-    raw_version = raw.get("schema_version")
-    if raw_version is None:
-        bundle.schema_version = CURRENT_BUNDLE_SCHEMA_VERSION
-        return bundle
-
-    schema_version = str(raw_version).strip() or CURRENT_BUNDLE_SCHEMA_VERSION
-    bundle.schema_version = schema_version
-    if schema_version in SUPPORTED_BUNDLE_SCHEMA_VERSIONS:
-        return bundle
-
-    message = (
-        f"Snapshot schema version '{schema_version}' in '{path}' is not supported; "
-        "continuing with best-effort compatibility mode."
-    )
-    if strict:
-        raise SnapshotLoadError(message)
-    if message not in bundle.parse_warnings:
-        bundle.parse_warnings.append(message)
-        bundle.provenance["parse_warning_count"] = len(bundle.parse_warnings)
-    return bundle
-
+    artifact.schema_version = CURRENT_BUNDLE_SCHEMA_VERSION
+    artifact.source_context = dict(DEFAULT_SOURCE_CONTEXT)
+    return artifact
 
 def _export_raw_inputs(
     *,

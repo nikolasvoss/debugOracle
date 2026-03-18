@@ -6,6 +6,11 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Callable
 
+from .policy.halted_analysis import evaluate_halt_requirement
+from .policy.limits import validate_bounded_memory_read
+from .sources.debuggers.gdb.memory import collect_gdb_memory_read
+from .sources.debuggers.gdb.registers import collect_gdb_registers
+
 DEFAULT_LIVE_BACKEND = "demo"
 DEFAULT_MEMORY_READ_SIZE = 16
 MAX_MEMORY_READ_BYTES = 64
@@ -76,8 +81,9 @@ class DemoLiveDebugBackend(LiveDebugBackend):
         "r0": "0x00000001",
     }
 
-    def __init__(self, *, available: bool = True) -> None:
+    def __init__(self, *, available: bool = True, target_state: str = "stopped") -> None:
         self._available = available
+        self._target_state = target_state
 
     def get_status(self) -> LiveStatusResult:
         if not self._available:
@@ -98,7 +104,7 @@ class DemoLiveDebugBackend(LiveDebugBackend):
             available=True,
             warnings=[self._warning],
             connected=True,
-            target_state="stopped",
+            target_state=self._target_state,
             detail="Synthetic backend ready for deterministic CLI and test verification.",
         )
 
@@ -112,13 +118,23 @@ class DemoLiveDebugBackend(LiveDebugBackend):
                 warnings=[self._warning, "Register data is unavailable because the demo backend is disabled."],
                 registers={},
             )
+        halt_decision = evaluate_halt_requirement(self._target_state)
+        if not halt_decision.allowed:
+            return RegisterReadResult(
+                backend=self.name,
+                source=self.name,
+                timestamp=utc_now(),
+                available=False,
+                warnings=[self._warning, *halt_decision.warnings],
+                registers={},
+            )
         return RegisterReadResult(
             backend=self.name,
             source=self.name,
             timestamp=utc_now(),
             available=True,
             warnings=[self._warning],
-            registers=dict(self._registers),
+            registers=collect_gdb_registers(self._registers),
         )
 
     def read_memory(self, address: int, size: int) -> MemoryReadResult:
@@ -129,6 +145,17 @@ class DemoLiveDebugBackend(LiveDebugBackend):
                 timestamp=utc_now(),
                 available=False,
                 warnings=[self._warning, "Memory data is unavailable because the demo backend is disabled."],
+                address=_format_address(address),
+                size=size,
+            )
+        halt_decision = evaluate_halt_requirement(self._target_state)
+        if not halt_decision.allowed:
+            return MemoryReadResult(
+                backend=self.name,
+                source=self.name,
+                timestamp=utc_now(),
+                available=False,
+                warnings=[self._warning, *halt_decision.warnings],
                 address=_format_address(address),
                 size=size,
             )
@@ -147,15 +174,20 @@ class DemoLiveDebugBackend(LiveDebugBackend):
             )
 
         payload = self._memory[offset:end]
+        memory_snapshot = collect_gdb_memory_read(
+            address=_format_address(address),
+            size=size,
+            data_hex=" ".join(f"{byte:02x}" for byte in payload),
+        )
         return MemoryReadResult(
             backend=self.name,
             source=self.name,
             timestamp=utc_now(),
             available=True,
             warnings=[self._warning],
-            address=_format_address(address),
-            size=size,
-            data_hex=" ".join(f"{byte:02x}" for byte in payload),
+            address=memory_snapshot.address,
+            size=memory_snapshot.size,
+            data_hex=memory_snapshot.data_hex,
             ascii_preview="".join(chr(byte) if 32 <= byte <= 126 else "." for byte in payload),
         )
 
@@ -175,22 +207,11 @@ def available_backends() -> list[str]:
 
 
 def validate_memory_request(address: str | int, size: int) -> tuple[int, int]:
-    if isinstance(address, int):
-        parsed_address = address
-    else:
-        try:
-            parsed_address = int(str(address), 0)
-        except ValueError as error:
-            raise ValueError(f"Invalid memory address: {address!r}") from error
-    if parsed_address < 0:
-        raise ValueError("Memory address must be non-negative.")
-    if size <= 0:
-        raise ValueError("Memory read size must be greater than zero.")
-    if size > MAX_MEMORY_READ_BYTES:
-        raise ValueError(
-            f"Memory read size {size} exceeds the safe limit of {MAX_MEMORY_READ_BYTES} bytes."
-        )
-    return parsed_address, size
+    return validate_bounded_memory_read(
+        address,
+        size,
+        max_bytes=MAX_MEMORY_READ_BYTES,
+    )
 
 
 def render_live_status(result: LiveStatusResult, fmt: str = "text") -> str:

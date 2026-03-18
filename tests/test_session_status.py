@@ -211,6 +211,35 @@ class SessionStatusTests(unittest.TestCase):
         self.assertIn("RTT capture connected but no bytes were captured yet.", status.warnings)
         self.assertIn("RTT log file exists but is still empty.", status.warnings)
 
+    def test_collect_session_status_degrades_running_target_artifact_via_policy(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            session_dir = Path(tmpdir) / ".dbgoracle"
+            session_dir.mkdir()
+            bundle = build_bundle_from_files(
+                str(FIXTURES / "sample.mi"),
+                str(FIXTURES / "sample.rtt"),
+            )
+            bundle.live_state = {
+                "backend": "demo",
+                "target_state": "running",
+                "warnings": [],
+            }
+            save_bundle(bundle, str(session_dir / "latest_snapshot.json"))
+            (session_dir / "cortex-debug-shared-mi.log").write_text(
+                (FIXTURES / "sample.mi").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (session_dir / "session.rtt").write_text(
+                (FIXTURES / "sample.rtt").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+
+            status = collect_session_status(SessionConfig.from_workspace(tmpdir))
+
+        self.assertEqual(status.health, "degraded")
+        self.assertIn("halted analysis is required", "\n".join(status.warnings).lower())
+        self.assertIn("target state 'running'", "\n".join(status.warnings).lower())
+
     def _prepare_workspace(self, tmpdir: str) -> str:
         workspace = Path(tmpdir)
         session_dir = workspace / ".dbgoracle"

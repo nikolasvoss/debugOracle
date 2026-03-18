@@ -6,9 +6,11 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .builder import load_bundle
-from .rtt import default_state_path as default_rtt_state_path
-from .rtt import load_capture_state
+from .artifacts.repository import load_artifact
+from .policy.halted_analysis import evaluate_artifact_live_state
+from .renderers.status import render_session_status
+from .sources.streams.rtt import default_state_path as default_rtt_state_path
+from .sources.streams.rtt import load_capture_state
 
 DEFAULT_SESSION_DIR = ".dbgoracle"
 DEFAULT_SNAPSHOT_FILENAME = "latest_snapshot.json"
@@ -148,9 +150,12 @@ def collect_session_status(
     snapshot_id: str | None = None
     parse_warnings: list[str] = []
     if snapshot.exists:
-        bundle = load_bundle(snapshot.path)
+        bundle = load_artifact(snapshot.path)
         snapshot_id = bundle.snapshot_id
         parse_warnings = list(bundle.parse_warnings)
+        halt_policy = evaluate_artifact_live_state(bundle.live_state)
+        if not halt_policy.allowed:
+            health_issues.extend(halt_policy.warnings)
         critical_warning_count = _as_int(bundle.provenance.get("critical_warning_count"))
         critical_warnings = _extract_critical_warnings(bundle, critical_warning_count)
         if critical_warnings:
@@ -178,40 +183,6 @@ def collect_session_status(
         rtt=rtt,
         rtt_capture=rtt_capture,
     )
-
-
-def render_session_status(status: SessionStatus, fmt: str = "text") -> str:
-    if fmt == "json":
-        return json.dumps(status.to_dict(), indent=2) + "\n"
-
-    lines = [
-        "DebugOracle Session Status",
-        "",
-        f"- Checked At: {status.checked_at}",
-        f"- Workspace Root: {status.workspace_root}",
-        f"- Health: {status.health}",
-        f"- Snapshot ID: {status.snapshot_id or 'unavailable'}",
-        f"- Snapshot Parse Warnings: {status.parse_warning_count}",
-        "",
-        "Snapshot:",
-        *_artifact_lines(status.snapshot),
-        "",
-        "GDB/MI:",
-        *_artifact_lines(status.gdb_mi),
-        "",
-        "RTT:",
-        *_artifact_lines(status.rtt),
-        "",
-        "RTT Capture:",
-        *_rtt_capture_lines(status.rtt_capture),
-        "",
-        "Warnings:",
-    ]
-    lines.extend(_bullet_lines(status.warnings or ["None"]))
-    if status.parse_warnings:
-        lines.extend(["", "Snapshot Parse Warnings Detail:"])
-        lines.extend(_bullet_lines(status.parse_warnings))
-    return "\n".join(lines).rstrip() + "\n"
 
 
 def _artifact_status(path: Path, now: datetime, stale_after_seconds: int) -> ArtifactStatus:

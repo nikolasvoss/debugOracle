@@ -8,6 +8,7 @@ from debugoracle.live import (
     build_live_backend,
     validate_memory_request,
 )
+from debugoracle.policy.limits import validate_bounded_memory_read
 
 
 class LiveBackendTests(unittest.TestCase):
@@ -43,6 +44,12 @@ class LiveBackendTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "safe limit"):
             validate_memory_request("0x20002000", MAX_MEMORY_READ_BYTES + 1)
 
+    def test_policy_limit_validation_matches_legacy_memory_request_contract(self) -> None:
+        self.assertEqual(
+            validate_bounded_memory_read("0x20002000", 16, max_bytes=MAX_MEMORY_READ_BYTES),
+            validate_memory_request("0x20002000", 16),
+        )
+
     def test_demo_backend_maps_unavailable_state_consistently(self) -> None:
         backend = DemoLiveDebugBackend(available=False)
         status = backend.get_status()
@@ -54,6 +61,19 @@ class LiveBackendTests(unittest.TestCase):
         self.assertFalse(memory.available)
         self.assertIn("disabled", "\n".join(registers.warnings).lower())
         self.assertIn("disabled", "\n".join(memory.warnings).lower())
+
+    def test_demo_backend_downgrades_reads_when_target_is_running(self) -> None:
+        backend = DemoLiveDebugBackend(target_state="running")
+
+        registers = backend.read_registers()
+        memory = backend.read_memory(0x20002000, 4)
+
+        self.assertFalse(registers.available)
+        self.assertFalse(memory.available)
+        self.assertIn("halted", "\n".join(registers.warnings).lower())
+        self.assertIn("running", "\n".join(registers.warnings).lower())
+        self.assertIn("halted", "\n".join(memory.warnings).lower())
+        self.assertIn("running", "\n".join(memory.warnings).lower())
 
 
 if __name__ == "__main__":

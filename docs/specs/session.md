@@ -13,8 +13,10 @@ Resolve workspace artifact locations and report overall session health.
 
 - Resolve default snapshot, MI, RTT, and RTT-state paths from a workspace root.
 - Inspect artifact freshness and managed RTT capture status.
-- Render session health in text or JSON form.
+- Apply shared halt-analysis policy to artifact live-state metadata when present.
+- Render session health in text or JSON form via `debugoracle/renderers/status.py`.
 
 ## Notes
 
-- This module owns workspace-level artifact discovery rules used by the CLI.
+- Session health remains artifact-first; it does not perform live reads itself.
+- If a persisted artifact explicitly records a non-halted `target_state`, session health degrades through `debugoracle/policy/halted_analysis.py`.

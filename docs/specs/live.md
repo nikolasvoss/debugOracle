@@ -12,9 +12,12 @@ Define the read-only live backend contract and deterministic demo backend used f
 ## Responsibilities
 
 - Represent live status, register reads, and memory reads as typed results.
-- Validate bounded memory read requests.
+- Delegate halt-required read policy to `debugoracle/policy/halted_analysis.py`.
+- Delegate bounded memory read validation to `debugoracle/policy/limits.py`.
+- Route canonical GDB-backed register and memory shaping through `debugoracle/sources/debuggers/gdb/registers.py` and `debugoracle/sources/debuggers/gdb/memory.py`.
 - Render live backend results for human-facing CLI output.
 
 ## Notes
 
-- The demo backend remains useful for local verification even when live commands are not part of the main CLI workflow.
+- Running, unknown, or unavailable target states are not treated as safe for correlated live reads.
+- `validate_memory_request` remains the compatibility-facing wrapper while the canonical limit rule now lives in policy.

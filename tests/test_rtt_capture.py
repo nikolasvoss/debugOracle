@@ -16,9 +16,16 @@ from debugoracle.rtt import (
     capture_rtt,
     load_capture_state,
 )
+from debugoracle.sources.streams.rtt import (
+    RTT_STREAM_SOURCE as CANONICAL_RTT_STREAM_SOURCE,
+)
 
 
 class RttCaptureTests(unittest.TestCase):
+    def test_canonical_rtt_source_module_exports_stream_descriptor(self) -> None:
+        self.assertEqual(CANONICAL_RTT_STREAM_SOURCE.source_id, "rtt")
+        self.assertEqual(CANONICAL_RTT_STREAM_SOURCE.family, "stream")
+
     def test_capture_rtt_waits_for_server_and_writes_stream(self) -> None:
         payload = b"RECOVERY requested err=0x02\nSTATE BOOT -> FAULT_RECOVERY\n"
         with tempfile.TemporaryDirectory() as tmpdir:

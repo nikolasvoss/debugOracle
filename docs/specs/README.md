@@ -12,13 +12,22 @@ Conventions:
 
 ## Registry
 
+The registry below tracks the spec-backed module surfaces we expect agents and maintainers to use
+during this refactor. It is intentionally curated rather than a flat dump of every helper module.
+
 | Module | Code Path | Spec |
 | --- | --- | --- |
 | `builder` | `debugoracle/builder.py` | [`builder.md`](builder.md) |
-| `cli` | `debugoracle/cli.py` | [`cli.md`](cli.md) |
+| `cli` | `debugoracle/cli/__init__.py` | [`cli.md`](cli.md) |
+| `main` | `debugoracle/cli/main.py` | [`main.md`](main.md) |
+| `status_capture` | `debugoracle/cli/commands/status_capture.py` | [`status_capture.md`](status_capture.md) |
+| `run_stop` | `debugoracle/cli/commands/run_stop.py` | [`run_stop.md`](run_stop.md) |
+| `evidence` | `debugoracle/cli/commands/evidence.py` | [`evidence.md`](evidence.md) |
+| `halt_snapshot` | `debugoracle/sources/debuggers/gdb/halt_snapshot.py` | [`halt_snapshot.md`](halt_snapshot.md) |
 | `live` | `debugoracle/live.py` | [`live.md`](live.md) |
+| `memory` | `debugoracle/sources/debuggers/gdb/memory.py` | [`memory.md`](memory.md) |
 | `mi` | `debugoracle/mi.py` | [`mi.md`](mi.md) |
-| `models` | `debugoracle/models.py` | [`models.md`](models.md) |
-| `output` | `debugoracle/output.py` | [`output.md`](output.md) |
+| `registers` | `debugoracle/sources/debuggers/gdb/registers.py` | [`registers.md`](registers.md) |
 | `rtt` | `debugoracle/rtt.py` | [`rtt.md`](rtt.md) |
 | `session` | `debugoracle/session.py` | [`session.md`](session.md) |
+| `transcript` | `debugoracle/sources/debuggers/gdb/transcript.py` | [`transcript.md`](transcript.md) |

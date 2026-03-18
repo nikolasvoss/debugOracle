@@ -3,21 +3,27 @@ import unittest
 
 
 class ModuleSpecRegistryTests(unittest.TestCase):
-    def test_every_top_level_debugoracle_module_has_matching_spec(self) -> None:
+    def test_spec_registry_entries_point_to_existing_code_and_spec_files(self) -> None:
         repo_root = Path(__file__).resolve().parent.parent
-        module_dir = repo_root / "debugoracle"
-        specs_dir = repo_root / "docs" / "specs"
+        registry = (repo_root / "docs" / "specs" / "README.md").read_text(encoding="utf-8")
 
-        ignored = {"__init__", "__main__"}
-        modules = {
-            path.stem
-            for path in module_dir.glob("*.py")
-            if path.stem not in ignored
-        }
-        specs = {
-            path.stem
-            for path in specs_dir.glob("*.md")
-            if path.stem != "README"
-        }
+        entries: list[tuple[str, str, str]] = []
+        for line in registry.splitlines():
+            if not line.startswith("| `"):
+                continue
+            columns = [part.strip() for part in line.strip("|").split("|")]
+            if len(columns) != 3:
+                continue
+            module = columns[0].strip("`")
+            code_path = columns[1].strip("`")
+            spec_cell = columns[2]
+            spec_name = spec_cell.split("](")[-1].rstrip(")")
+            entries.append((module, code_path, spec_name))
 
-        self.assertEqual(modules, specs)
+        modules = {module for module, _, _ in entries}
+        self.assertNotIn("models", modules)
+        self.assertNotIn("output", modules)
+
+        for _, code_path, spec_name in entries:
+            self.assertTrue((repo_root / code_path).is_file(), code_path)
+            self.assertTrue((repo_root / "docs" / "specs" / spec_name).is_file(), spec_name)
