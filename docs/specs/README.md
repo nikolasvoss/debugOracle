@@ -2,6 +2,8 @@
 
 Module specs live in this directory so agents have one predictable place to look before opening code.
 
+Read [`../architecture.md`](../architecture.md) first for the whole-system view, package boundaries, and architecture diagrams. Then use the module specs below for code-near detail.
+
 Conventions:
 
 - The spec filename matches the module filename exactly.

@@ -2,6 +2,8 @@
 
 DebugOracle is a passive embedded-debug evidence packager for ChatGPT. It reads a bounded GDB/MI transcript plus optional RTT logs, builds a reusable evidence bundle, and renders either a local evidence report or a ChatGPT-ready prompt.
 
+The intended system architecture lives in [`docs/architecture.md`](docs/architecture.md).
+
 Module specifications live under [`docs/specs/README.md`](docs/specs/README.md). The spec filename matches the module filename so agents have one predictable place to look for architecture notes.
 
 ## Default workflow
