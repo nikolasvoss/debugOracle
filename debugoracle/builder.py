@@ -9,12 +9,13 @@ from pathlib import Path
 from typing import Any
 
 from .mi import MIParseError, parse_mi_record
-from .models import EvidenceBundle, SessionEvent, StackFrame
+from .models import CURRENT_BUNDLE_SCHEMA_VERSION, EvidenceBundle, SessionEvent, StackFrame
 
 DEFAULT_RTT_WINDOW = 40
 FULL_RTT_WINDOW = 200
 RAW_GDB_MI_FILENAME = "raw-gdb-mi.log"
 RAW_RTT_FILENAME = "raw-rtt.log"
+SUPPORTED_BUNDLE_SCHEMA_VERSIONS = {CURRENT_BUNDLE_SCHEMA_VERSION}
 
 DEFAULT_SOURCE_CONTEXT: dict[str, object] = {}
 
@@ -299,6 +300,7 @@ def build_bundle_from_text(
         pc=pc,
         lr=lr,
         sp=sp,
+        schema_version=CURRENT_BUNDLE_SCHEMA_VERSION,
         frames=latest_stack,
         registers=latest_registers,
         watched_values=latest_watched,
@@ -344,7 +346,13 @@ def load_bundle(path: str, *, strict: bool = False) -> EvidenceBundle:
         if strict:
             raise SnapshotLoadError(message) from error
         return _empty_bundle_from_load_error(path, f"Could not parse snapshot JSON: {error}")
-    return EvidenceBundle.from_dict(raw)
+    bundle = EvidenceBundle.from_dict(raw)
+    return _apply_schema_compatibility(
+        bundle,
+        raw=raw,
+        path=path,
+        strict=strict,
+    )
 
 
 def _empty_bundle_from_load_error(path: str, message: str) -> EvidenceBundle:
@@ -355,6 +363,7 @@ def _empty_bundle_from_load_error(path: str, message: str) -> EvidenceBundle:
         pc=None,
         lr=None,
         sp=None,
+        schema_version=CURRENT_BUNDLE_SCHEMA_VERSION,
         parse_warnings=[message],
         provenance={
             "gdb_mi_source": path,
@@ -371,7 +380,42 @@ def _empty_bundle_from_load_error(path: str, message: str) -> EvidenceBundle:
 def save_bundle(bundle: EvidenceBundle, path: str) -> None:
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
+    if not bundle.schema_version:
+        bundle.schema_version = CURRENT_BUNDLE_SCHEMA_VERSION
     target.write_text(json.dumps(bundle.to_dict(), indent=2), encoding="utf-8")
+
+
+def _apply_schema_compatibility(
+    bundle: EvidenceBundle,
+    *,
+    raw: object,
+    path: str,
+    strict: bool,
+) -> EvidenceBundle:
+    if not isinstance(raw, dict):
+        bundle.schema_version = CURRENT_BUNDLE_SCHEMA_VERSION
+        return bundle
+
+    raw_version = raw.get("schema_version")
+    if raw_version is None:
+        bundle.schema_version = CURRENT_BUNDLE_SCHEMA_VERSION
+        return bundle
+
+    schema_version = str(raw_version).strip() or CURRENT_BUNDLE_SCHEMA_VERSION
+    bundle.schema_version = schema_version
+    if schema_version in SUPPORTED_BUNDLE_SCHEMA_VERSIONS:
+        return bundle
+
+    message = (
+        f"Snapshot schema version '{schema_version}' in '{path}' is not supported; "
+        "continuing with best-effort compatibility mode."
+    )
+    if strict:
+        raise SnapshotLoadError(message)
+    if message not in bundle.parse_warnings:
+        bundle.parse_warnings.append(message)
+        bundle.provenance["parse_warning_count"] = len(bundle.parse_warnings)
+    return bundle
 
 
 def _export_raw_inputs(

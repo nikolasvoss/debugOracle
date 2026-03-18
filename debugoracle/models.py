@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
+CURRENT_BUNDLE_SCHEMA_VERSION = "1"
+
 
 @dataclass
 class SessionEvent:
@@ -30,11 +32,13 @@ class EvidenceBundle:
     pc: str | None
     lr: str | None
     sp: str | None
+    schema_version: str = CURRENT_BUNDLE_SCHEMA_VERSION
     frames: list[StackFrame] = field(default_factory=list)
     registers: dict[str, str] = field(default_factory=dict)
     watched_values: dict[str, str] = field(default_factory=dict)
     recent_rtt: list[str] = field(default_factory=list)
     parse_warnings: list[str] = field(default_factory=list)
+    live_state: dict[str, Any] = field(default_factory=dict)
     source_context: dict[str, Any] = field(default_factory=dict)
     provenance: dict[str, Any] = field(default_factory=dict)
     session_events: list[SessionEvent] = field(default_factory=list)
@@ -83,11 +87,14 @@ class EvidenceBundle:
             pc=_as_optional_str(raw.get("pc")),
             lr=_as_optional_str(raw.get("lr")),
             sp=_as_optional_str(raw.get("sp")),
+            schema_version=_as_optional_str(raw.get("schema_version"), CURRENT_BUNDLE_SCHEMA_VERSION)
+            or CURRENT_BUNDLE_SCHEMA_VERSION,
             frames=frames,
             registers=_as_str_dict(raw.get("registers")),
             watched_values=_as_str_dict(raw.get("watched_values")),
             recent_rtt=[_as_optional_str(line, "") for line in _as_list(raw.get("recent_rtt"), []) if line is not None],
             parse_warnings=[_as_optional_str(item, "") for item in _as_list(raw.get("parse_warnings"), []) if item is not None],
+            live_state=_as_any_dict(raw.get("live_state")),
             source_context=_as_any_dict(raw.get("source_context")),
             provenance=_as_any_dict(raw.get("provenance")),
             session_events=events,
