@@ -1,111 +1,136 @@
-# DebugOracle Agent Runbook (offline, snapshot-first)
+# DebugOracle Agent Runbook
 
 Goal:
-- Verify a captured debug session in `/home/niko/Dokumente/Bastelei/stm32_1/.dbgoracle` quickly and safely.
-- Keep this runbook read-only unless you explicitly need a re-bundle.
+- Help an agent use DebugOracle correctly inside an STM32 workspace.
+- Keep the workflow aligned with the current proof of concept:
+  real `NUCLEO-L432KC` session, GDB-first evidence, read-only analysis after
+  logs have been captured.
 
-## Hard rule
+## PoC assumptions
 
-Do **not** run `dbgoracle observe` as part of routine verification.
+- The relevant evidence source is the GDB/MI log.
+- RTT is optional and not required for success.
+- Live reads are not part of this PoC.
+- DebugOracle does not control the debugger.
+- A useful report is expected to contain GDB stop information such as stop
+  reason, stack, registers, or locals, or an explicit warning when some of that
+  context is missing.
 
-`observe` is a snapshot rebuild action (it writes `latest_snapshot.json` and optional raw sidecars).
-Use it only when you need to regenerate the snapshot after collecting new MI/RTT logs.
-When provided, `--state-out` is always authoritative for the snapshot output location.
-Without `--state-out`, `observe` resolves output to:
-1. next to the resolved GDB/MI input (if available),
-2. next to the resolved RTT input (if available),
-3. `<workspace>/.dbgoracle/latest_snapshot.json` (default fallback).
-`status` and discovery checks remain warning-oriented for malformed snapshots; they are not hard-failed.
+## Interpret these requests as DebugOracle tasks
 
-## Workspace defaults (fixed for this workflow)
+- "fetch the prompt from dbgoracle"
+- "get the debug report"
+- "show me the detailed snapshot"
+- "use dbgoracle on this workspace"
 
-- Workspace root: `/home/niko/Dokumente/Bastelei/stm32_1`
-- Artifacts: `/home/niko/Dokumente/Bastelei/stm32_1/.dbgoracle`
+The agent should prefer the smallest successful path that produces the
+requested artifact.
 
-## Verification sequence (preferred)
+## Required self-discovery rule
 
-1. **Health and freshness gate**
+Do not guess DebugOracle flags, output modes, or command behavior.
 
-```bash
-WORKSPACE=/home/niko/Dokumente/Bastelei/stm32_1
-SNAPSHOT_FILE=$WORKSPACE/.dbgoracle/latest_snapshot.json
-STATUS_FILE=$WORKSPACE/.dbgoracle/agent-status.json
-
-if ! dbgoracle status --workspace-root "$WORKSPACE" --format json | tee "$STATUS_FILE"; then
-  echo "Outcome: FAIL"
-  echo "Reason: status command failed."
-  exit 1
-fi
-```
-
-Interpret `status` output:
-
-- PASS gate: `.snapshot.exists == true` **and** `.snapshot.stale == false`
-- REVIEW gate: `.parse_warning_count > 0` or `.health == "degraded"`  
-  (do not fail automatically; require explicit review note)
-- FAIL gate:
-  - status JSON missing or not readable
-  - `.snapshot.exists == false`
-  - `.snapshot.age_seconds` is older than your allowed recapture threshold
-  - MI/RTT source missing when expected by your session policy
-
-If `jq` exists, you can evaluate deterministically with:
+When the user asks for more detail, a different rendering mode, or an unfamiliar
+command, inspect the CLI help first:
 
 ```bash
-if ! jq -e '.snapshot.exists == true and .snapshot.stale == false' "$STATUS_FILE" >/dev/null; then
-  echo "Outcome: FAIL"
-  exit 1
-fi
-
-PARSE_WARNINGS=$(jq -r '.parse_warning_count // 0' "$STATUS_FILE")
-if [ "$PARSE_WARNINGS" -gt 0 ] || [ "$(jq -r '.health // "unknown"' "$STATUS_FILE")" = "degraded" ]; then
-  echo "Outcome: REVIEW"
-fi
+dbgoracle --help
+dbgoracle <command> --help
 ```
 
-If `.status` output cannot be parsed by tools, inspect the printed JSON fields directly and apply the same rules.
+Use the actual supported flags from help output. For example,
+`dbgoracle snapshot` does not support `--verbose`. To get more detail, use
+`--format json` or `--format markdown`.
 
-2. **Render human-readable report**
+## Command decision path
+
+1. If a usable snapshot already exists, prefer rendering from it.
+2. If no snapshot exists but a GDB/MI log exists, run `dbgoracle observe`.
+3. After a snapshot exists:
+   - use `dbgoracle report` for a human-readable GDB evidence summary
+   - use `dbgoracle prompt --goal "Explain why the target stopped here"` for an
+     agent handoff artifact
+   - use `dbgoracle snapshot --format json` for detailed structured output
+   - use `dbgoracle snapshot --format markdown` for detailed human-readable
+     output
+4. If neither a snapshot nor a usable GDB/MI log exists, report that required
+   debug evidence is missing.
+
+## Preferred verification flow
+
+Use the current workspace root unless the user gives a different path.
+
+1. Check the current DebugOracle state:
 
 ```bash
-dbgoracle report --workspace-root /home/niko/Dokumente/Bastelei/stm32_1 --snapshot-file "$SNAPSHOT_FILE" --format markdown
+dbgoracle status --workspace-root .
 ```
 
-3. **Render snapshot (automation/automation-friendly export)**
+2. If a reusable snapshot is already present, render from it:
 
 ```bash
-dbgoracle snapshot --workspace-root /home/niko/Dokumente/Bastelei/stm32_1 --snapshot-file "$SNAPSHOT_FILE" --format json
+dbgoracle report --workspace-root .
+dbgoracle prompt --workspace-root . --goal "Explain why the target stopped here"
 ```
 
-4. **Create LLM handoff prompt**
+3. If no snapshot exists but the GDB/MI log exists, build a snapshot and then
+   render:
 
 ```bash
-dbgoracle prompt --workspace-root /home/niko/Dokumente/Bastelei/stm32_1 --snapshot-file "$SNAPSHOT_FILE" --goal "Explain why the target stopped here" --full --format markdown
+dbgoracle observe --workspace-root .
+dbgoracle report --workspace-root .
+dbgoracle prompt --workspace-root . --goal "Explain why the target stopped here"
 ```
 
-5. **Agent exit contract**
+## Minimal workflows
 
-Emit one of these outcomes for automation:
-
-- `Outcome: PASS` (all required checks passed, no blocking quality issues)
-- `Outcome: REVIEW` (passes structurally; includes parse warnings or degraded status; proceed with caution)
-- `Outcome: FAIL` (stale/missing snapshot or command failure)
-```
-
-## If status or checks fail
-
-- Stop autonomous decision flow and request a new capture.
-- Re-run capture, then run `observe` only intentionally if you need a refreshed snapshot:
+For "fetch the prompt from dbgoracle":
 
 ```bash
-cd /home/niko/Dokumente/Bastelei/stm32_1
-dbgoracle observe --workspace-root /home/niko/Dokumente/Bastelei/stm32_1 --state-out "$SNAPSHOT_FILE"
+dbgoracle status --workspace-root .
+dbgoracle observe --workspace-root .   # only if no usable snapshot exists
+dbgoracle prompt --workspace-root . --goal "Explain why the target stopped here"
 ```
 
-- For parse warnings, continue only with explicit review notes and avoid concluding a fix without human verification.
+For "get the debug report":
 
-## Safety notes
+```bash
+dbgoracle status --workspace-root .
+dbgoracle observe --workspace-root .   # only if no usable snapshot exists
+dbgoracle report --workspace-root .
+```
 
-- MI/RTT logs can contain sensitive firmware/runtime state.
-- Prefer sharing `report`/`prompt` outputs over raw traces.
-- Avoid exposing raw traces unless necessary and approved.
+For "show me the detailed snapshot" or "give me verbose snapshot output":
+
+```bash
+dbgoracle status --workspace-root .
+dbgoracle observe --workspace-root .   # only if no usable snapshot exists
+dbgoracle snapshot --workspace-root . --format json
+```
+
+If the user wants a more readable detailed view, prefer:
+
+```bash
+dbgoracle snapshot --workspace-root . --format markdown
+```
+
+## Failure handling
+
+Stop and report the issue if any of the following are true:
+
+- no GDB/MI log exists
+- the available session evidence does not let `observe` build a snapshot
+- the report is too thin because the session did not capture meaningful halt
+  context
+- the user appears to expect live reads or debugger control
+
+## Troubleshooting guidance
+
+- If the report or prompt is thin, suggest refreshing Call Stack, Registers, and
+  Variables/Locals before ending the debug session and recapturing.
+- If the snapshot is missing, check whether the workspace contains a GDB/MI log
+  before attempting `observe`.
+- If `observe` fails, tell the user that the current workspace does not contain
+  a usable GDB evidence input for DebugOracle.
+- If the user asks for "verbose" snapshot output, do not invent flags. Check
+  `dbgoracle snapshot --help` and use the supported `--format` options.
