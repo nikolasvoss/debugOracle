@@ -22,6 +22,8 @@ target-specific fields before using it on another project:
 
 - MI transcript output should write to `./cortex-debug-shared-mi.log` or `.dbgoracle/cortex-debug-shared-mi.log`
 - RTT should be captured by `./dbgoracle run` into `.dbgoracle/session.rtt`
+- The launch config must still enable RTT in your installed Cortex-Debug/OpenOCD
+  setup so an RTT TCP server is actually exposed.
 - If your Cortex-Debug version uses different MI/RTT key names, update only the
   logging lines.
 - `serverpath` in the sample is optional and commented out by default.
@@ -59,6 +61,9 @@ test -f .dbgoracle/session.rtt && echo "RTT file path exists" || echo "RTT log n
 
 - Start your Cortex-Debug session.
 - Use the TCP port that Cortex-Debug/OpenOCD prints for the active RTT channel. Channel `0` is often exposed on `60001`.
+- Keep `tasks.json.example` aligned with the actual RTT TCP port for your
+  session. If OpenOCD/Cortex-Debug exposes a different port, update
+  `DebugOracle: Start RTT run` to match it.
 - Use only one RTT consumer at a time. Do not run `uScope` or a second RTT terminal while `dbgoracle run` is attached.
 - Reproduce the fault until the stop point you want to investigate.
 - Open/refresh **Call Stack**, **Registers**, and **Variables/Locals** after the stop.
@@ -103,6 +108,10 @@ Then hand it to ChatGPT:
 - Cortex-Debug launch JSON schemas vary slightly by extension/version; keep only the MI/RTT paths and shared-logging settings aligned with your installed version.
 - Treat Cortex-Debug `rttConfig.logFile` as best-effort only. The supported robust path is `./dbgoracle run`.
 - If the RTT file stays empty, inspect `.dbgoracle/session.rtt.state.json` or run `./dbgoracle status` to see whether capture connected, stayed idle, or hit an error.
+- If the RTT file stays empty from the start, the two most likely causes are:
+  - the launch configuration did not enable RTT, so no RTT TCP server came up
+  - the `dbgoracle run --port ...` value does not match the actual RTT TCP port
+    printed by Cortex-Debug/OpenOCD
 - If a debug session ends unexpectedly, run `./dbgoracle stop --workspace-root .` to clean up detached runtime metadata.
 - If logs are stale, remove old `.dbgoracle/*` files before next run.
 - For security, treat MI/RTT logs as potentially sensitive traces (register values,

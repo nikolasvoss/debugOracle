@@ -78,7 +78,7 @@ class DebugOracleRunStopTests(unittest.TestCase):
             popen = Mock()
             popen.pid = 23456
             popen.poll.return_value = None
-            with patch("debugoracle.cli.commands.run_stop.subprocess.Popen", return_value=popen), redirect_stdout(buffer):
+            with patch("debugoracle.cli.commands.run_stop.subprocess.Popen", return_value=popen) as popen_mock, redirect_stdout(buffer):
                 exit_code = main(["run", "--detach", "--workspace-root", str(workspace)])
             runtime_path = workspace / ".dbgoracle" / "session.rtt.run.json"
             payload = json.loads(runtime_path.read_text(encoding="utf-8"))
@@ -86,6 +86,10 @@ class DebugOracleRunStopTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertEqual(payload["pid"], 23456)
         self.assertEqual(payload["mode"], "detached")
+        self.assertIn(
+            str(Path(__file__).resolve().parents[1]),
+            popen_mock.call_args.kwargs["env"]["PYTHONPATH"],
+        )
         self.assertIn("Started detached RTT run", buffer.getvalue())
 
     def test_run_detach_fails_when_child_exits_during_startup(self) -> None:

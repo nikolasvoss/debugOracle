@@ -16,6 +16,8 @@ Own the workspace-oriented RTT lifecycle commands used for foreground and detach
 - Resolve managed RTT output, state, runtime metadata, and launch-log paths.
 - Start detached RTT capture processes and persist runtime metadata.
 - Stop only managed DebugOracle run processes and clean stale metadata safely.
+- Ensure detached RTT child launches can still import `debugoracle` when run
+  from an external workspace without an editable install.
 
 ## Boundaries
 

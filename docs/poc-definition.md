@@ -61,13 +61,13 @@ top-level workflow in [`README.md`](../README.md).
 
 The PoC passes when all of the following are true:
 
-- A real `NUCLEO-L432KC` debug session produces a bounded GDB/MI log.
-- `dbgoracle observe` succeeds from that log.
-- `dbgoracle report` contains useful GDB stop information.
+- A real `NUCLEO-L432KC` debug session produces a bounded GDB/MI log. ✅
+- `dbgoracle observe` succeeds from that log. ✅
+- `dbgoracle report` contains useful GDB stop information. ✅
 - The report includes stop-context evidence such as stop reason, stack,
-  registers, or locals, or an explicit warning when some context is missing.
+  registers, or locals, or an explicit warning when some context is missing. ✅
 - `dbgoracle prompt` produces a handoff artifact that an agent can use in the
-  same workspace.
+  same workspace. ✅
 - Another engineer can reproduce the same flow with the same board and tooling
   from this documentation plus the existing setup docs.
 
@@ -84,12 +84,12 @@ The PoC fails if any of the following are true:
 
 ## In Scope
 
-- Real hardware validation on `NUCLEO-L432KC`
-- Cortex-Debug based GDB/MI log capture
-- File-based evidence ingestion
-- `observe`, `report`, and `prompt`
-- Agent use inside the same STM32 workspace
-- Basic documentation for the required VS Code setup
+- Real hardware validation on `NUCLEO-L432KC` ✅
+- Cortex-Debug based GDB/MI log capture ✅
+- File-based evidence ingestion ✅
+- `observe`, `report`, and `prompt` ✅
+- Agent use inside the same STM32 workspace ✅
+- Basic documentation for the required VS Code setup ✅
 
 ## Out Of Scope
 

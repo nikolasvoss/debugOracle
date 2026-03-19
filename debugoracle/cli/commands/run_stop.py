@@ -24,6 +24,7 @@ DEFAULT_RUN_PORT = 60001
 DEFAULT_RUN_OUTPUT = "session.rtt"
 DEFAULT_RUN_METADATA = "session.rtt.run.json"
 DEFAULT_RUN_LAUNCH_LOG = "session.rtt.launch.log"
+PACKAGE_ROOT = Path(__file__).resolve().parents[3]
 
 
 def cmd_run(args: argparse.Namespace) -> int:
@@ -148,6 +149,7 @@ def _cmd_run_detach(
                 output_path=output_path,
                 state_path=state_path,
             ),
+            env=build_detached_run_env(),
             stdin=subprocess.DEVNULL,
             stdout=log_handle,
             stderr=subprocess.STDOUT,
@@ -264,6 +266,17 @@ def build_detached_run_command(
     if args.append:
         command.append("--append")
     return command
+
+
+def build_detached_run_env() -> dict[str, str]:
+    env = os.environ.copy()
+    package_root = str(PACKAGE_ROOT)
+    existing = env.get("PYTHONPATH")
+    if existing:
+        env["PYTHONPATH"] = os.pathsep.join([package_root, existing])
+    else:
+        env["PYTHONPATH"] = package_root
+    return env
 
 
 def load_runtime_metadata(path: Path) -> dict[str, object] | None:
