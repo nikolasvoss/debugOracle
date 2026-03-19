@@ -248,6 +248,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_RTT_WINDOW,
         help="Bounded RTT line window to retain when building from raw inputs",
     )
+    add_variable_selector_arguments(snapshot)
     snapshot.set_defaults(func=cmd_snapshot)
 
     prompt = subparsers.add_parser(
@@ -276,6 +277,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_RTT_WINDOW,
         help="Bounded RTT line window to retain when building from raw inputs",
     )
+    add_variable_selector_arguments(prompt)
     prompt.set_defaults(func=cmd_prompt)
 
     report = subparsers.add_parser(
@@ -300,6 +302,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_RTT_WINDOW,
         help="Bounded RTT line window to retain when building from raw inputs",
     )
+    add_variable_selector_arguments(report)
     report.set_defaults(func=cmd_report)
 
     return parser
@@ -364,4 +367,25 @@ def add_input_arguments(
         "--workspace-root",
         default=".",
         help="Workspace root used to resolve default file paths",
+    )
+
+
+def add_variable_selector_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--var-scope",
+        choices=["local", "watchpoint", "unknown", "all"],
+        default="all",
+        help="Variable evidence scope to render",
+    )
+    parser.add_argument(
+        "--var-name",
+        action="append",
+        default=[],
+        help="Optional variable/watchpoint name filter; repeat to request multiple names",
+    )
+    parser.add_argument(
+        "--var-detail",
+        choices=["compact", "full"],
+        default="compact",
+        help="Variable evidence detail level",
     )

@@ -3,7 +3,7 @@
 - Module: `builder`
 - Code Path: `debugoracle/builder.py`
 - Public Entrypoints: `build_bundle_from_files`, `build_bundle_from_stream`, `build_bundle_from_text`, `load_bundle`, `save_bundle`, `SnapshotLoadError`
-- Last Updated: `2026-03-18`
+- Last Updated: `2026-03-19`
 
 # SPEC: DebugOracle Builder Compatibility Boundary
 
@@ -60,6 +60,14 @@ For Step 7:
 
 - Artifact creation now happens through `debugoracle.pipeline.storage.build_artifact_from_sources`
 - `debugoracle.builder` still owns the legacy `build_bundle_from_*` entrypoints, but it no longer owns the shared shaping logic directly
+
+For Variable Evidence v1:
+
+- Builder now assembles snapshots with structured variable evidence instead of treating locals and
+  variables as a flat `watched_values` map.
+- The compatibility-facing `build_bundle_from_*` APIs remain unchanged, but their returned artifact
+  schema now centers variable evidence under bucketed entries (`locals`, `globals`,
+  `watchpoints`, `unknown`).
 
 ## Migration Note
 

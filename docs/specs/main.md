@@ -3,7 +3,7 @@
 - Module: `main`
 - Code Path: `debugoracle/cli/main.py`
 - Public Entrypoints: `main`, `build_parser`
-- Last Updated: `2026-03-18`
+- Last Updated: `2026-03-19`
 
 # SPEC: DebugOracle CLI Parser And Dispatch
 
@@ -27,3 +27,15 @@ Own the top-level CLI parser, shared argument groups, and command dispatch wirin
 
 - Preserve the compatibility entrypoint exported by `debugoracle/cli/__init__.py`.
 - Keep parser-only concerns here; avoid moving evidence shaping or policy logic back into dispatch.
+
+## Shared Variable Selectors
+
+The parser owns one shared variable-evidence selector surface for `snapshot`, `report`, and
+`prompt`:
+
+- `--var-scope local|watchpoint|unknown|all`
+- repeatable `--var-name`
+- `--var-detail compact|full`
+
+Dispatch should pass these parsed selectors through to the evidence command module without
+interpreting the underlying evidence model in `main.py`.

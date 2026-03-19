@@ -33,7 +33,8 @@ class DebugOracleCliTests(unittest.TestCase):
         payload = json.loads(output)
         self.assertEqual(payload["stop_reason"], "breakpoint-hit")
         self.assertEqual(payload["pc"], "0x08000100")
-        self.assertEqual(payload["watched_values"]["system_state"], "READY")
+        self.assertEqual(payload["variable_evidence"]["locals"][0]["name"], "system_state")
+        self.assertEqual(payload["variable_evidence"]["locals"][0]["value"], "READY")
         self.assertEqual(len(payload["recent_rtt"]), 3)
 
     def test_snapshot_classifies_noise_lines_without_masking_stop_context(self) -> None:
@@ -230,6 +231,77 @@ class DebugOracleCliTests(unittest.TestCase):
         self.assertNotIn("Top non-MI patterns", report_output)
         self.assertIn("## Parsing Summary", report_output)
         self.assertIn("DebugOracle Evidence Report", report_output)
+
+    def test_report_supports_variable_scope_name_and_full_detail_filters(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            snapshot_path = Path(tmpdir) / "snapshot.json"
+            self._run_cli(
+                [
+                    "observe",
+                    "--gdb-mi",
+                    str(FIXTURES / "sample.mi"),
+                    "--state-out",
+                    str(snapshot_path),
+                ]
+            )
+            payload = json.loads(snapshot_path.read_text(encoding="utf-8"))
+            payload["variable_evidence"]["unknown"] = [
+                {
+                    "name": "dup",
+                    "value": "one",
+                    "bucket": "unknown",
+                    "availability": "captured",
+                    "origin": "fixture",
+                    "order": 10,
+                    "detail": {},
+                },
+                {
+                    "name": "dup",
+                    "value": "two",
+                    "bucket": "unknown",
+                    "availability": "captured",
+                    "origin": "fixture",
+                    "order": 11,
+                    "detail": {},
+                },
+            ]
+            snapshot_path.write_text(json.dumps(payload), encoding="utf-8")
+
+            report_output = self._run_cli(
+                [
+                    "report",
+                    "--snapshot-file",
+                    str(snapshot_path),
+                    "--var-scope",
+                    "unknown",
+                    "--var-name",
+                    "dup",
+                    "--var-detail",
+                    "full",
+                ]
+            )
+
+        self.assertIn("- Locals: 0 total", report_output)
+        self.assertIn("- Unknown Classification: 2 total", report_output)
+        self.assertIn("dup: one", report_output)
+        self.assertIn("dup: two", report_output)
+
+    def test_observe_help_does_not_advertise_variable_render_selectors(self) -> None:
+        code, stdout, stderr = self._run_cli_expect_system_exit(["observe", "--help"])
+
+        self.assertEqual(code, 0)
+        self.assertEqual(stderr, "")
+        self.assertNotIn("--var-scope", stdout)
+        self.assertNotIn("--var-name", stdout)
+        self.assertNotIn("--var-detail", stdout)
+
+    def test_report_help_disables_global_scope_selector(self) -> None:
+        code, stdout, stderr = self._run_cli_expect_system_exit(["report", "--help"])
+
+        self.assertEqual(code, 0)
+        self.assertEqual(stderr, "")
+        self.assertIn("--var-scope {local,watchpoint,unknown,all}", stdout)
+        self.assertNotIn("global", stdout)
 
     def test_prompt_markdown_contains_goal_intent_and_citations(self) -> None:
         output = self._run_cli(
@@ -855,7 +927,7 @@ class DebugOracleCliTests(unittest.TestCase):
         finally:
             Path(path).unlink()
         self.assertIn("No register-values record was found", output)
-        self.assertIn("No watched values or locals were captured", output)
+        self.assertIn("No variable evidence was captured", output)
         self.assertIn("No RTT lines were available for this snapshot.", output)
 
     def test_report_fails_with_corrupt_snapshot_file(self) -> None:

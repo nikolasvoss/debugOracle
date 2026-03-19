@@ -11,6 +11,7 @@ from ...builder import DEFAULT_RTT_WINDOW, FULL_RTT_WINDOW, build_bundle_from_fi
 from ...renderers.prompt import render_prompt
 from ...renderers.report import render_report
 from ...renderers.snapshot import render_snapshot
+from ...renderers._evidence_common import variable_options_from_args
 from ...session import (
     DEFAULT_GDB_MI_FILENAME,
     DEFAULT_RTT_FILENAME,
@@ -58,7 +59,7 @@ def cmd_snapshot(args: argparse.Namespace) -> int:
         command_name="snapshot",
         strict_snapshot=True,
     )
-    output = render_snapshot(bundle, fmt=args.format)
+    output = render_snapshot(bundle, fmt=args.format, variable_options=variable_options_from_args(args))
     return emit(output, args.output)
 
 
@@ -76,6 +77,9 @@ def cmd_prompt(args: argparse.Namespace) -> int:
         snapshot_ref=bundle.snapshot_id,
         format=args.format,
         detail_level="full" if args.full else "compact",
+        var_scope=args.var_scope,
+        var_names=list(args.var_name or []),
+        var_detail=args.var_detail,
     )
     output = render_prompt(bundle, request)
     return emit(output, args.output)
@@ -87,7 +91,7 @@ def cmd_report(args: argparse.Namespace) -> int:
         command_name="report",
         strict_snapshot=True,
     )
-    output = render_report(bundle, fmt=args.format)
+    output = render_report(bundle, fmt=args.format, variable_options=variable_options_from_args(args))
     return emit(output, args.output)
 
 

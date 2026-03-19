@@ -1,15 +1,32 @@
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import Iterable
 
-from ..artifacts.models import EvidenceBundle, InvestigationRequest
+from ..artifacts.models import (
+    EvidenceBundle,
+    InvestigationRequest,
+    VariableEntry,
+    VariableEvidence,
+    VARIABLE_BUCKETS,
+)
 from ..builder import DEFAULT_RTT_WINDOW, FULL_RTT_WINDOW
+
+COMPACT_VARIABLE_LIMIT = 5
+
+
+@dataclass
+class VariableRenderOptions:
+    scope: str = "all"
+    names: list[str] = field(default_factory=list)
+    detail: str = "compact"
 
 
 def summary(bundle: EvidenceBundle, request: InvestigationRequest) -> str:
     top = bundle.frames[0] if bundle.frames else None
     location = frame_label(top) if top else "No stack frame available"
     log_window = bundle.provenance.get("rtt_window", DEFAULT_RTT_WINDOW)
+    variable_options = variable_options_from_request(request)
     lines = [
         f"- Snapshot ID: {bundle.snapshot_id}",
         f"- Captured At: {bundle.captured_at}",
@@ -18,7 +35,7 @@ def summary(bundle: EvidenceBundle, request: InvestigationRequest) -> str:
         f"- PC/LR/SP: {bundle.pc or 'unknown'} / {bundle.lr or 'unknown'} / {bundle.sp or 'unknown'}",
         f"- Stack Frames: {len(bundle.frames)}",
         f"- Registers Captured: {len(bundle.registers)}",
-        f"- Watched Values: {len(bundle.watched_values)}",
+        f"- Variable Entries: {bundle.variable_evidence.count()}",
         f"- RTT Window Included: {len(bundle.recent_rtt)} lines (configured window {log_window})",
         f"- Requested Goal: {request.goal_text}",
     ]
@@ -29,12 +46,15 @@ def summary(bundle: EvidenceBundle, request: InvestigationRequest) -> str:
         lines.append("- Detail Mode: full")
     else:
         lines.append("- Detail Mode: compact")
+    lines.append(f"- Variable Scope: {variable_options.scope}")
+    lines.append(f"- Variable Detail: {variable_options.detail}")
     return "\n".join(lines)
 
 
 def appendix(bundle: EvidenceBundle, request: InvestigationRequest) -> str:
     rtt_limit = FULL_RTT_WINDOW if request.detail_level == "full" else DEFAULT_RTT_WINDOW
     recent_rtt = bundle.recent_rtt[-rtt_limit:]
+    variable_options = variable_options_from_request(request)
     sections = [
         "### Session Context",
         session_summary(bundle),
@@ -45,8 +65,8 @@ def appendix(bundle: EvidenceBundle, request: InvestigationRequest) -> str:
         "### Registers",
         mapping_section(bundle.registers),
         "",
-        "### Watched Values",
-        mapping_section(bundle.watched_values),
+        "### Variable Evidence",
+        variable_section(bundle.variable_evidence, variable_options),
         "",
         "### Recent RTT",
         lines_section(recent_rtt),
@@ -88,7 +108,7 @@ def citations(bundle: EvidenceBundle) -> list[str]:
         f"C1 Session context and stop state from GDB/MI transcript: {gdb_source}",
         "C2 Stack trace extracted from the latest observed stop-context snapshot",
         "C3 Register values extracted from the latest register-values result record",
-        "C4 Watched values extracted from the latest locals/variables result records",
+        "C4 Variable evidence extracted from the latest locals/variables/watchpoint records",
     ]
     if rtt_source:
         citations.append(f"C5 Recent RTT lines from: {rtt_source}")
@@ -106,8 +126,8 @@ def unknowns(bundle: EvidenceBundle, request: InvestigationRequest | None) -> li
         unknowns_list.append("No stack trace was available in the parsed transcript.")
     if not bundle.registers:
         unknowns_list.append("No register-values record was found in the parsed transcript.")
-    if not bundle.watched_values:
-        unknowns_list.append("No watched values or locals were captured in the parsed transcript.")
+    if bundle.variable_evidence.count() == 0:
+        unknowns_list.append("No variable evidence was captured in the parsed transcript.")
     if not bundle.recent_rtt:
         unknowns_list.append("No RTT lines were available for this snapshot.")
     if evidence_quality := evidence_quality_score(bundle):
@@ -175,6 +195,93 @@ def lines_section(lines: Iterable[str], plain: bool = False) -> str:
 
 def render_bullets(items: Iterable[str], bullet: str = "- ") -> str:
     return "\n".join(f"{bullet}{item}" for item in items)
+
+
+def variable_options_from_request(request: InvestigationRequest) -> VariableRenderOptions:
+    return VariableRenderOptions(
+        scope=request.var_scope,
+        names=list(request.var_names),
+        detail=request.var_detail,
+    )
+
+
+def variable_options_from_args(args: object) -> VariableRenderOptions:
+    scope = getattr(args, "var_scope", "all")
+    names = list(getattr(args, "var_name", []) or [])
+    detail = getattr(args, "var_detail", "compact")
+    return VariableRenderOptions(scope=scope, names=names, detail=detail)
+
+
+def variable_section(
+    evidence: VariableEvidence,
+    options: VariableRenderOptions,
+    *,
+    plain: bool = False,
+) -> str:
+    sections: list[str] = []
+    for bucket in VARIABLE_BUCKETS:
+        entries = list(filtered_variable_entries(evidence.bucket(bucket), options, bucket))
+        title = bucket_heading(bucket)
+        sections.append(f"- {title}: {len(entries)} total")
+        if not entries:
+            sections.append("  - None")
+            continue
+        display_entries = entries if options.detail == "full" else entries[:COMPACT_VARIABLE_LIMIT]
+        for entry in display_entries:
+            sections.append(f"  - {format_variable_entry(entry)}")
+        omitted = len(entries) - len(display_entries)
+        if omitted > 0:
+            sections.append(f"  - ... {omitted} more omitted")
+    return "\n".join(sections)
+
+
+def filtered_variable_entries(
+    entries: list[VariableEntry],
+    options: VariableRenderOptions,
+    bucket: str,
+) -> list[VariableEntry]:
+    if options.scope != "all" and normalize_scope(options.scope) != bucket:
+        return []
+    if not options.names:
+        return entries
+    wanted = {name.lower() for name in options.names}
+    return [entry for entry in entries if entry.name.lower() in wanted]
+
+
+def normalize_scope(scope: str) -> str:
+    mapping = {
+        "all": "all",
+        "local": "locals",
+        "locals": "locals",
+        "global": "globals",
+        "globals": "globals",
+        "watchpoint": "watchpoints",
+        "watchpoints": "watchpoints",
+        "unknown": "unknown",
+    }
+    return mapping.get(scope, scope)
+
+
+def bucket_heading(bucket: str) -> str:
+    return {
+        "locals": "Locals",
+        "globals": "Globals",
+        "watchpoints": "Watchpoints",
+        "unknown": "Unknown Classification",
+    }.get(bucket, bucket.title())
+
+
+def format_variable_entry(entry: VariableEntry) -> str:
+    value = entry.value if entry.value is not None else "<unavailable>"
+    context = []
+    if entry.frame:
+        context.append(entry.frame)
+    if entry.availability != "captured":
+        context.append(entry.availability)
+    if entry.origin:
+        context.append(entry.origin)
+    suffix = f" ({', '.join(context)})" if context else ""
+    return f"{entry.name}: {value}{suffix}"
 
 
 def parsing_summary_counts(bundle: EvidenceBundle) -> tuple[int, int, int]:

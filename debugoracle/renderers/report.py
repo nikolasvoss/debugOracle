@@ -10,17 +10,29 @@ from ._evidence_common import (
     session_summary,
     stack_section,
     unknowns,
+    VariableRenderOptions,
+    variable_section,
     with_parse_warnings,
 )
 
 
-def render_report(bundle: EvidenceBundle, fmt: str = "markdown") -> str:
+def render_report(
+    bundle: EvidenceBundle,
+    fmt: str = "markdown",
+    *,
+    variable_options: VariableRenderOptions | None = None,
+) -> str:
+    variable_options = variable_options or VariableRenderOptions()
     if fmt == "text":
-        return _render_report_text(bundle)
-    return _render_report_markdown(bundle)
+        return _render_report_text(bundle, variable_options=variable_options)
+    return _render_report_markdown(bundle, variable_options=variable_options)
 
 
-def _render_report_markdown(bundle: EvidenceBundle) -> str:
+def _render_report_markdown(
+    bundle: EvidenceBundle,
+    *,
+    variable_options: VariableRenderOptions,
+) -> str:
     return "\n".join(
         with_parse_warnings(
             [
@@ -34,8 +46,8 @@ def _render_report_markdown(bundle: EvidenceBundle) -> str:
                 "## Registers",
                 mapping_section(bundle.registers),
                 "",
-                "## Watched Values",
-                mapping_section(bundle.watched_values),
+                "## Variable Evidence",
+                variable_section(bundle.variable_evidence, variable_options),
                 "",
                 "## Recent RTT",
                 lines_section(bundle.recent_rtt),
@@ -55,7 +67,11 @@ def _render_report_markdown(bundle: EvidenceBundle) -> str:
     ).rstrip() + "\n"
 
 
-def _render_report_text(bundle: EvidenceBundle) -> str:
+def _render_report_text(
+    bundle: EvidenceBundle,
+    *,
+    variable_options: VariableRenderOptions,
+) -> str:
     return "\n".join(
         with_parse_warnings(
             [
@@ -69,8 +85,8 @@ def _render_report_text(bundle: EvidenceBundle) -> str:
                 "Registers:",
                 mapping_section(bundle.registers, plain=True),
                 "",
-                "Watched Values:",
-                mapping_section(bundle.watched_values, plain=True),
+                "Variable Evidence:",
+                variable_section(bundle.variable_evidence, variable_options, plain=True),
                 "",
                 "Recent RTT:",
                 lines_section(bundle.recent_rtt, plain=True),
