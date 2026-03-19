@@ -6,7 +6,7 @@ from pathlib import Path
 
 from .models import CURRENT_BUNDLE_SCHEMA_VERSION, InvestigationArtifact
 
-SUPPORTED_ARTIFACT_SCHEMA_VERSIONS = {CURRENT_BUNDLE_SCHEMA_VERSION}
+SUPPORTED_ARTIFACT_SCHEMA_VERSIONS = {"1", CURRENT_BUNDLE_SCHEMA_VERSION}
 
 
 class ArtifactLoadError(RuntimeError):

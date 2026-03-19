@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from ....artifacts.models import StackFrame
+from ....artifacts.models import StackFrame, VariableEvidence
 from ...base import SourceDescriptor, validate_source_descriptor
 from .transcript import extract_pc, normalize_frame
 
@@ -29,7 +29,7 @@ class GdbHaltSnapshot:
     sp: str | None
     frames: list[StackFrame]
     registers: dict[str, str]
-    watched_values: dict[str, str]
+    variable_evidence: VariableEvidence
 
 
 def build_halt_snapshot(
@@ -37,7 +37,7 @@ def build_halt_snapshot(
     latest_stop: dict[str, Any] | None,
     latest_stack: list[StackFrame],
     latest_registers: dict[str, str],
-    latest_watched: dict[str, str],
+    variable_evidence: VariableEvidence,
 ) -> GdbHaltSnapshot:
     frames = latest_stack
     if not frames and latest_stop:
@@ -51,7 +51,7 @@ def build_halt_snapshot(
         sp=latest_registers.get("13"),
         frames=frames,
         registers=latest_registers,
-        watched_values=latest_watched,
+        variable_evidence=variable_evidence,
     )
 
 

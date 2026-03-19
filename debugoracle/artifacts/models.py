@@ -3,7 +3,18 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-CURRENT_BUNDLE_SCHEMA_VERSION = "1"
+CURRENT_BUNDLE_SCHEMA_VERSION = "2"
+
+VARIABLE_BUCKET_LOCALS = "locals"
+VARIABLE_BUCKET_GLOBALS = "globals"
+VARIABLE_BUCKET_WATCHPOINTS = "watchpoints"
+VARIABLE_BUCKET_UNKNOWN = "unknown"
+VARIABLE_BUCKETS = (
+    VARIABLE_BUCKET_LOCALS,
+    VARIABLE_BUCKET_GLOBALS,
+    VARIABLE_BUCKET_WATCHPOINTS,
+    VARIABLE_BUCKET_UNKNOWN,
+)
 
 
 @dataclass
@@ -25,6 +36,38 @@ class StackFrame:
 
 
 @dataclass
+class VariableEntry:
+    name: str
+    value: str | None = None
+    bucket: str = VARIABLE_BUCKET_UNKNOWN
+    availability: str = "captured"
+    origin: str = ""
+    frame: str | None = None
+    order: int = 0
+    detail: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class VariableEvidence:
+    locals: list[VariableEntry] = field(default_factory=list)
+    globals: list[VariableEntry] = field(default_factory=list)
+    watchpoints: list[VariableEntry] = field(default_factory=list)
+    unknown: list[VariableEntry] = field(default_factory=list)
+
+    def bucket(self, name: str) -> list[VariableEntry]:
+        return getattr(self, name, [])
+
+    def all_entries(self) -> list[VariableEntry]:
+        entries: list[VariableEntry] = []
+        for bucket_name in VARIABLE_BUCKETS:
+            entries.extend(self.bucket(bucket_name))
+        return entries
+
+    def count(self) -> int:
+        return len(self.all_entries())
+
+
+@dataclass
 class InvestigationArtifact:
     snapshot_id: str
     captured_at: str
@@ -35,13 +78,21 @@ class InvestigationArtifact:
     schema_version: str = CURRENT_BUNDLE_SCHEMA_VERSION
     frames: list[StackFrame] = field(default_factory=list)
     registers: dict[str, str] = field(default_factory=dict)
-    watched_values: dict[str, str] = field(default_factory=dict)
+    variable_evidence: VariableEvidence = field(default_factory=VariableEvidence)
     recent_rtt: list[str] = field(default_factory=list)
     parse_warnings: list[str] = field(default_factory=list)
     live_state: dict[str, Any] = field(default_factory=dict)
     source_context: dict[str, Any] = field(default_factory=dict)
     provenance: dict[str, Any] = field(default_factory=dict)
     session_events: list[SessionEvent] = field(default_factory=list)
+
+    @property
+    def watched_values(self) -> dict[str, str]:
+        values: dict[str, str] = {}
+        for entry in self.variable_evidence.all_entries():
+            if entry.value is not None:
+                values[entry.name] = entry.value
+        return values
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -80,6 +131,7 @@ class InvestigationArtifact:
                     payload=_as_str_dict(payload),
                 )
             )
+        variable_evidence = _parse_variable_evidence(raw)
         return cls(
             snapshot_id=_as_optional_str(raw.get("snapshot_id"), "unknown"),
             captured_at=_as_optional_str(raw.get("captured_at"), ""),
@@ -91,7 +143,7 @@ class InvestigationArtifact:
             or CURRENT_BUNDLE_SCHEMA_VERSION,
             frames=frames,
             registers=_as_str_dict(raw.get("registers")),
-            watched_values=_as_str_dict(raw.get("watched_values")),
+            variable_evidence=variable_evidence,
             recent_rtt=[_as_optional_str(line, "") for line in _as_list(raw.get("recent_rtt"), []) if line is not None],
             parse_warnings=[_as_optional_str(item, "") for item in _as_list(raw.get("parse_warnings"), []) if item is not None],
             live_state=_as_any_dict(raw.get("live_state")),
@@ -108,6 +160,9 @@ class InvestigationRequest:
     snapshot_ref: str | None = None
     format: str = "markdown"
     detail_level: str = "compact"
+    var_scope: str = "all"
+    var_names: list[str] = field(default_factory=list)
+    var_detail: str = "compact"
 
 
 @dataclass
@@ -131,6 +186,13 @@ __all__ = [
     "PromptPackage",
     "SessionEvent",
     "StackFrame",
+    "VariableEntry",
+    "VariableEvidence",
+    "VARIABLE_BUCKET_GLOBALS",
+    "VARIABLE_BUCKET_LOCALS",
+    "VARIABLE_BUCKET_UNKNOWN",
+    "VARIABLE_BUCKET_WATCHPOINTS",
+    "VARIABLE_BUCKETS",
 ]
 
 
@@ -164,6 +226,60 @@ def _as_any_dict(value: object) -> dict[str, object]:
             continue
         parsed[key_text] = item
     return parsed
+
+
+def _parse_variable_evidence(raw: dict[str, Any]) -> VariableEvidence:
+    payload = raw.get("variable_evidence")
+    if isinstance(payload, dict):
+        return VariableEvidence(
+            locals=_parse_variable_bucket(payload.get(VARIABLE_BUCKET_LOCALS), VARIABLE_BUCKET_LOCALS),
+            globals=_parse_variable_bucket(payload.get(VARIABLE_BUCKET_GLOBALS), VARIABLE_BUCKET_GLOBALS),
+            watchpoints=_parse_variable_bucket(payload.get(VARIABLE_BUCKET_WATCHPOINTS), VARIABLE_BUCKET_WATCHPOINTS),
+            unknown=_parse_variable_bucket(payload.get(VARIABLE_BUCKET_UNKNOWN), VARIABLE_BUCKET_UNKNOWN),
+        )
+
+    legacy = _as_str_dict(raw.get("watched_values"))
+    if not legacy:
+        return VariableEvidence()
+    return VariableEvidence(
+        unknown=[
+            VariableEntry(
+                name=name,
+                value=value,
+                bucket=VARIABLE_BUCKET_UNKNOWN,
+                availability="captured",
+                origin="legacy-watched-values",
+                order=index,
+            )
+            for index, (name, value) in enumerate(legacy.items())
+        ]
+    )
+
+
+def _parse_variable_bucket(value: object, bucket: str) -> list[VariableEntry]:
+    entries: list[VariableEntry] = []
+    for index, item in enumerate(_as_list(value, [])):
+        if not isinstance(item, dict):
+            continue
+        detail = item.get("detail")
+        if not isinstance(detail, dict):
+            detail = {}
+        name = _as_optional_str(item.get("name"))
+        if name is None:
+            continue
+        entries.append(
+            VariableEntry(
+                name=name,
+                value=_as_optional_str(item.get("value")),
+                bucket=_as_optional_str(item.get("bucket"), bucket) or bucket,
+                availability=_as_optional_str(item.get("availability"), "captured") or "captured",
+                origin=_as_optional_str(item.get("origin"), "") or "",
+                frame=_as_optional_str(item.get("frame")),
+                order=_to_int(item.get("order")) if _to_int(item.get("order")) is not None else index,
+                detail=_as_any_dict(detail),
+            )
+        )
+    return entries
 
 
 def _as_optional_str(value: object, default: str | None = None) -> str | None:

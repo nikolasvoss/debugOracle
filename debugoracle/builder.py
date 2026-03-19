@@ -94,7 +94,7 @@ def build_bundle_from_text(
         latest_stop=transcript.latest_stop,
         latest_stack=transcript.latest_stack,
         latest_registers=transcript.latest_registers,
-        latest_watched=transcript.latest_watched,
+        variable_evidence=transcript.variable_evidence,
     )
     artifact = build_artifact_from_sources(
         captured_at=captured_at,

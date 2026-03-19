@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from debugoracle.builder import GDB_HALT_SNAPSHOT_SOURCE, GDB_TRANSCRIPT_SOURCE
+from debugoracle.artifacts.models import VariableEntry, VariableEvidence
 from debugoracle.rtt import RTT_STREAM_SOURCE
 from debugoracle.sources.base import SourceDescriptor
 from debugoracle.sources.debuggers.gdb.halt_snapshot import (
@@ -65,14 +66,24 @@ class SourceContractTests(unittest.TestCase):
             latest_stop={"reason": "breakpoint-hit", "frame": {"addr": "0x08000100", "func": "main"}},
             latest_stack=[],
             latest_registers={"13": "0x20002000", "14": "0x08000081", "15": "0x08000100"},
-            latest_watched={"system_state": "READY"},
+            variable_evidence=VariableEvidence(
+                locals=[
+                    VariableEntry(
+                        name="system_state",
+                        value="READY",
+                        bucket="locals",
+                        origin="fixture",
+                    )
+                ]
+            ),
         )
 
         self.assertEqual(snapshot.stop_reason, "breakpoint-hit")
         self.assertEqual(snapshot.pc, "0x08000100")
         self.assertEqual(snapshot.lr, "0x08000081")
         self.assertEqual(snapshot.sp, "0x20002000")
-        self.assertEqual(snapshot.watched_values["system_state"], "READY")
+        self.assertEqual(snapshot.variable_evidence.locals[0].name, "system_state")
+        self.assertEqual(snapshot.variable_evidence.locals[0].value, "READY")
 
     def test_canonical_gdb_register_source_module_exports_snapshot_descriptor(self) -> None:
         self.assertIsInstance(CANONICAL_GDB_REGISTERS_SOURCE, SourceDescriptor)

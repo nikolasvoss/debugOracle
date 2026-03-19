@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from debugoracle.artifacts.models import CURRENT_BUNDLE_SCHEMA_VERSION, EvidenceBundle
+from debugoracle.artifacts.models import CURRENT_BUNDLE_SCHEMA_VERSION, EvidenceBundle, VariableEntry
 from debugoracle.renderers.report import render_report
 from debugoracle.builder import SnapshotLoadError, build_bundle_from_text, load_bundle, save_bundle
 
@@ -62,8 +62,39 @@ class ArtifactSchemaTests(unittest.TestCase):
             save_bundle(bundle, str(path))
             payload = json.loads(path.read_text(encoding="utf-8"))
 
-        self.assertEqual(payload["schema_version"], "1")
+        self.assertEqual(payload["schema_version"], "2")
         self.assertEqual(payload["live_state"]["backend"], "demo")
+
+    def test_save_and_load_preserve_structured_variable_evidence(self) -> None:
+        bundle = build_bundle_from_text("", "")
+        bundle.variable_evidence.locals.append(
+            VariableEntry(
+                name="system_state",
+                value="READY",
+                bucket="locals",
+                origin="fixture",
+                order=0,
+            )
+        )
+        bundle.variable_evidence.unknown.append(
+            VariableEntry(
+                name="dup",
+                value="shadow",
+                bucket="unknown",
+                origin="fixture",
+                order=1,
+            )
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "snapshot.json"
+            save_bundle(bundle, str(path))
+            loaded = load_bundle(str(path))
+
+        self.assertEqual(loaded.schema_version, "2")
+        self.assertEqual(loaded.variable_evidence.locals[0].name, "system_state")
+        self.assertEqual(loaded.variable_evidence.locals[0].value, "READY")
+        self.assertEqual(loaded.variable_evidence.unknown[0].name, "dup")
 
     def test_load_bundle_legacy_snapshot_defaults_schema_version_and_renders(self) -> None:
         bundle = build_bundle_from_text("", "")
@@ -76,7 +107,7 @@ class ArtifactSchemaTests(unittest.TestCase):
             loaded = load_bundle(str(path))
             report = render_report(loaded)
 
-        self.assertEqual(loaded.schema_version, "1")
+        self.assertEqual(loaded.schema_version, "2")
         self.assertEqual(loaded.live_state, {})
         self.assertIn("DebugOracle Evidence Report", report)
 

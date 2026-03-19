@@ -4,7 +4,15 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from ....artifacts.models import SessionEvent, StackFrame
+from ....artifacts.models import (
+    SessionEvent,
+    StackFrame,
+    VariableEntry,
+    VariableEvidence,
+    VARIABLE_BUCKET_LOCALS,
+    VARIABLE_BUCKET_UNKNOWN,
+    VARIABLE_BUCKET_WATCHPOINTS,
+)
 from ....mi import MIParseError, parse_mi_record
 from ...base import SourceDescriptor, validate_source_descriptor
 
@@ -27,7 +35,7 @@ class GdbTranscriptParseResult:
     latest_stop: dict[str, Any] | None
     latest_stack: list[StackFrame]
     latest_registers: dict[str, str]
-    latest_watched: dict[str, str]
+    variable_evidence: VariableEvidence
     session_events: list[SessionEvent]
     parse_warnings: list[str]
     mi_record_count: int
@@ -43,7 +51,8 @@ def parse_gdb_transcript(gdb_text: str, *, now_text: Callable[[], str]) -> GdbTr
     latest_stop: dict[str, Any] | None = None
     latest_stack: list[StackFrame] = []
     latest_registers: dict[str, str] = {}
-    latest_watched: dict[str, str] = {}
+    variable_evidence = VariableEvidence()
+    variable_order = 0
     session_events: list[SessionEvent] = []
     parse_warnings: list[str] = []
     mi_record_count = 0
@@ -178,15 +187,34 @@ def parse_gdb_transcript(gdb_text: str, *, now_text: Callable[[], str]) -> GdbTr
             if "register-values" in record.data:
                 latest_registers = extract_registers(record.data["register-values"])
             if "locals" in record.data:
-                latest_watched.update(extract_named_values(record.data["locals"]))
+                entries = extract_variable_entries(
+                    record.data["locals"],
+                    bucket=VARIABLE_BUCKET_LOCALS,
+                    origin="gdb-mi-locals",
+                    start_order=variable_order,
+                )
+                variable_evidence.locals.extend(entries)
+                variable_order += len(entries)
             if "variables" in record.data:
-                latest_watched.update(extract_named_values(record.data["variables"]))
+                entries = extract_variable_entries(
+                    record.data["variables"],
+                    bucket=VARIABLE_BUCKET_UNKNOWN,
+                    origin="gdb-mi-variables",
+                    start_order=variable_order,
+                )
+                variable_evidence.unknown.extend(entries)
+                variable_order += len(entries)
+
+    if latest_stop:
+        watchpoint_entries = extract_watchpoint_entries(latest_stop, start_order=variable_order)
+        if watchpoint_entries:
+            variable_evidence.watchpoints = watchpoint_entries
 
     return GdbTranscriptParseResult(
         latest_stop=latest_stop,
         latest_stack=latest_stack,
         latest_registers=latest_registers,
-        latest_watched=latest_watched,
+        variable_evidence=variable_evidence,
         session_events=session_events,
         parse_warnings=parse_warnings,
         mi_record_count=mi_record_count,
@@ -241,18 +269,68 @@ def extract_registers(raw_values: object) -> dict[str, str]:
     return registers
 
 
-def extract_named_values(raw_values: object) -> dict[str, str]:
-    values: dict[str, str] = {}
+def extract_variable_entries(
+    raw_values: object,
+    *,
+    bucket: str,
+    origin: str,
+    start_order: int,
+) -> list[VariableEntry]:
+    values: list[VariableEntry] = []
     if not isinstance(raw_values, list):
         return values
-    for item in raw_values:
+    for offset, item in enumerate(raw_values):
         if not isinstance(item, dict):
             continue
         name = as_text(item.get("name"))
         value = as_text(item.get("value"))
         if name is not None:
-            values[name] = value or "<unavailable>"
+            values.append(
+                VariableEntry(
+                    name=name,
+                    value=value or "<unavailable>",
+                    bucket=bucket,
+                    availability="captured" if value is not None else "value-unavailable",
+                    origin=origin,
+                    frame=as_text(item.get("arg")) if bucket == VARIABLE_BUCKET_LOCALS else None,
+                    order=start_order + offset,
+                )
+            )
     return values
+
+
+def extract_watchpoint_entries(latest_stop: dict[str, Any], *, start_order: int) -> list[VariableEntry]:
+    reason = as_text(latest_stop.get("reason")) or ""
+    if "watchpoint" not in reason:
+        return []
+    watchpoint = latest_stop.get("wpt")
+    if not isinstance(watchpoint, dict):
+        return []
+    name = as_text(watchpoint.get("exp")) or as_text(watchpoint.get("number")) or "watchpoint"
+    value_payload = latest_stop.get("value")
+    value = None
+    availability = "value-unavailable"
+    detail: dict[str, Any] = {}
+    if isinstance(value_payload, dict):
+        old = as_text(value_payload.get("old"))
+        new = as_text(value_payload.get("new"))
+        if old is not None:
+            detail["old"] = old
+        if new is not None:
+            detail["new"] = new
+            value = new
+            availability = "captured"
+    return [
+        VariableEntry(
+            name=name,
+            value=value,
+            bucket=VARIABLE_BUCKET_WATCHPOINTS,
+            availability=availability,
+            origin="gdb-mi-watchpoint-stop",
+            order=start_order,
+            detail=detail,
+        )
+    ]
 
 
 def extract_pc(

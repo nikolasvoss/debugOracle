@@ -4,7 +4,7 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
-from ..artifacts.models import EvidenceBundle
+from ..artifacts.models import EvidenceBundle, VariableEvidence
 
 
 def build_artifact_from_sources(
@@ -48,7 +48,7 @@ def build_artifact_from_sources(
         latest_stop=transcript.latest_stop,
         latest_stack=halt_snapshot.frames,
         latest_registers=halt_snapshot.registers,
-        latest_watched=halt_snapshot.watched_values,
+        variable_evidence=halt_snapshot.variable_evidence,
         parse_error_count=transcript.mi_parse_error_count,
         warning_count=len(transcript.parse_warnings),
     )
@@ -75,7 +75,7 @@ def build_artifact_from_sources(
         sp=halt_snapshot.sp,
         frames=halt_snapshot.frames,
         registers=halt_snapshot.registers,
-        watched_values=halt_snapshot.watched_values,
+        variable_evidence=halt_snapshot.variable_evidence,
         recent_rtt=recent_rtt,
         parse_warnings=transcript.parse_warnings,
         source_context={},
@@ -127,7 +127,7 @@ def _compute_evidence_quality_score(
     latest_stop: dict[str, Any] | None,
     latest_stack: list[object],
     latest_registers: dict[str, str],
-    latest_watched: dict[str, str],
+    variable_evidence: VariableEvidence,
     parse_error_count: int,
     warning_count: int,
 ) -> int:
@@ -138,7 +138,7 @@ def _compute_evidence_quality_score(
         score -= 20
     if not latest_registers:
         score -= 20
-    if not latest_watched:
+    if variable_evidence.count() == 0:
         score -= 15
     score -= min(25, parse_error_count * 8)
     score -= min(5, warning_count // 4)
