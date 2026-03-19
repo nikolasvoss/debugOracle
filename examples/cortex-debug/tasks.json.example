@@ -21,10 +21,11 @@
     },
     {
       "label": "DebugOracle: Start RTT run",
+      "detail": "Required per-project edits: keep --port aligned with the RTT server port in launch.jsonc, and increase --connect-timeout further if your debugger/server startup is slow.",
       "type": "shell",
-      "command": "dbgoracle run --detach --workspace-root \"${workspaceFolder}\" --port 60001 --output \"${workspaceFolder}/.dbgoracle/session.rtt\" --state-out \"${workspaceFolder}/.dbgoracle/session.rtt.state.json\"",
+      "command": "dbgoracle run --detach --workspace-root \"${workspaceFolder}\" --port 60001 --connect-timeout 30 --output \"${workspaceFolder}/.dbgoracle/session.rtt\" --state-out \"${workspaceFolder}/.dbgoracle/session.rtt.state.json\"",
       "windows": {
-        "command": "dbgoracle run --detach --workspace-root \"${workspaceFolder}\" --port 60001 --output \"${workspaceFolder}\\\\.dbgoracle\\\\session.rtt\" --state-out \"${workspaceFolder}\\\\.dbgoracle\\\\session.rtt.state.json\""
+        "command": "dbgoracle run --detach --workspace-root \"${workspaceFolder}\" --port 60001 --connect-timeout 30 --output \"${workspaceFolder}\\\\.dbgoracle\\\\session.rtt\" --state-out \"${workspaceFolder}\\\\.dbgoracle\\\\session.rtt.state.json\""
       },
       "problemMatcher": []
     },

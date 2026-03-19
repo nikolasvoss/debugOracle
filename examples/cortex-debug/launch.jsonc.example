@@ -2,21 +2,12 @@
   "version": "0.2.0",
   "configurations": [
     {
-      // This example is specific to an STM32 + OpenOCD workflow.
-      // Adjust the target, executable, and debugger paths for your project.
-      "name": "Debug STM32 (OpenOCD)",
+      "name": "Debug STM32",
       "type": "cortex-debug",
       "request": "launch",
       "showDevDebugOutput": "raw",
       "servertype": "openocd",
-      // Keep this override only if your OpenOCD prints a matching "Listening on port ... for gdb connections" line.
-      // If launch hangs waiting for the server while OpenOCD is already running, remove or adapt this regex.
       "overrideGDBServerStartedRegex": "Info\\s*:\\s*Listening on port\\s+\\d+\\s+for\\s+gdb\\s+connections?",
-      // PATH-based tool lookup is used by default.
-      // Set these only when your environment needs fixed binaries:
-      // "armToolchainPath": "${env:HOME}/.local/toolchains/arm-none-eabi/bin",
-      // "gdbPath": "${env:HOME}/.local/toolchains/arm-none-eabi/bin/arm-none-eabi-gdb",
-
       "configFiles": [
         "interface/stlink.cfg",
         "target/stm32l4x.cfg"
@@ -25,14 +16,12 @@
         "adapter speed 4000"
       ],
       "cwd": "${workspaceFolder}",
-      // Update this to your firmware output path; missing/incorrect paths surface as launch-time errors.
+      // Required per-project edits:
+      // - update `executable` to your actual ELF path
+      // - keep the task label in sync with tasks.json if you rename it
       "executable": "${workspaceFolder}/build/app.elf",
-      // "runToEntryPoint": "main",
-      // Keep task labels in sync with tasks.json.
       "preLaunchTask": "DebugOracle: Prelaunch",
       "postDebugTask": "DebugOracle: Stop RTT run",
-
-      // Write MI log directly into .dbgoracle for DebugOracle.
       "preLaunchCommands": [
         "set pagination off",
         "set logging overwrite on",
@@ -42,11 +31,33 @@
       "postLaunchCommands": [
         "set remotetimeout 20",
         "monitor reset halt",
-        "set pagination off"
+        "set pagination off",
+        // Optional RTT block. Leave this commented if you only need MI logs.
+        // Required per-project edits before enabling:
+        // - `rtt setup <address> <size> "SEGGER RTT"` must cover your actual
+        //   control-block location in RAM
+        // - `rtt server start <port> <channel>` must match the port/channel
+        //   you will also pass to `dbgoracle run` in tasks.json
+        // Preferred way to find the RTT address/window:
+        // 1. Inspect your ELF symbols first, for example with:
+        //    - `arm-none-eabi-nm -a build/app.elf | rg SEGGER`
+        //    - `arm-none-eabi-readelf -s build/app.elf | rg SEGGER`
+        // 2. If you find the RTT control block symbol, use its RAM address as
+        //    the start of a small search window for `monitor rtt setup`.
+        // Fallback when the ELF does not expose a useful symbol:
+        // 1. Start one debug session with the block still commented.
+        // 2. In the Debug Console, try:
+        //    - `monitor rtt setup 0x20000000 0x1000 "SEGGER RTT"`
+        //    - `monitor rtt start`
+        //    - `monitor rtt server start 60001 0`
+        // 3. If OpenOCD reports it cannot find RTT, widen or move the RAM
+        //    search window until it does.
+        // 4. If channel 0 or port 60001 is wrong for your setup, use the value
+        //    OpenOCD/Cortex-Debug reports and mirror it in tasks.json.
+        // "monitor rtt setup 0x20000000 0x1000 \"SEGGER RTT\"",
+        // "monitor rtt start",
+        // "monitor rtt server start 60001 0"
       ]
-
-      // Optional: if your GDB supports Python and you want richer dumps, add:
-      // "source .vscode/dump-registers.gdb" to postLaunchCommands.
     }
   ]
 }

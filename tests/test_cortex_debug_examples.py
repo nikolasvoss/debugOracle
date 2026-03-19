@@ -20,6 +20,7 @@ def test_tasks_use_run_and_stop_contract():
 
     assert "dbgoracle run --detach" in start_cmd
     assert "--workspace-root" in start_cmd
+    assert "--connect-timeout 30" in start_cmd
     assert "--output" in start_cmd
     assert "--state-out" in start_cmd
     assert "dbgoracle stop --workspace-root" in stop_cmd
@@ -35,6 +36,8 @@ def test_launch_example_wires_prelaunch_and_postdebug_tasks():
     launch = LAUNCH_EXAMPLE.read_text(encoding="utf-8")
     assert '"preLaunchTask": "DebugOracle: Prelaunch"' in launch
     assert '"postDebugTask": "DebugOracle: Stop RTT run"' in launch
+    assert '// "monitor rtt setup' in launch
+    assert '// "monitor rtt server start 60001 0"' in launch
 
 
 def test_readme_documents_run_stop_workflow():
