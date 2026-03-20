@@ -4,7 +4,7 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
-from ..artifacts.models import EvidenceBundle, VariableEvidence
+from ..artifacts.models import ArtifactSources, EvidenceBundle, GdbSource, RttSource, VariableEvidence
 
 
 def build_artifact_from_sources(
@@ -33,7 +33,7 @@ def build_artifact_from_sources(
             f"{transcript.noise_line_counts.get('prompt-marker', 0)} prompt markers, "
             f"{transcript.noise_line_counts.get('console-output', 0)} console-output lines, "
             f"{transcript.noise_line_counts.get('non_mi_line', 0)} other non-MI lines. "
-            "Raw sidecar export provides the full transcript."
+            "The snapshot embeds the full transcript for later inspection."
         )
 
     critical_events: list[str] = []
@@ -55,9 +55,11 @@ def build_artifact_from_sources(
 
     raw_export: dict[str, Any] = {}
     if export_dir is not None:
-        should_export = export_raw or bool(transcript.non_mi_line_count or transcript.mi_parse_error_count or not gdb_text)
-        raw_export["raw_exported"] = should_export
+        should_export = export_raw or bool(
+            transcript.non_mi_line_count or transcript.mi_parse_error_count or not gdb_text
+        )
         if should_export:
+            raw_export["raw_exported"] = True
             raw_export.update(
                 _export_raw_inputs(
                     gdb_text=gdb_text,
@@ -65,6 +67,25 @@ def build_artifact_from_sources(
                     export_dir=Path(export_dir),
                 )
             )
+
+    gdb_events = list(transcript.session_events)
+    rtt_lines = [line.rstrip() for line in rtt_text.splitlines()]
+    has_gdb_source = bool(gdb_text) or gdb_source not in {"<missing-gdb-mi>", "<stdin>"}
+    has_rtt_source = bool(rtt_text) or rtt_source is not None
+    sources = ArtifactSources(
+        gdb=GdbSource(
+            raw_text=gdb_text if has_gdb_source else None,
+            events=gdb_events,
+            event_count=len(gdb_events),
+            embedded=has_gdb_source,
+        ),
+        rtt=RttSource(
+            raw_text=rtt_text if has_rtt_source else None,
+            lines=rtt_lines,
+            line_count=len(rtt_lines),
+            embedded=has_rtt_source,
+        ),
+    )
 
     return EvidenceBundle(
         snapshot_id=_make_snapshot_id(gdb_text, rtt_text, captured_at),
@@ -76,15 +97,16 @@ def build_artifact_from_sources(
         frames=halt_snapshot.frames,
         registers=halt_snapshot.registers,
         variable_evidence=halt_snapshot.variable_evidence,
+        sources=sources,
         recent_rtt=recent_rtt,
         parse_warnings=transcript.parse_warnings,
         source_context={},
         provenance={
             "gdb_mi_source": gdb_source,
             "rtt_source": rtt_source,
-            "gdb_event_count": len(transcript.session_events),
+            "gdb_event_count": len(gdb_events),
             "rtt_line_count": len(recent_rtt),
-            "rtt_total_line_count": len([line for line in rtt_text.splitlines()]),
+            "rtt_total_line_count": len(rtt_lines),
             "rtt_window": rtt_window,
             "parse_warning_count": len(transcript.parse_warnings),
             "mi_record_count": transcript.mi_record_count,
@@ -102,7 +124,7 @@ def build_artifact_from_sources(
             "raw_line_warning_count": transcript.non_mi_line_count,
             **raw_export,
         },
-        session_events=transcript.session_events,
+        session_events=gdb_events,
     )
 
 

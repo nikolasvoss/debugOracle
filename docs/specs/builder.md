@@ -3,7 +3,7 @@
 - Module: `builder`
 - Code Path: `debugoracle/builder.py`
 - Public Entrypoints: `build_bundle_from_files`, `build_bundle_from_stream`, `build_bundle_from_text`, `load_bundle`, `save_bundle`, `SnapshotLoadError`
-- Last Updated: `2026-03-19`
+- Last Updated: `2026-03-20`
 
 # SPEC: DebugOracle Builder Compatibility Boundary
 
@@ -68,6 +68,16 @@ For Variable Evidence v1:
 - The compatibility-facing `build_bundle_from_*` APIs remain unchanged, but their returned artifact
   schema now centers variable evidence under bucketed entries (`locals`, `globals`,
   `watchpoints`, `unknown`).
+
+## Snapshot Embedding Contract
+
+- Builder-facing artifact construction must preserve full selected source payloads inside the saved
+  snapshot.
+- GDB data is stored both as raw transcript text and as the ordered parsed event list derived from
+  that transcript.
+- RTT data is stored both as raw text and as a convenient line-oriented representation.
+- Top-level summary fields remain available for cheap access, but they are derived from the
+  embedded source payloads rather than replacing them.
 
 ## Migration Note
 

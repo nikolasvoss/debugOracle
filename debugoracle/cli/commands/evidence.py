@@ -9,9 +9,7 @@ from ...artifacts.models import InvestigationArtifact, InvestigationRequest
 from ...artifacts.repository import ArtifactLoadError, load_artifact, save_artifact
 from ...builder import DEFAULT_RTT_WINDOW, FULL_RTT_WINDOW, build_bundle_from_files
 from ...renderers.prompt import render_prompt
-from ...renderers.report import render_report
-from ...renderers.snapshot import render_snapshot
-from ...renderers._evidence_common import variable_options_from_args
+from ...renderers.report import ReportRenderOptions, render_report
 from ...session import (
     DEFAULT_GDB_MI_FILENAME,
     DEFAULT_RTT_FILENAME,
@@ -19,16 +17,11 @@ from ...session import (
     DEFAULT_SNAPSHOT_FILENAME,
     SessionConfig,
 )
-from ...sources.streams.rtt import (
-    STATE_STATUS_CONNECTED,
-    default_state_path,
-    load_capture_state,
-)
 
 
-def cmd_observe(args: argparse.Namespace) -> int:
+def cmd_fetch(args: argparse.Namespace) -> int:
     workspace_root = Path(args.workspace_root).resolve()
-    discovery = resolve_observe_inputs(args, workspace_root)
+    discovery = resolve_fetch_inputs(args, workspace_root)
     gdb_mi = discovery["gdb_mi"]
     rtt = discovery["rtt"]
     state_out = resolve_state_out_path(
@@ -42,34 +35,18 @@ def cmd_observe(args: argparse.Namespace) -> int:
         gdb_mi=gdb_mi,
         rtt=rtt,
         allow_snapshot_fallback=False,
-        command_name="observe",
+        command_name="fetch",
         explicit_gdb=discovery["gdb_mi_explicit"],
         explicit_rtt=discovery["rtt_explicit"],
         export_dir=Path(state_out).parent,
     )
     save_artifact(bundle, state_out)
-    warn_if_connected_no_bytes_rtt_capture(rtt=rtt)
-    print(f"Saved snapshot {bundle.snapshot_id} to {state_out}")
+    emit_fetch_summary(bundle, state_out)
     return 0
 
 
-def cmd_snapshot(args: argparse.Namespace) -> int:
-    bundle = resolve_bundle(
-        args,
-        command_name="snapshot",
-        strict_snapshot=True,
-    )
-    output = render_snapshot(bundle, fmt=args.format, variable_options=variable_options_from_args(args))
-    return emit(output, args.output)
-
-
 def cmd_prompt(args: argparse.Namespace) -> int:
-    bundle = resolve_bundle(
-        args,
-        full=args.full,
-        command_name="prompt",
-        strict_snapshot=True,
-    )
+    bundle = resolve_required_snapshot(args, command_name="prompt")
     intent = read_intent(args.intent, args.intent_file)
     request = InvestigationRequest(
         goal_text=args.goal,
@@ -86,28 +63,44 @@ def cmd_prompt(args: argparse.Namespace) -> int:
 
 
 def cmd_report(args: argparse.Namespace) -> int:
-    bundle = resolve_bundle(
-        args,
-        command_name="report",
-        strict_snapshot=True,
+    bundle = resolve_required_snapshot(args, command_name="report")
+    options = ReportRenderOptions(
+        variable_names=list(args.vars or []) if args.vars is not None else None,
+        include_gdb=bool(getattr(args, "gdb", False)),
+        include_rtt=bool(getattr(args, "rtt", False)),
+        verbose=bool(getattr(args, "verbose", False)),
+        tail=getattr(args, "tail", None),
     )
-    output = render_report(bundle, fmt=args.format, variable_options=variable_options_from_args(args))
+    try:
+        output = render_report(bundle, options=options)
+    except RuntimeError as error:
+        raise SystemExit(str(error)) from error
     return emit(output, args.output)
 
 
-def warn_if_connected_no_bytes_rtt_capture(rtt: str | None) -> None:
-    if not rtt or rtt in {"-", "/dev/stdin", "stdin"}:
-        return
-    state_path = default_state_path(Path(rtt).expanduser())
-    try:
-        state = load_capture_state(state_path)
-    except (OSError, ValueError, TypeError, KeyError):
-        return
-    if state.status == STATE_STATUS_CONNECTED and state.bytes_captured == 0:
-        print(
-            "Warning: RTT capture is connected but no bytes were recorded yet. "
-            "If RTT should be active, check your capture configuration."
-        )
+def emit_fetch_summary(bundle: InvestigationArtifact, output_path: str) -> None:
+    gdb_source = bundle.sources.gdb
+    rtt_source = bundle.sources.rtt
+    embedded_sources: list[str] = []
+    if gdb_source.raw_text:
+        embedded_sources.append("gdb")
+    if rtt_source.raw_text:
+        embedded_sources.append("rtt")
+
+    print(f"Snapshot ID: {bundle.snapshot_id}")
+    print(f"Output Path: {output_path}")
+    print("Embedded Sources: " + (", ".join(embedded_sources) if embedded_sources else "none"))
+    print("Source Sizes/Counts:")
+    print(
+        "- gdb: "
+        f"{len((gdb_source.raw_text or '').encode('utf-8'))} bytes, "
+        f"{gdb_source.event_count} events"
+    )
+    print(
+        "- rtt: "
+        f"{len((rtt_source.raw_text or '').encode('utf-8'))} bytes, "
+        f"{rtt_source.line_count} lines"
+    )
 
 
 def resolve_bundle(
@@ -117,7 +110,7 @@ def resolve_bundle(
     rtt: str | None = None,
     *,
     allow_snapshot_fallback: bool = True,
-    command_name: str = "snapshot",
+    command_name: str = "fetch",
     strict_snapshot: bool = False,
     explicit_gdb: bool = False,
     explicit_rtt: bool = False,
@@ -214,17 +207,41 @@ def resolve_bundle(
     if rtt:
         require_readable_file(rtt, "RTT")
     try:
-        bundle = build_bundle_from_files(
+        return build_bundle_from_files(
             gdb_mi,
             rtt,
             rtt_window=rtt_window,
-            export_raw=args.export_raw,
+            export_raw=getattr(args, "export_raw", False),
             export_dir=export_dir or config.snapshot_file.parent,
         )
-        emit_raw_export_notice(command_name, bundle.provenance)
-        return bundle
     except OSError as error:
         raise SystemExit(f"Unable to read one of the required input files: {error}") from error
+
+
+def resolve_required_snapshot(
+    args: argparse.Namespace,
+    *,
+    command_name: str,
+) -> InvestigationArtifact:
+    workspace_root = Path(args.workspace_root).resolve()
+    config = resolve_session_config(args, workspace_root)
+    requested_snapshot_file = getattr(args, "snapshot_file", None)
+
+    if requested_snapshot_file:
+        resolved_snapshot = resolve_workspace_path(requested_snapshot_file, workspace_root)
+        return load_snapshot(command_name=command_name, path=resolved_snapshot, strict=True)
+
+    if config.snapshot_file.exists():
+        emit_discovery_summary(
+            command_name,
+            {"snapshot-file": str(config.snapshot_file)},
+            {"snapshot-file": True},
+        )
+        return load_snapshot(command_name=command_name, path=str(config.snapshot_file), strict=True)
+
+    raise SystemExit(
+        f"{command_name} requires a snapshot. run `fetch` first or pass --snapshot-file."
+    )
 
 
 def load_snapshot(
@@ -245,16 +262,20 @@ def resolve_session_config(
     args: argparse.Namespace,
     workspace_root: Path,
 ) -> SessionConfig:
+    snapshot_file = getattr(args, "snapshot_file", None)
+    gdb_mi_file = getattr(args, "gdb_mi", None)
+    rtt_file = getattr(args, "rtt", None)
+    rtt_state_file = getattr(args, "rtt_state", None) if hasattr(args, "rtt_state") else None
     return SessionConfig.from_workspace(
         workspace_root=workspace_root,
-        snapshot_file=getattr(args, "snapshot_file", None),
-        gdb_mi_file=getattr(args, "gdb_mi", None),
-        rtt_file=getattr(args, "rtt", None),
-        rtt_state_file=getattr(args, "rtt_state", None) if hasattr(args, "rtt_state") else None,
+        snapshot_file=snapshot_file if isinstance(snapshot_file, str) else None,
+        gdb_mi_file=gdb_mi_file if isinstance(gdb_mi_file, str) else None,
+        rtt_file=rtt_file if isinstance(rtt_file, str) else None,
+        rtt_state_file=rtt_state_file if isinstance(rtt_state_file, str) else None,
     )
 
 
-def resolve_observe_inputs(
+def resolve_fetch_inputs(
     args: argparse.Namespace,
     workspace_root: Path,
 ) -> dict[str, str | None | bool]:
@@ -294,10 +315,6 @@ def missing_inputs_error(
     workspace_root: Path,
     allow_snapshot_fallback: bool,
 ) -> str:
-    snapshot_candidates = [
-        workspace_root / DEFAULT_SNAPSHOT_FILENAME,
-        workspace_root / DEFAULT_SESSION_DIR / DEFAULT_SNAPSHOT_FILENAME,
-    ]
     gdb_candidates = [
         workspace_root / DEFAULT_GDB_MI_FILENAME,
         workspace_root / DEFAULT_SESSION_DIR / DEFAULT_GDB_MI_FILENAME,
@@ -308,10 +325,21 @@ def missing_inputs_error(
     ]
     lines = [
         f"{command_name} could not auto-resolve an input source.",
-        "Either provide --snapshot-file, --gdb-mi, or --rtt, or run from a workspace with:",
-        "  - Snapshot:",
-        f"    - {snapshot_candidates[0]}",
-        f"    - {snapshot_candidates[1]}",
+    ]
+    if allow_snapshot_fallback:
+        snapshot_candidates = [
+            workspace_root / DEFAULT_SNAPSHOT_FILENAME,
+            workspace_root / DEFAULT_SESSION_DIR / DEFAULT_SNAPSHOT_FILENAME,
+        ]
+        lines.extend([
+            "Either provide --snapshot-file, --gdb-mi, or --rtt, or run from a workspace with:",
+            "  - Snapshot:",
+            f"    - {snapshot_candidates[0]}",
+            f"    - {snapshot_candidates[1]}",
+        ])
+    else:
+        lines.append("Either provide --gdb-mi, --rtt, or both, or run from a workspace with:")
+    lines.extend([
         "  - GDB/MI:",
         f"    - {gdb_candidates[0]}",
         f"    - {gdb_candidates[1]}",
@@ -320,7 +348,7 @@ def missing_inputs_error(
         f"    - {rtt_candidates[1]}",
         "  - At least one of GDB/MI or RTT must be available.",
         f"Workspace root: {workspace_root}",
-    ]
+    ])
     if allow_snapshot_fallback:
         lines.append(
             "Tip: run from a folder with latest_snapshot.json (or .dbgoracle/latest_snapshot.json) "
@@ -352,21 +380,6 @@ def emit_discovery_summary(
     )
     for label, value in discovered_items:
         print(f"- {label}: {value}", file=sys.stderr)
-
-
-def emit_raw_export_notice(command_name: str, provenance: dict[str, object]) -> None:
-    if not provenance.get("raw_exported"):
-        return
-    print(f"Raw input export for {command_name}:", file=sys.stderr)
-    export_root = provenance.get("raw_export_root")
-    if export_root:
-        print(f"- export root: {export_root}", file=sys.stderr)
-    gdb_path = provenance.get("gdb_mi_raw_path")
-    if gdb_path:
-        print(f"- gdb-mi raw: {gdb_path}", file=sys.stderr)
-    rtt_path = provenance.get("rtt_raw_path")
-    if rtt_path:
-        print(f"- rtt raw: {rtt_path}", file=sys.stderr)
 
 
 def require_readable_file(path: str, label: str) -> None:

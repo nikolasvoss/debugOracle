@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-CURRENT_BUNDLE_SCHEMA_VERSION = "2"
+CURRENT_BUNDLE_SCHEMA_VERSION = "3"
 
 VARIABLE_BUCKET_LOCALS = "locals"
 VARIABLE_BUCKET_GLOBALS = "globals"
@@ -68,6 +68,28 @@ class VariableEvidence:
 
 
 @dataclass
+class GdbSource:
+    raw_text: str | None = None
+    events: list[SessionEvent] = field(default_factory=list)
+    event_count: int = 0
+    embedded: bool = False
+
+
+@dataclass
+class RttSource:
+    raw_text: str | None = None
+    lines: list[str] = field(default_factory=list)
+    line_count: int = 0
+    embedded: bool = False
+
+
+@dataclass
+class ArtifactSources:
+    gdb: GdbSource = field(default_factory=GdbSource)
+    rtt: RttSource = field(default_factory=RttSource)
+
+
+@dataclass
 class InvestigationArtifact:
     snapshot_id: str
     captured_at: str
@@ -79,6 +101,7 @@ class InvestigationArtifact:
     frames: list[StackFrame] = field(default_factory=list)
     registers: dict[str, str] = field(default_factory=dict)
     variable_evidence: VariableEvidence = field(default_factory=VariableEvidence)
+    sources: ArtifactSources = field(default_factory=ArtifactSources)
     recent_rtt: list[str] = field(default_factory=list)
     parse_warnings: list[str] = field(default_factory=list)
     live_state: dict[str, Any] = field(default_factory=dict)
@@ -93,6 +116,24 @@ class InvestigationArtifact:
             if entry.value is not None:
                 values[entry.name] = entry.value
         return values
+
+    @property
+    def has_embedded_gdb_source(self) -> bool:
+        return self.sources.gdb.embedded
+
+    @property
+    def has_embedded_rtt_source(self) -> bool:
+        return self.sources.rtt.embedded
+
+    def require_embedded_gdb_source(self) -> GdbSource:
+        if not self.has_embedded_gdb_source:
+            raise RuntimeError("embedded gdb source data is unavailable in this snapshot")
+        return self.sources.gdb
+
+    def require_embedded_rtt_source(self) -> RttSource:
+        if not self.has_embedded_rtt_source:
+            raise RuntimeError("embedded rtt source data is unavailable in this snapshot")
+        return self.sources.rtt
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -116,22 +157,8 @@ class InvestigationArtifact:
                     line=_to_int(raw_frame.get("line")),
                 )
             )
-        events = []
-        for raw_event in _as_list(raw.get("session_events"), []):
-            if not isinstance(raw_event, dict):
-                continue
-            payload = raw_event.get("payload")
-            if not isinstance(payload, dict):
-                payload = {"raw": payload}
-            events.append(
-                SessionEvent(
-                    source=_as_optional_str(raw_event.get("source"), ""),
-                    timestamp=_as_optional_str(raw_event.get("timestamp"), ""),
-                    kind=_as_optional_str(raw_event.get("kind"), ""),
-                    payload=_as_str_dict(payload),
-                )
-            )
         variable_evidence = _parse_variable_evidence(raw)
+        sources = _parse_sources(raw)
         return cls(
             snapshot_id=_as_optional_str(raw.get("snapshot_id"), "unknown"),
             captured_at=_as_optional_str(raw.get("captured_at"), ""),
@@ -144,12 +171,21 @@ class InvestigationArtifact:
             frames=frames,
             registers=_as_str_dict(raw.get("registers")),
             variable_evidence=variable_evidence,
-            recent_rtt=[_as_optional_str(line, "") for line in _as_list(raw.get("recent_rtt"), []) if line is not None],
-            parse_warnings=[_as_optional_str(item, "") for item in _as_list(raw.get("parse_warnings"), []) if item is not None],
+            sources=sources,
+            recent_rtt=[
+                _as_optional_str(line, "")
+                for line in _as_list(raw.get("recent_rtt"), [])
+                if line is not None
+            ],
+            parse_warnings=[
+                _as_optional_str(item, "")
+                for item in _as_list(raw.get("parse_warnings"), [])
+                if item is not None
+            ],
             live_state=_as_any_dict(raw.get("live_state")),
             source_context=_as_any_dict(raw.get("source_context")),
             provenance=_as_any_dict(raw.get("provenance")),
-            session_events=events,
+            session_events=sources.gdb.events,
         )
 
 
@@ -179,11 +215,14 @@ class PromptPackage:
 EvidenceBundle = InvestigationArtifact
 
 __all__ = [
+    "ArtifactSources",
     "CURRENT_BUNDLE_SCHEMA_VERSION",
     "EvidenceBundle",
+    "GdbSource",
     "InvestigationArtifact",
     "InvestigationRequest",
     "PromptPackage",
+    "RttSource",
     "SessionEvent",
     "StackFrame",
     "VariableEntry",
@@ -256,6 +295,63 @@ def _parse_variable_evidence(raw: dict[str, Any]) -> VariableEvidence:
     )
 
 
+def _parse_sources(raw: dict[str, Any]) -> ArtifactSources:
+    payload = raw.get("sources")
+    if isinstance(payload, dict):
+        gdb_raw = payload.get("gdb") if isinstance(payload.get("gdb"), dict) else {}
+        rtt_raw = payload.get("rtt") if isinstance(payload.get("rtt"), dict) else {}
+        gdb_events = _parse_session_events(gdb_raw.get("events"))
+        rtt_lines = [
+            _as_optional_str(line, "")
+            for line in _as_list(rtt_raw.get("lines"), [])
+            if line is not None
+        ]
+        return ArtifactSources(
+            gdb=GdbSource(
+                raw_text=_as_optional_str(gdb_raw.get("raw_text")),
+                events=gdb_events,
+                event_count=_to_int(gdb_raw.get("event_count")) if _to_int(gdb_raw.get("event_count")) is not None else len(gdb_events),
+                embedded=True,
+            ),
+            rtt=RttSource(
+                raw_text=_as_optional_str(rtt_raw.get("raw_text")),
+                lines=rtt_lines,
+                line_count=_to_int(rtt_raw.get("line_count")) if _to_int(rtt_raw.get("line_count")) is not None else len(rtt_lines),
+                embedded=True,
+            ),
+        )
+
+    legacy_events = _parse_session_events(raw.get("session_events"))
+    legacy_rtt = [
+        _as_optional_str(line, "")
+        for line in _as_list(raw.get("recent_rtt"), [])
+        if line is not None
+    ]
+    return ArtifactSources(
+        gdb=GdbSource(raw_text=None, events=legacy_events, event_count=len(legacy_events), embedded=False),
+        rtt=RttSource(raw_text=None, lines=legacy_rtt, line_count=len(legacy_rtt), embedded=False),
+    )
+
+
+def _parse_session_events(value: object) -> list[SessionEvent]:
+    events = []
+    for raw_event in _as_list(value, []):
+        if not isinstance(raw_event, dict):
+            continue
+        payload = raw_event.get("payload")
+        if not isinstance(payload, dict):
+            payload = {"raw": payload}
+        events.append(
+            SessionEvent(
+                source=_as_optional_str(raw_event.get("source"), ""),
+                timestamp=_as_optional_str(raw_event.get("timestamp"), ""),
+                kind=_as_optional_str(raw_event.get("kind"), ""),
+                payload=_as_str_dict(payload),
+            )
+        )
+    return events
+
+
 def _parse_variable_bucket(value: object, bucket: str) -> list[VariableEntry]:
     entries: list[VariableEntry] = []
     for index, item in enumerate(_as_list(value, [])):
@@ -267,6 +363,7 @@ def _parse_variable_bucket(value: object, bucket: str) -> list[VariableEntry]:
         name = _as_optional_str(item.get("name"))
         if name is None:
             continue
+        order = _to_int(item.get("order"))
         entries.append(
             VariableEntry(
                 name=name,
@@ -275,7 +372,7 @@ def _parse_variable_bucket(value: object, bucket: str) -> list[VariableEntry]:
                 availability=_as_optional_str(item.get("availability"), "captured") or "captured",
                 origin=_as_optional_str(item.get("origin"), "") or "",
                 frame=_as_optional_str(item.get("frame")),
-                order=_to_int(item.get("order")) if _to_int(item.get("order")) is not None else index,
+                order=order if order is not None else index,
                 detail=_as_any_dict(detail),
             )
         )

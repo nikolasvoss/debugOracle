@@ -9,7 +9,7 @@ from ..sources.streams.rtt import (
     DEFAULT_RTT_HOST,
     DEFAULT_RTT_POLL_INTERVAL,
 )
-from .commands.evidence import cmd_observe, cmd_prompt, cmd_report, cmd_snapshot
+from .commands.evidence import cmd_fetch, cmd_prompt, cmd_report
 from .commands.run_stop import (
     DEFAULT_RUN_PORT,
     cmd_run,
@@ -21,6 +21,7 @@ from .commands.status_capture import cmd_capture_rtt, cmd_status
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    validate_report_arguments(parser, args)
     return args.func(args)
 
 
@@ -32,6 +33,7 @@ def build_parser() -> argparse.ArgumentParser:
         description=(
             "Passive embedded debug evidence packager for Cortex-Debug and GDB/MI sessions"
         ),
+        allow_abbrev=False,
     )
     parser.add_argument(
         "--version",
@@ -195,71 +197,44 @@ def build_parser() -> argparse.ArgumentParser:
     )
     stop.set_defaults(func=cmd_stop)
 
-    observe = subparsers.add_parser(
-        "observe",
-        help="Capture and store a reusable snapshot for later report or prompt use",
+    fetch = subparsers.add_parser(
+        "fetch",
+        help="Resolve raw evidence inputs and build the latest reusable snapshot",
         description=(
-            "Build and store a reusable evidence snapshot from a bounded GDB/MI "
-            "transcript plus optional RTT logs."
+            "Resolve explicit or auto-discovered raw evidence inputs, build a "
+            "self-contained snapshot, and overwrite the default latest snapshot "
+            "unless --state-out is provided."
         ),
     )
-    add_input_arguments(observe, include_snapshot_file=False)
-    observe.add_argument(
+    add_input_arguments(fetch, include_snapshot_file=False)
+    fetch.add_argument(
         "--state-out",
         default=None,
         help=(
-            "Path for the reusable snapshot JSON written by observe. When provided, this "
+            "Path for the reusable snapshot JSON written by fetch. When provided, this "
             "path is authoritative. When omitted, "
             "defaults to the latest_snapshot.json file beside the GDB/MI input, "
             "or falls back to <workspace>/latest_snapshot.json or "
             "<workspace>/.dbgoracle/latest_snapshot.json."
         ),
     )
-    observe.add_argument(
+    fetch.add_argument(
         "--rtt-window",
         type=int,
         default=DEFAULT_RTT_WINDOW,
         help="Bounded RTT line window to retain in the snapshot",
     )
-    observe.set_defaults(func=cmd_observe)
-
-    snapshot = subparsers.add_parser(
-        "snapshot",
-        help="Advanced snapshot rendering for automation or low-level inspection",
-        description=(
-            "Render a snapshot from a saved bundle or bounded raw inputs. Most users "
-            "should start with observe, then use report or prompt."
-        ),
-    )
-    add_input_arguments(snapshot, include_snapshot_file=True)
-    snapshot.add_argument(
-        "--format",
-        choices=["json", "text", "markdown"],
-        default="json",
-        help="Output format",
-    )
-    snapshot.add_argument(
-        "--output",
-        help="Optional output file path",
-    )
-    snapshot.add_argument(
-        "--rtt-window",
-        type=int,
-        default=DEFAULT_RTT_WINDOW,
-        help="Bounded RTT line window to retain when building from raw inputs",
-    )
-    add_variable_selector_arguments(snapshot)
-    snapshot.set_defaults(func=cmd_snapshot)
+    fetch.set_defaults(func=cmd_fetch)
 
     prompt = subparsers.add_parser(
         "prompt",
-        help="Build a ChatGPT-ready prompt package from a snapshot or raw inputs",
+        help="Build a ChatGPT-ready prompt package from a saved snapshot",
         description=(
-            "Package a saved snapshot or bounded raw inputs into a prompt you can "
-            "paste into ChatGPT."
+            "Package a saved snapshot into a prompt you can paste into ChatGPT. "
+            "If omitted, --snapshot-file defaults to a discovered latest_snapshot.json."
         ),
     )
-    add_input_arguments(prompt, include_snapshot_file=True)
+    add_snapshot_arguments(prompt)
     prompt.add_argument("--goal", required=True, help="Investigation goal to hand to ChatGPT")
     prompt.add_argument("--intent", help="Optional intended system state text")
     prompt.add_argument("--intent-file", help="Optional file containing intended system state text")
@@ -271,41 +246,66 @@ def build_parser() -> argparse.ArgumentParser:
     )
     prompt.add_argument("--full", action="store_true", help="Expand the evidence appendix")
     prompt.add_argument("--output", help="Optional output file path")
-    prompt.add_argument(
-        "--rtt-window",
-        type=int,
-        default=DEFAULT_RTT_WINDOW,
-        help="Bounded RTT line window to retain when building from raw inputs",
-    )
-    add_variable_selector_arguments(prompt)
+    add_prompt_variable_arguments(prompt)
     prompt.set_defaults(func=cmd_prompt)
 
     report = subparsers.add_parser(
         "report",
-        help="Render a human-readable evidence report from a snapshot or raw inputs",
+        help="Render a human-readable evidence report or compact inspection JSON from a saved snapshot",
         description=(
-            "Render a human-readable evidence report from a saved snapshot or bounded "
-            "raw inputs."
+            "Render a plain-text evidence summary by default, or compact JSON inspect "
+            "sections with --vars, --gdb, --rtt, and --verbose. "
+            "If omitted, --snapshot-file defaults to a discovered latest_snapshot.json."
         ),
     )
-    add_input_arguments(report, include_snapshot_file=True)
-    report.add_argument(
-        "--format",
-        choices=["text", "markdown"],
-        default="markdown",
-        help="Report output format",
-    )
+    add_snapshot_arguments(report)
     report.add_argument("--output", help="Optional output file path")
     report.add_argument(
-        "--rtt-window",
-        type=int,
-        default=DEFAULT_RTT_WINDOW,
-        help="Bounded RTT line window to retain when building from raw inputs",
+        "--vars",
+        nargs="*",
+        help="Emit grouped variable evidence as compact JSON; optionally filter by exact case-insensitive variable names",
     )
-    add_variable_selector_arguments(report)
+    report.add_argument(
+        "--gdb",
+        action="store_true",
+        help="Emit embedded GDB source data as compact JSON",
+    )
+    report.add_argument(
+        "--rtt",
+        action="store_true",
+        help="Emit embedded RTT source data as compact JSON",
+    )
+    report.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Emit a compact JSON object combining summary, variables, streams, and provenance",
+    )
+    report.add_argument(
+        "--tail",
+        type=positive_int,
+        help="Limit embedded stream sections to the last N events or lines",
+    )
     report.set_defaults(func=cmd_report)
 
     return parser
+
+
+def positive_int(value: str) -> int:
+    parsed = int(value, 10)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("tail must be a positive integer")
+    return parsed
+
+
+def validate_report_arguments(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    if getattr(args, "command", None) != "report":
+        return
+    if getattr(args, "tail", None) is not None and not (
+        getattr(args, "gdb", False) or getattr(args, "rtt", False) or getattr(args, "verbose", False)
+    ):
+        parser.error("--tail requires --gdb, --rtt, or --verbose")
+
+
 
 
 def add_session_arguments(parser: argparse.ArgumentParser) -> None:
@@ -338,6 +338,18 @@ def add_session_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def add_snapshot_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--snapshot-file",
+        help="Existing snapshot JSON produced by fetch (relative paths resolve from --workspace-root)",
+    )
+    parser.add_argument(
+        "--workspace-root",
+        default=".",
+        help="Workspace root used to resolve default file paths",
+    )
+
+
 def add_input_arguments(
     parser: argparse.ArgumentParser,
     include_snapshot_file: bool,
@@ -345,7 +357,7 @@ def add_input_arguments(
     if include_snapshot_file:
         parser.add_argument(
             "--snapshot-file",
-            help="Existing snapshot JSON produced by observe (relative paths resolve from --workspace-root)",
+            help="Existing snapshot JSON produced by fetch (relative paths resolve from --workspace-root)",
         )
     parser.add_argument(
         "--gdb-mi",
@@ -356,36 +368,28 @@ def add_input_arguments(
         help="Path to an RTT log captured alongside the MI transcript (relative paths resolve from --workspace-root)",
     )
     parser.add_argument(
-        "--export-raw",
-        action="store_true",
-        help=(
-            "Export raw MI/RTT inputs to sidecar files. Raw export also happens "
-            "automatically when parse warnings are detected."
-        ),
-    )
-    parser.add_argument(
         "--workspace-root",
         default=".",
         help="Workspace root used to resolve default file paths",
     )
 
 
-def add_variable_selector_arguments(parser: argparse.ArgumentParser) -> None:
+def add_prompt_variable_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--var-scope",
         choices=["local", "watchpoint", "unknown", "all"],
         default="all",
-        help="Variable evidence scope to render",
+        help="Variable evidence scope to include in the prompt appendix",
     )
     parser.add_argument(
         "--var-name",
         action="append",
         default=[],
-        help="Optional variable/watchpoint name filter; repeat to request multiple names",
+        help="Optional variable/watchpoint name filter for the prompt appendix; repeat to request multiple names",
     )
     parser.add_argument(
         "--var-detail",
         choices=["compact", "full"],
         default="compact",
-        help="Variable evidence detail level",
+        help="Variable evidence detail level for the prompt appendix",
     )

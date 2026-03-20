@@ -3,7 +3,7 @@
 - Module: `main`
 - Code Path: `debugoracle/cli/main.py`
 - Public Entrypoints: `main`, `build_parser`
-- Last Updated: `2026-03-19`
+- Last Updated: `2026-03-20`
 
 # SPEC: DebugOracle CLI Parser And Dispatch
 
@@ -21,21 +21,31 @@ Own the top-level CLI parser, shared argument groups, and command dispatch wirin
 
 - `status`, `capture-rtt` -> `debugoracle/cli/commands/status_capture.py`
 - `run`, `stop` -> `debugoracle/cli/commands/run_stop.py`
-- `observe`, `snapshot`, `report`, `prompt` -> `debugoracle/cli/commands/evidence.py`
+- `fetch`, `report`, `prompt` -> `debugoracle/cli/commands/evidence.py`
+- `observe` and `snapshot` are not exposed on the public CLI surface.
+- `prompt` does not expose raw-input-only flags such as `--rtt-window`.
 
 ## Constraints
 
 - Preserve the compatibility entrypoint exported by `debugoracle/cli/__init__.py`.
 - Keep parser-only concerns here; avoid moving evidence shaping or policy logic back into dispatch.
 
-## Shared Variable Selectors
+## Report Inspect Flags
 
-The parser owns one shared variable-evidence selector surface for `snapshot`, `report`, and
-`prompt`:
+The parser owns the `report` inspect-mode surface after snapshot resolution has already been established:
 
-- `--var-scope local|watchpoint|unknown|all`
-- repeatable `--var-name`
-- `--var-detail compact|full`
+- `--vars [NAME ...]`
+- `--gdb`
+- `--rtt`
+- `--verbose`
+- `--tail N`
 
-Dispatch should pass these parsed selectors through to the evidence command module without
+Dispatch should pass these parsed flags through to the evidence command module without
 interpreting the underlying evidence model in `main.py`.
+
+Parser constraints:
+
+- `--tail` must be a hard-positive integer
+- `--tail` is valid only when a stream-bearing section is requested
+- inspect flags may be combined, in which case `report` emits one compact JSON object containing
+  only the requested sections

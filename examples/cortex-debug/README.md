@@ -69,7 +69,7 @@ test -f .dbgoracle/session.rtt && echo "RTT file path exists" || echo "RTT log n
 - Open/refresh **Call Stack**, **Registers**, and **Variables/Locals** after the stop.
 - Stop debugging for that run so the MI file stays bounded to one incident.
 
-Before calling `observe`, confirm MI data exists:
+Before calling `fetch`, confirm MI data exists:
 
 ```bash
 test -s cortex-debug-shared-mi.log && echo "MI log ready" || test -s .dbgoracle/cortex-debug-shared-mi.log && echo "MI log ready" || echo "MI log empty or missing"
@@ -82,7 +82,7 @@ to avoid stale evidence.
 ## 3) Build and inspect evidence
 
 ```bash
-./dbgoracle observe
+./dbgoracle fetch
 ./dbgoracle report
 ```
 
@@ -94,7 +94,7 @@ Then hand it to ChatGPT:
 
 ## Minimal validation checklist
 
-- `observe` exits successfully and writes `latest_snapshot.json` in the detected artifact folder
+- `fetch` exits successfully and writes `latest_snapshot.json` in the detected artifact folder
   (workspace root or `.dbgoracle`).
 - `status` shows an `RTT Capture` section with the RTT transport state if you used `run`.
 - `report` includes:

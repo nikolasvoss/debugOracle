@@ -11,6 +11,7 @@ from debugoracle.artifacts.models import (
     VariableEvidence,
 )
 from debugoracle.pipeline.storage import build_artifact_from_sources
+from debugoracle.builder import build_bundle_from_text
 from debugoracle.sources.debuggers.gdb.halt_snapshot import build_halt_snapshot
 from debugoracle.sources.debuggers.gdb.transcript import parse_gdb_transcript
 
@@ -138,6 +139,41 @@ class PipelineAndRendererTests(unittest.TestCase):
         self.assertIn("DebugOracle Prompt Package", render_prompt(artifact, request))
         self.assertIn('"snapshot_id"', render_snapshot(artifact, fmt="json"))
 
+    def test_partial_snapshot_marks_missing_rtt_source_absent_and_report_rtt_fails(self) -> None:
+        from debugoracle.renderers.report import ReportRenderOptions, render_report
+
+        bundle = build_bundle_from_text((FIXTURES / "sample.mi").read_text(encoding="utf-8"), "")
+
+        self.assertTrue(bundle.has_embedded_gdb_source)
+        self.assertFalse(bundle.has_embedded_rtt_source)
+        with self.assertRaisesRegex(RuntimeError, "embedded rtt source"):
+            render_report(bundle, options=ReportRenderOptions(include_rtt=True))
+
+    def test_partial_snapshot_marks_missing_gdb_source_absent_and_report_gdb_fails(self) -> None:
+        from debugoracle.renderers.report import ReportRenderOptions, render_report
+
+        bundle = build_bundle_from_text("", (FIXTURES / "sample.rtt").read_text(encoding="utf-8"))
+
+        self.assertFalse(bundle.has_embedded_gdb_source)
+        self.assertTrue(bundle.has_embedded_rtt_source)
+        with self.assertRaisesRegex(RuntimeError, "embedded gdb source"):
+            render_report(bundle, options=ReportRenderOptions(include_gdb=True))
+
+    def test_render_snapshot_rejects_non_json_formats(self) -> None:
+        from debugoracle.renderers.snapshot import render_snapshot
+
+        artifact = InvestigationArtifact(
+            snapshot_id="snap-123",
+            captured_at="2026-03-18T10:00:00+00:00",
+            stop_reason=None,
+            pc=None,
+            lr=None,
+            sp=None,
+        )
+
+        with self.assertRaisesRegex(ValueError, "only supports"):
+            render_snapshot(artifact, fmt="text")
+
     def test_report_renders_bucketed_variable_summary_with_caps_and_unknowns(self) -> None:
         from debugoracle.renderers.report import render_report
 
@@ -167,7 +203,7 @@ class PipelineAndRendererTests(unittest.TestCase):
 
         report = render_report(artifact)
 
-        self.assertIn("## Variable Evidence", report)
+        self.assertIn("Variable Summary:", report)
         self.assertIn("- Locals: 6 total", report)
         self.assertIn("local_0: 0", report)
         self.assertIn("local_4: 4", report)

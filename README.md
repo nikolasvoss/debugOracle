@@ -14,7 +14,7 @@ DebugOracle does not drive the probe or debugger. The intended v1 flow is:
 2. Reproduce until the target reaches a meaningful stop.
 3. Open or refresh Call Stack, Registers, and Variables or Locals so Cortex-Debug emits the context you want to keep.
 4. If runtime breadcrumbs matter, capture RTT from the OpenOCD RTT TCP port with `run` (or low-level `capture-rtt`).
-5. Build a reusable snapshot with `observe`.
+5. Build a reusable snapshot with `fetch`.
 6. Inspect it locally with `report`.
 7. Hand the same snapshot to ChatGPT with `prompt`.
 
@@ -39,17 +39,17 @@ Use the example below to make first capture quick:
 - Build once:
 
 ```bash
-./dbgoracle observe
+./dbgoracle fetch
 ./dbgoracle report
 ./dbgoracle prompt --goal "Explain why the target stopped here"
 ```
 
-Observe output path behavior:
+Fetch output path behavior:
 - `--state-out` always wins when provided.
-- Without `--state-out`, observe writes `latest_snapshot.json` next to the resolved GDB/MI input when available,
+- Without `--state-out`, `fetch` writes `latest_snapshot.json` next to the resolved GDB/MI input when available,
   or next to the resolved RTT input, or finally to `<workspace>/.dbgoracle/latest_snapshot.json`.
 
-Before running `observe`, verify the MI file is receiving output:
+Before running `fetch`, verify the MI file is receiving output:
 
 ```bash
 test -s cortex-debug-shared-mi.log && echo "MI log ready" || test -s .dbgoracle/cortex-debug-shared-mi.log && echo "MI log ready" || echo "MI log empty or missing"
@@ -65,7 +65,7 @@ What to configure in Cortex-Debug:
 
 Quick check after run:
 
-- `observe` succeeds and writes `latest_snapshot.json` in the resolved artifact folder
+- `fetch` succeeds and writes `latest_snapshot.json` in the resolved artifact folder
   (next to explicit/auto-resolved GDB/MI input when present, otherwise next to explicit/auto-resolved RTT,
   otherwise `<workspace>/.dbgoracle`).
 - `report` shows stop reason + frame + register/local context.
@@ -80,34 +80,30 @@ Typical Cortex-Debug flow:
 
 ```bash
 ./dbgoracle run --detach --workspace-root /path/to/workspace --port 60001 --output /path/to/session.rtt
-./dbgoracle observe --workspace-root /path/to/workspace
+./dbgoracle fetch --workspace-root /path/to/workspace
 ./dbgoracle report --workspace-root /path/to/workspace
 ./dbgoracle prompt --workspace-root /path/to/workspace --goal "Explain why the target stopped here"
 ./dbgoracle stop --workspace-root /path/to/workspace
 ./dbgoracle --version
 ```
 
-Advanced or automation-oriented rendering:
+Automation or inspection-oriented JSON output:
 
 ```bash
-./dbgoracle snapshot --format json
-./dbgoracle snapshot --gdb-mi /path/to/cortex-debug-shared-mi.log --format json
+./dbgoracle report --vars
+./dbgoracle report --gdb
+./dbgoracle report --verbose
 ```
 
-## When raw JSON is useful
+## When inspect JSON is useful
 
-- Automation or scripting against the evidence bundle
-- Re-rendering a saved snapshot without re-reading the original logs
-- Attaching a machine-readable artifact to an issue or test case
+- Automation or scripting against saved evidence
+- Pulling exact variable groups or embedded GDB/RTT sections from a snapshot
+- Attaching a machine-readable inspection payload to an issue or test case
 
-Raw JSON is not required for the everyday `observe -> report -> prompt` workflow.
-
-### Raw input export on parse warnings
-
-When DebugOracle detects parse warnings, it now writes raw input sidecars next to the
-snapshot/session artifacts and records their paths in the snapshot provenance. You can
-also force a raw export with `--export-raw` on `observe`, `snapshot`, `report`, or `prompt`.
-Raw exports may include sensitive data from your debug logs.
+Compact JSON inspect modes are not required for the everyday `fetch -> report -> prompt` workflow.
+New snapshots already embed the full selected raw source payloads plus derived parsed structures,
+so `report --gdb`, `report --rtt`, and `report --verbose` can surface them without raw sidecars.
 
 `report` and `prompt` now render non-MI frequency summaries in explicit form, for example:
 

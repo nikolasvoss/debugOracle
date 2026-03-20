@@ -20,7 +20,7 @@ Goal:
 
 - "fetch the prompt from dbgoracle"
 - "get the debug report"
-- "show me the detailed snapshot"
+- "show me the detailed embedded evidence"
 - "use dbgoracle on this workspace"
 
 The agent should prefer the smallest successful path that produces the
@@ -39,20 +39,21 @@ dbgoracle <command> --help
 ```
 
 Use the actual supported flags from help output. For example,
-`dbgoracle snapshot` does not support `--verbose`. To get more detail, use
-`--format json` or `--format markdown`.
+`dbgoracle report` supports detailed inspection with `--vars`, `--gdb`, `--rtt`,
+and `--verbose` rather than a separate `snapshot` rendering command.
 
 ## Command decision path
 
 1. If a usable snapshot already exists, prefer rendering from it.
-2. If no snapshot exists but a GDB/MI log exists, run `dbgoracle observe`.
+2. If no snapshot exists but a GDB/MI log exists, run `dbgoracle fetch`.
 3. After a snapshot exists:
    - use `dbgoracle report` for a human-readable GDB evidence summary
    - use `dbgoracle prompt --goal "Explain why the target stopped here"` for an
      agent handoff artifact
-   - use `dbgoracle snapshot --format json` for detailed structured output
-   - use `dbgoracle snapshot --format markdown` for detailed human-readable
-     output
+   - use `dbgoracle report --gdb` or `dbgoracle report --rtt` for detailed
+     structured source inspection
+   - use `dbgoracle report --verbose` for one compact JSON object with summary,
+     variables, and embedded source sections
 4. If neither a snapshot nor a usable GDB/MI log exists, report that required
    debug evidence is missing.
 
@@ -77,7 +78,7 @@ dbgoracle prompt --workspace-root . --goal "Explain why the target stopped here"
    render:
 
 ```bash
-dbgoracle observe --workspace-root .
+dbgoracle fetch --workspace-root .
 dbgoracle report --workspace-root .
 dbgoracle prompt --workspace-root . --goal "Explain why the target stopped here"
 ```
@@ -88,7 +89,7 @@ For "fetch the prompt from dbgoracle":
 
 ```bash
 dbgoracle status --workspace-root .
-dbgoracle observe --workspace-root .   # only if no usable snapshot exists
+dbgoracle fetch --workspace-root .   # only if no usable snapshot exists
 dbgoracle prompt --workspace-root . --goal "Explain why the target stopped here"
 ```
 
@@ -96,22 +97,24 @@ For "get the debug report":
 
 ```bash
 dbgoracle status --workspace-root .
-dbgoracle observe --workspace-root .   # only if no usable snapshot exists
+dbgoracle fetch --workspace-root .   # only if no usable snapshot exists
 dbgoracle report --workspace-root .
 ```
 
-For "show me the detailed snapshot" or "give me verbose snapshot output":
+For "show me the detailed embedded evidence" or "give me verbose structured output":
 
 ```bash
 dbgoracle status --workspace-root .
-dbgoracle observe --workspace-root .   # only if no usable snapshot exists
-dbgoracle snapshot --workspace-root . --format json
+dbgoracle fetch --workspace-root .   # only if no usable snapshot exists
+dbgoracle report --workspace-root . --verbose
 ```
 
-If the user wants a more readable detailed view, prefer:
+If the user wants one specific embedded section, prefer:
 
 ```bash
-dbgoracle snapshot --workspace-root . --format markdown
+dbgoracle report --workspace-root . --gdb
+dbgoracle report --workspace-root . --rtt
+dbgoracle report --workspace-root . --vars
 ```
 
 ## Failure handling
@@ -119,7 +122,7 @@ dbgoracle snapshot --workspace-root . --format markdown
 Stop and report the issue if any of the following are true:
 
 - no GDB/MI log exists
-- the available session evidence does not let `observe` build a snapshot
+- the available session evidence does not let `fetch` build a snapshot
 - the report is too thin because the session did not capture meaningful halt
   context
 - the user appears to expect live reads or debugger control
@@ -129,8 +132,8 @@ Stop and report the issue if any of the following are true:
 - If the report or prompt is thin, suggest refreshing Call Stack, Registers, and
   Variables/Locals before ending the debug session and recapturing.
 - If the snapshot is missing, check whether the workspace contains a GDB/MI log
-  before attempting `observe`.
-- If `observe` fails, tell the user that the current workspace does not contain
+  before attempting `fetch`.
+- If `fetch` fails, tell the user that the current workspace does not contain
   a usable GDB evidence input for DebugOracle.
-- If the user asks for "verbose" snapshot output, do not invent flags. Check
-  `dbgoracle snapshot --help` and use the supported `--format` options.
+- If the user asks for detailed structured evidence, do not invent flags. Check
+  `dbgoracle report --help` and use the supported inspect options.

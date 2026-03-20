@@ -2,8 +2,8 @@
 
 - Module: `evidence`
 - Code Path: `debugoracle/cli/commands/evidence.py`
-- Public Entrypoints: `cmd_observe`, `cmd_snapshot`, `cmd_report`, `cmd_prompt`
-- Last Updated: `2026-03-19`
+- Public Entrypoints: `cmd_fetch`, `cmd_report`, `cmd_prompt`
+- Last Updated: `2026-03-20`
 
 # SPEC: DebugOracle Evidence Commands
 
@@ -13,11 +13,13 @@ Own the CLI flows that resolve raw or saved evidence, build or load artifacts, a
 
 ## Responsibilities
 
-- Resolve snapshot, GDB/MI, and RTT inputs for evidence-oriented commands.
+- Resolve raw evidence for `fetch`.
+- Resolve snapshot input for `report` and `prompt`.
 - Build investigation artifacts from raw evidence when required.
-- Save snapshots for `observe` and render snapshot/report/prompt outputs for reuse.
-- Thread shared variable-evidence selectors into the renderer layer for `snapshot`, `report`, and
-  `prompt`.
+- Save snapshots for `fetch` and render report/prompt outputs for reuse.
+- Keep `fetch` stdout operational by summarizing the saved snapshot rather than rendering interpretive evidence.
+- Thread `report` inspect-mode flags into the renderer layer without rebuilding from raw evidence.
+- Keep prompt-specific variable selectors isolated from the report parser surface.
 
 ## Boundaries
 
@@ -25,10 +27,21 @@ Own the CLI flows that resolve raw or saved evidence, build or load artifacts, a
 - Keep command-specific path resolution and CLI messaging here.
 - Do not own parser construction; that belongs in `debugoracle/cli/main.py`.
 
-## Variable Evidence Contract
+## Command Resolution Contract
 
-- `report` is the primary summarized output surface for variable evidence.
-- `observe` persists the full structured variable evidence snapshot.
-- `report`, `snapshot`, and `prompt` may all filter the rendered variable evidence by shared
-  selector flags, but they should consume the same stored artifact model rather than recomputing
-  variable classification locally.
+- `cmd_fetch` is raw-only and never loads a snapshot as its primary evidence source.
+- `cmd_report` is snapshot-only and fails clearly when no snapshot can be resolved.
+- `cmd_report` points users to `fetch` when no snapshot is available.
+- `cmd_prompt` is snapshot-only and fails clearly when no snapshot can be resolved.
+- `cmd_prompt` does not accept stale raw-build tuning flags.
+- `cmd_prompt` points users to `fetch` when no snapshot is available.
+
+## Report Inspect Contract
+
+- Default `report` output is a human-readable summary.
+- `report --vars [NAME ...]` emits a compact JSON object under `variables`.
+- `report --gdb [--tail N]` emits a compact JSON object under `gdb`.
+- `report --rtt [--tail N]` emits a compact JSON object under `rtt`.
+- `report --verbose [--tail N]` emits a compact JSON object containing summary, variables, source
+  streams, and provenance metadata.
+- Combined inspect flags emit one compact JSON object containing only the requested sections.

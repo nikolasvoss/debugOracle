@@ -3,7 +3,7 @@
 - Module: `cli`
 - Code Path: `debugoracle/cli/__init__.py`
 - Public Entrypoints: `main`
-- Last Updated: `2026-03-18`
+- Last Updated: `2026-03-20`
 
 # SPEC: DebugOracle CLI
 
@@ -42,16 +42,16 @@ implementation lives in:
 - `debugoracle/cli/main.py` for parser construction and dispatch
 - `debugoracle/cli/commands/status_capture.py` for `status` and `capture-rtt`
 - `debugoracle/cli/commands/run_stop.py` for `run` and `stop`
-- `debugoracle/cli/commands/evidence.py` for `observe`, `snapshot`, `report`, and `prompt`
+- `debugoracle/cli/commands/evidence.py` for `fetch`, `report`, and `prompt`
 
 The CLI has three behavioral layers:
 
 1. Transport and workspace health
    Commands: `status`, `capture-rtt`, `run`, `stop`
 2. Evidence capture and stabilization
-   Command: `observe`
-3. Evidence rendering
-   Commands: `snapshot`, `report`, `prompt`
+   Command: `fetch`
+3. Evidence rendering and packaging
+   Commands: `report`, `prompt`
 
 ## Shared Inputs
 
@@ -76,13 +76,16 @@ Valid raw combinations:
 - RTT only
 - GDB/MI and RTT together
 
-Missing evidence weakens the result but does not invalidate it.
+Missing evidence weakens the result but does not invalidate `fetch` when at least one selected
+source is available.
 
 ### Stable Evidence
 
 - Snapshot file: `--snapshot-file`
 
-Snapshots are reusable, machine-readable evidence bundles previously written by `observe`.
+Snapshots are reusable, machine-readable evidence bundles previously written by `fetch`.
+`report` and `prompt` resolve only snapshots; they do not accept raw evidence inputs.
+Snapshot completeness is defined by embedded source sections, not by raw sidecar export metadata.
 
 ### Output
 
@@ -158,53 +161,47 @@ Outputs:
 Meaning:
 - Stops only managed DebugOracle run processes and cleans up stale runtime metadata.
 
-### `observe`
+### `fetch`
 
 Purpose:
-- Build a stable snapshot from current raw evidence and save it.
+- Build a stable self-contained snapshot from current raw evidence and save it.
 
 Inputs:
 - Raw evidence, by explicit path or discovery
 - Optional `--state-out`
-- Optional `--export-raw`
 
 Outputs:
 - Snapshot JSON written to disk
-- Success line naming the snapshot id and output path
+- Operational summary naming:
+  - snapshot id
+  - output path
+  - embedded sources
+  - source sizes and counts
 
 Meaning:
-- `observe` always builds from raw evidence.
+- `fetch` always builds from raw evidence.
 - It never treats an existing snapshot as the primary source.
-
-### `snapshot`
-
-Purpose:
-- Render the current evidence state for inspection or automation.
-
-Inputs:
-- Snapshot or raw evidence, according to source resolution rules
-
-Outputs:
-- Evidence bundle in `json`, `text`, or `markdown`
-
-Meaning:
-- `snapshot` prefers fresh raw evidence.
-- It falls back to snapshot input only when raw input is unavailable and input mode allows fallback.
+- It overwrites the default latest snapshot when no explicit output path is provided.
 
 ### `report`
 
 Purpose:
-- Render a human-facing evidence report.
+- Render a snapshot-only evidence inspection surface.
 
 Inputs:
-- Snapshot or raw evidence, according to source resolution rules
+- Snapshot input only
 
 Outputs:
-- Report in `text` or `markdown`
+- Human-readable plain-text report by default
+- Compact JSON inspect payloads for:
+  - `--vars [NAME ...]`
+  - `--gdb [--tail N]`
+  - `--rtt [--tail N]`
+  - `--verbose [--tail N]`
 
 Meaning:
-- `report` prefers a stable snapshot.
-- It may rebuild from raw only when explicitly requested by input mode.
+- `report` never rebuilds from raw evidence.
+- Full embedded source payloads remain inside the snapshot and can be surfaced through inspect modes.
 
 ### `prompt`
 
@@ -212,7 +209,7 @@ Purpose:
 - Render an agent-ready prompt package from stable evidence.
 
 Inputs:
-- Snapshot or raw evidence, according to source resolution rules
+- Snapshot input only
 - Required `--goal`
 - Optional intent text or intent file
 
@@ -220,25 +217,10 @@ Outputs:
 - Prompt package in `text` or `markdown`
 
 Meaning:
-- `prompt` prefers a stable snapshot.
-- It may rebuild from raw only when explicitly requested by input mode.
+- `prompt` is snapshot-only.
+- It never rebuilds from raw evidence.
 
 ## Source Resolution
-
-### Input Mode
-
-The target CLI defines `--input-mode auto|snapshot|raw` for `snapshot`, `report`, and `prompt`.
-
-- `auto`: use the command default
-- `snapshot`: only use snapshot input; fail if no snapshot is available
-- `raw`: only use raw input; fail if no raw input is available
-
-Command defaults:
-
-- `observe`: raw only
-- `snapshot`: raw first, then snapshot fallback
-- `report`: snapshot first
-- `prompt`: snapshot first
 
 ### Explicit Inputs Override Discovery
 
@@ -270,7 +252,7 @@ Examples:
 
 - only GDB/MI found: build degraded evidence from GDB/MI only
 - only RTT found: build degraded evidence from RTT only
-- snapshot found and no raw found: `report` and `prompt` may use snapshot in `auto` mode
+- snapshot found and no raw found: `report` and `prompt` may use the discovered snapshot
 
 All auto-discovered choices must be reported on `stderr`.
 
@@ -286,7 +268,7 @@ evidence source that a command uses after explicit inputs and discovery have bee
 - Non-MI lines are retained as context, not discarded.
 - Console-output and prompt-marker lines are classified explicitly.
 - MI parse failures are represented as warning events, not fatal errors.
-- Raw lines must remain recoverable through raw export when warnings occur or when explicitly requested.
+- Raw lines must remain recoverable from the embedded snapshot source payloads.
 
 ### RTT
 
@@ -296,7 +278,7 @@ evidence source that a command uses after explicit inputs and discovery have bee
 
 ### Snapshot Integrity
 
-- Snapshots are stable evidence artifacts intended for later reuse.
+- Snapshots are stable self-contained evidence artifacts intended for later reuse.
 - User-facing rendering commands fail hard on unreadable or malformed snapshot JSON.
 - Evidence weakness inside a valid snapshot is represented inside the payload, not as snapshot corruption.
 
@@ -308,8 +290,9 @@ Weak or incomplete evidence is non-fatal by default.
 
 Examples:
 
-- missing GDB/MI
-- missing RTT
+- missing GDB/MI during `fetch`
+- missing RTT during `fetch`
+- missing selected sources for `report` or `prompt`
 - non-MI transcript noise
 - MI parse warnings
 - thin stop context
@@ -321,7 +304,7 @@ Warnings must appear in both places:
 
 The CLI should prefer salvage over rejection:
 
-- raw evidence is better than no evidence
+- raw evidence captured by `fetch` is better than no evidence
 - partial evidence is better than failing early
 - missing context must be surfaced explicitly instead of silently hidden
 
@@ -351,7 +334,7 @@ Examples for `2`:
 - Explicit flags always override discovery.
 - Command meaning must be inferable from the command name.
 - Degraded evidence is surfaced explicitly, not silently hidden.
-- A saved snapshot is a stable artifact distinct from raw logs.
+- A saved snapshot is a stable self-contained artifact distinct from raw logs.
 - DebugOracle does not read source code or claim to answer source-level questions by itself.
 - The agent using DebugOracle is responsible for combining debug evidence with source and workspace context.
 
