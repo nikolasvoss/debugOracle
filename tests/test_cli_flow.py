@@ -69,6 +69,15 @@ class DebugOracleCliTests(unittest.TestCase):
             self.assertIn("Source Sizes/Counts:", stdout)
             self.assertIn("Auto-discovered input paths for fetch:", stderr)
 
+    def test_report_notes_when_svd_register_data_is_unavailable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            snapshot_path = self._write_snapshot(Path(tmpdir) / "latest_snapshot.json")
+            output = self._run_cli(["report", "--snapshot-file", str(snapshot_path)])
+
+        lowered = output.lower()
+        self.assertIn("peripheral register data is not available in this snapshot", lowered)
+        self.assertIn("fetch --svd-file", output)
+
     def test_report_requires_snapshot_and_tells_user_to_run_fetch(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             previous = os.getcwd()
@@ -142,6 +151,73 @@ class DebugOracleCliTests(unittest.TestCase):
         self.assertIn("rtt", payload)
         self.assertIn("provenance", payload)
 
+    def test_fetch_with_svd_embeds_register_catalog_and_prints_register_counts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            (workspace / "cortex-debug-shared-mi.log").write_text(
+                (FIXTURES / "sample.mi").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (workspace / "session.rtt").write_text(
+                (FIXTURES / "sample.rtt").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+
+            previous = os.getcwd()
+            try:
+                os.chdir(workspace)
+                stdout, stderr = self._run_cli(["fetch", "--svd-file", str(FIXTURES / "sample.svd")], capture_stderr=True)
+            finally:
+                os.chdir(previous)
+
+            payload = json.loads((workspace / "latest_snapshot.json").read_text(encoding="utf-8"))
+
+        self.assertIn("- regs:", stdout)
+        self.assertEqual(payload["sources"]["registers"]["device_name"], "STM32L432KCTest")
+        self.assertEqual(payload["sources"]["registers"]["register_count"], 4)
+        self.assertEqual(payload["sources"]["registers"]["skipped_count"], 4)
+
+    def test_report_regs_list_outputs_captured_peripherals(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            snapshot_path = self._write_snapshot(Path(tmpdir) / "latest_snapshot.json", svd_file=FIXTURES / "sample.svd")
+            output = self._run_cli(["report", "--snapshot-file", str(snapshot_path), "--regs-list"])
+
+        payload = json.loads(output)
+        self.assertEqual(payload["registers_list"]["device_name"], "STM32L432KCTest")
+        self.assertEqual([item["name"] for item in payload["registers_list"]["peripherals"]], ["GPIOA", "RCC"])
+
+    def test_report_regs_list_peripheral_outputs_registers(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            snapshot_path = self._write_snapshot(Path(tmpdir) / "latest_snapshot.json", svd_file=FIXTURES / "sample.svd")
+            output = self._run_cli(["report", "--snapshot-file", str(snapshot_path), "--regs-list", "GPIOA"])
+
+        payload = json.loads(output)
+        self.assertEqual(payload["registers_list"]["peripheral"], "GPIOA")
+        self.assertEqual([item["name"] for item in payload["registers_list"]["registers"]], ["MODER", "IDR"])
+
+    def test_report_regs_outputs_filtered_register_values(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            snapshot_path = self._write_snapshot(Path(tmpdir) / "latest_snapshot.json", svd_file=FIXTURES / "sample.svd")
+            output = self._run_cli(["report", "--snapshot-file", str(snapshot_path), "--regs", "GPIOA:MODER", "RCC"])
+
+        payload = json.loads(output)
+        self.assertEqual([item["name"] for item in payload["registers"]["peripherals"]], ["GPIOA", "RCC"])
+        self.assertEqual(payload["registers"]["peripherals"][0]["registers"][0]["name"], "MODER")
+        self.assertEqual(payload["registers"]["peripherals"][0]["registers"][0]["read_status"], "skipped")
+
+    def test_report_regs_list_fails_when_register_data_is_unavailable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            snapshot_path = self._write_snapshot(Path(tmpdir) / "latest_snapshot.json")
+            code, stdout, stderr = self._run_cli_expect_system_exit(["report", "--snapshot-file", str(snapshot_path), "--regs-list"])
+
+        self.assertNotEqual(code, 0)
+        self.assertIn("embedded register source", stdout + stderr)
+
+    def test_report_rejects_invalid_register_selector(self) -> None:
+        code, stdout, stderr = self._run_cli_expect_system_exit(["report", "--regs", "GPIOA:"])
+        self.assertNotEqual(code, 0)
+        self.assertIn("invalid register selector", stdout + stderr)
+
     def test_report_tail_requires_positive_integer(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             snapshot_path = self._write_snapshot(Path(tmpdir) / "latest_snapshot.json")
@@ -179,10 +255,11 @@ class DebugOracleCliTests(unittest.TestCase):
         self.assertIn("cortex-debug-shared-mi.log", message)
         self.assertIn("session.rtt", message)
 
-    def _write_snapshot(self, path: Path) -> Path:
+    def _write_snapshot(self, path: Path, svd_file: Path | None = None) -> Path:
         bundle = build_bundle_from_files(
             str(FIXTURES / "sample.mi"),
             str(FIXTURES / "sample.rtt"),
+            svd_file_path=str(svd_file) if svd_file else None,
         )
         save_bundle(bundle, str(path))
         return path

@@ -82,6 +82,7 @@ source is available.
 ### Stable Evidence
 
 - Snapshot file: `--snapshot-file`
+- Optional SVD file during `fetch`: `--svd-file`
 
 Snapshots are reusable, machine-readable evidence bundles previously written by `fetch`.
 `report` and `prompt` resolve only snapshots; they do not accept raw evidence inputs.
@@ -169,6 +170,7 @@ Purpose:
 Inputs:
 - Raw evidence, by explicit path or discovery
 - Optional `--state-out`
+- Optional `--svd-file` for embedded register catalog capture
 
 Outputs:
 - Snapshot JSON written to disk
@@ -182,6 +184,7 @@ Meaning:
 - `fetch` always builds from raw evidence.
 - It never treats an existing snapshot as the primary source.
 - It overwrites the default latest snapshot when no explicit output path is provided.
+- It remains a capture-only surface; register discovery and inspection happen through `report`.
 
 ### `report`
 
@@ -197,11 +200,14 @@ Outputs:
   - `--vars [NAME ...]`
   - `--gdb [--tail N]`
   - `--rtt [--tail N]`
+  - `--regs-list [PERIPHERAL]`
+  - `--regs [SELECTOR ...]`
   - `--verbose [--tail N]`
 
 Meaning:
 - `report` never rebuilds from raw evidence.
 - Full embedded source payloads remain inside the snapshot and can be surfaced through inspect modes.
+- `--regs-list` is the discovery surface for captured register catalogs, while `--regs` is the stored-value/status surface.
 
 ### `prompt`
 

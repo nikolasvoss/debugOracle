@@ -49,3 +49,13 @@ Parser constraints:
 - `--tail` is valid only when a stream-bearing section is requested
 - inspect flags may be combined, in which case `report` emits one compact JSON object containing
   only the requested sections
+
+
+## Register Inspection Flags
+
+The parser now owns snapshot-only register inspection flags for `report`:
+
+- `--regs-list [PERIPHERAL]`
+- `--regs [SELECTOR ...]` where selectors are `PERIPHERAL` or `PERIPHERAL:REGISTER`
+
+Dispatch should treat these as snapshot filters only; `fetch` remains the capture surface for SVD-backed register catalogs.

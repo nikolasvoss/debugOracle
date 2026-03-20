@@ -224,6 +224,10 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_RTT_WINDOW,
         help="Bounded RTT line window to retain in the snapshot",
     )
+    fetch.add_argument(
+        "--svd-file",
+        help="Optional CMSIS-SVD file used to embed the device register catalog into the snapshot",
+    )
     fetch.set_defaults(func=cmd_fetch)
 
     prompt = subparsers.add_parser(
@@ -278,7 +282,20 @@ def build_parser() -> argparse.ArgumentParser:
     report.add_argument(
         "--verbose",
         action="store_true",
-        help="Emit a compact JSON object combining summary, variables, streams, and provenance",
+        help="Emit a compact JSON object combining summary, variables, streams, provenance, and embedded register data when present",
+    )
+    report.add_argument(
+        "--regs-list",
+        nargs="?",
+        const="",
+        metavar="PERIPHERAL",
+        help="List captured peripherals, or list captured registers for one peripheral",
+    )
+    report.add_argument(
+        "--regs",
+        nargs="*",
+        metavar="SELECTOR",
+        help="Emit captured register data as compact JSON; selectors are PERIPHERAL or PERIPHERAL:REGISTER",
     )
     report.add_argument(
         "--tail",
@@ -304,6 +321,13 @@ def validate_report_arguments(parser: argparse.ArgumentParser, args: argparse.Na
         getattr(args, "gdb", False) or getattr(args, "rtt", False) or getattr(args, "verbose", False)
     ):
         parser.error("--tail requires --gdb, --rtt, or --verbose")
+    if getattr(args, "regs_list", None) is not None and getattr(args, "regs", None) is not None:
+        parser.error("--regs-list and --regs cannot be used together")
+    if getattr(args, "regs_list", None) not in (None, "") and ":" in getattr(args, "regs_list", ""):
+        parser.error("--regs-list accepts an optional peripheral name only")
+    for selector in getattr(args, "regs", None) or []:
+        if not _is_valid_register_selector(selector):
+            parser.error(f"invalid register selector: {selector}")
 
 
 
@@ -393,3 +417,12 @@ def add_prompt_variable_arguments(parser: argparse.ArgumentParser) -> None:
         default="compact",
         help="Variable evidence detail level for the prompt appendix",
     )
+
+
+def _is_valid_register_selector(value: str) -> bool:
+    if not value or value.count(":") > 1:
+        return False
+    if ":" not in value:
+        return bool(value.strip())
+    peripheral, register = value.split(":", 1)
+    return bool(peripheral.strip()) and bool(register.strip())

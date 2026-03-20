@@ -8,12 +8,13 @@ from pathlib import Path
 from typing import Any
 
 from .artifacts.bundle import SnapshotLoadError, load_bundle, save_bundle
-from .artifacts.models import CURRENT_BUNDLE_SCHEMA_VERSION, EvidenceBundle, SessionEvent, StackFrame
+from .artifacts.models import CURRENT_BUNDLE_SCHEMA_VERSION, EvidenceBundle, RegisterSource, SessionEvent, StackFrame
 from .pipeline.storage import build_artifact_from_sources
 from .sources.debuggers.gdb.halt_snapshot import (
     GDB_HALT_SNAPSHOT_SOURCE,
     build_halt_snapshot,
 )
+from .sources.debuggers.gdb.peripheral_registers import collect_peripheral_registers_from_svd
 from .sources.debuggers.gdb.transcript import (
     GDB_TRANSCRIPT_SOURCE,
     parse_gdb_transcript,
@@ -38,6 +39,7 @@ def build_bundle_from_files(
     *,
     export_raw: bool = False,
     export_dir: str | Path | None = None,
+    svd_file_path: str | None = None,
 ) -> EvidenceBundle:
     gdb_text = (
         _read_text_file(gdb_mi_path, errors="replace", required=True)
@@ -53,6 +55,7 @@ def build_bundle_from_files(
         rtt_window=rtt_window,
         export_raw=export_raw,
         export_dir=export_dir,
+        svd_file_path=svd_file_path,
     )
 
 
@@ -65,6 +68,7 @@ def build_bundle_from_stream(
     *,
     export_raw: bool = False,
     export_dir: str | Path | None = None,
+    svd_file_path: str | None = None,
 ) -> EvidenceBundle:
     gdb_text = stream.read()
     return build_bundle_from_text(
@@ -75,6 +79,7 @@ def build_bundle_from_stream(
         rtt_window=rtt_window,
         export_raw=export_raw,
         export_dir=export_dir,
+        svd_file_path=svd_file_path,
     )
 
 
@@ -87,6 +92,7 @@ def build_bundle_from_text(
     *,
     export_raw: bool = False,
     export_dir: str | Path | None = None,
+    svd_file_path: str | None = None,
 ) -> EvidenceBundle:
     captured_at = utc_now()
     transcript = parse_gdb_transcript(gdb_text, now_text=utc_now)
@@ -96,6 +102,7 @@ def build_bundle_from_text(
         latest_registers=transcript.latest_registers,
         variable_evidence=transcript.variable_evidence,
     )
+    register_source = _collect_register_source(svd_file_path)
     artifact = build_artifact_from_sources(
         captured_at=captured_at,
         gdb_text=gdb_text,
@@ -107,10 +114,17 @@ def build_bundle_from_text(
         rtt_window=rtt_window,
         export_raw=export_raw,
         export_dir=export_dir,
+        register_source=register_source,
     )
     artifact.schema_version = CURRENT_BUNDLE_SCHEMA_VERSION
     artifact.source_context = dict(DEFAULT_SOURCE_CONTEXT)
     return artifact
+
+
+def _collect_register_source(svd_file_path: str | None) -> RegisterSource | None:
+    if not svd_file_path:
+        return None
+    return collect_peripheral_registers_from_svd(svd_file_path)
 
 def _export_raw_inputs(
     *,

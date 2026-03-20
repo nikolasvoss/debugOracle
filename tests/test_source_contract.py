@@ -14,6 +14,10 @@ from debugoracle.sources.debuggers.gdb.memory import (
     GDB_MEMORY_SOURCE as CANONICAL_GDB_MEMORY_SOURCE,
     collect_gdb_memory_read,
 )
+from debugoracle.sources.debuggers.gdb.peripheral_registers import (
+    GDB_PERIPHERAL_REGISTERS_SOURCE as CANONICAL_GDB_PERIPHERAL_REGISTERS_SOURCE,
+    collect_peripheral_registers_from_svd,
+)
 from debugoracle.sources.debuggers.gdb.registers import (
     GDB_REGISTERS_SOURCE as CANONICAL_GDB_REGISTERS_SOURCE,
     collect_gdb_registers,
@@ -94,6 +98,16 @@ class SourceContractTests(unittest.TestCase):
         registers = collect_gdb_registers({"15": "0x08000100", "13": "0x20002000"})
         self.assertEqual(registers["15"], "0x08000100")
         self.assertEqual(registers["13"], "0x20002000")
+
+    def test_canonical_gdb_peripheral_register_source_module_exports_snapshot_descriptor(self) -> None:
+        self.assertIsInstance(CANONICAL_GDB_PERIPHERAL_REGISTERS_SOURCE, SourceDescriptor)
+        self.assertEqual(CANONICAL_GDB_PERIPHERAL_REGISTERS_SOURCE.source_id, "gdb_peripheral_registers")
+        self.assertEqual(CANONICAL_GDB_PERIPHERAL_REGISTERS_SOURCE.family, "snapshot")
+
+        register_source = collect_peripheral_registers_from_svd("tests/fixtures/sample.svd")
+        self.assertEqual(register_source.device_name, "STM32L432KCTest")
+        self.assertEqual(register_source.peripheral_count, 2)
+        self.assertEqual(register_source.skipped_count, 4)
 
     def test_canonical_gdb_memory_source_module_exports_snapshot_descriptor(self) -> None:
         self.assertIsInstance(CANONICAL_GDB_MEMORY_SOURCE, SourceDescriptor)

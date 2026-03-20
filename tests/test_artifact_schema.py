@@ -10,6 +10,9 @@ from debugoracle.renderers.report import ReportRenderOptions, render_report
 from debugoracle.builder import SnapshotLoadError, build_bundle_from_text, load_bundle, save_bundle
 
 
+FIXTURES = Path(__file__).parent / "fixtures"
+
+
 class ArtifactSchemaTests(unittest.TestCase):
     def test_canonical_artifact_api_supports_round_trip_without_legacy_bundle_names(self) -> None:
         from debugoracle.artifacts.models import InvestigationArtifact
@@ -96,6 +99,21 @@ class ArtifactSchemaTests(unittest.TestCase):
         self.assertEqual(loaded.variable_evidence.locals[0].value, "READY")
         self.assertEqual(loaded.variable_evidence.unknown[0].name, "dup")
 
+    def test_save_and_load_round_trip_embeds_register_sources_object(self) -> None:
+        bundle = build_bundle_from_text("^done\n", "line one\n", svd_file_path=str(FIXTURES / "sample.svd"))
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "snapshot.json"
+            save_bundle(bundle, str(path))
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            loaded = load_bundle(str(path))
+
+        self.assertIn("registers", payload["sources"])
+        self.assertEqual(payload["sources"]["registers"]["device_name"], "STM32L432KCTest")
+        self.assertEqual(payload["sources"]["registers"]["register_count"], 4)
+        self.assertTrue(loaded.has_embedded_register_source)
+        self.assertEqual(loaded.sources.registers.peripherals[0].name, "GPIOA")
+
     def test_save_and_load_round_trip_embeds_sources_object(self) -> None:
         bundle = build_bundle_from_text("^done\n", "line one\nline two\n")
 
@@ -161,6 +179,20 @@ class ArtifactSchemaTests(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "embedded gdb source"):
             render_report(loaded, options=ReportRenderOptions(include_gdb=True))
+
+    def test_legacy_snapshot_rejects_embedded_register_inspection_with_clear_error(self) -> None:
+        bundle = build_bundle_from_text("", "")
+        payload = bundle.to_dict()
+        payload.pop("schema_version", None)
+        payload.pop("sources", None)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "legacy.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            loaded = load_bundle(str(path))
+
+        with self.assertRaisesRegex(RuntimeError, "embedded register source"):
+            render_report(loaded, options=ReportRenderOptions(regs_list_selector=""))
 
     def test_legacy_snapshot_rejects_embedded_rtt_inspection_with_clear_error(self) -> None:
         bundle = build_bundle_from_text("", "")

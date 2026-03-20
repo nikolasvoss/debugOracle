@@ -20,7 +20,6 @@ during this refactor. It is intentionally curated rather than a flat dump of eve
 | `builder` | `debugoracle/builder.py` | [`builder.md`](builder.md) |
 | `cli` | `debugoracle/cli/__init__.py` | [`cli.md`](cli.md) |
 | `main` | `debugoracle/cli/main.py` | [`main.md`](main.md) |
-| `models` | `debugoracle/artifacts/models.py` | [`models.md`](models.md) |
 | `storage` | `debugoracle/pipeline/storage.py` | [`storage.md`](storage.md) |
 | `status_capture` | `debugoracle/cli/commands/status_capture.py` | [`status_capture.md`](status_capture.md) |
 | `run_stop` | `debugoracle/cli/commands/run_stop.py` | [`run_stop.md`](run_stop.md) |
@@ -28,6 +27,7 @@ during this refactor. It is intentionally curated rather than a flat dump of eve
 | `halt_snapshot` | `debugoracle/sources/debuggers/gdb/halt_snapshot.py` | [`halt_snapshot.md`](halt_snapshot.md) |
 | `live` | `debugoracle/live.py` | [`live.md`](live.md) |
 | `memory` | `debugoracle/sources/debuggers/gdb/memory.py` | [`memory.md`](memory.md) |
+| `peripheral_registers` | `debugoracle/sources/debuggers/gdb/peripheral_registers.py` | [`peripheral_registers.md`](peripheral_registers.md) |
 | `mi` | `debugoracle/mi.py` | [`mi.md`](mi.md) |
 | `registers` | `debugoracle/sources/debuggers/gdb/registers.py` | [`registers.md`](registers.md) |
 | `rtt` | `debugoracle/rtt.py` | [`rtt.md`](rtt.md) |

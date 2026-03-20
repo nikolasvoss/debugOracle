@@ -30,6 +30,8 @@ def cmd_fetch(args: argparse.Namespace) -> int:
         gdb_mi=gdb_mi,
         rtt=rtt,
     )
+    if getattr(args, "svd_file", None):
+        require_readable_file(resolve_workspace_path(args.svd_file, workspace_root), "SVD")
     bundle = resolve_bundle(
         args,
         gdb_mi=gdb_mi,
@@ -70,6 +72,8 @@ def cmd_report(args: argparse.Namespace) -> int:
         include_rtt=bool(getattr(args, "rtt", False)),
         verbose=bool(getattr(args, "verbose", False)),
         tail=getattr(args, "tail", None),
+        regs_list_selector=getattr(args, "regs_list", None),
+        regs_selectors=list(args.regs or []) if args.regs is not None else None,
     )
     try:
         output = render_report(bundle, options=options)
@@ -86,6 +90,8 @@ def emit_fetch_summary(bundle: InvestigationArtifact, output_path: str) -> None:
         embedded_sources.append("gdb")
     if rtt_source.raw_text:
         embedded_sources.append("rtt")
+    if bundle.has_embedded_register_source:
+        embedded_sources.append("registers")
 
     print(f"Snapshot ID: {bundle.snapshot_id}")
     print(f"Output Path: {output_path}")
@@ -101,6 +107,16 @@ def emit_fetch_summary(bundle: InvestigationArtifact, output_path: str) -> None:
         f"{len((rtt_source.raw_text or '').encode('utf-8'))} bytes, "
         f"{rtt_source.line_count} lines"
     )
+    if bundle.has_embedded_register_source:
+        register_source = bundle.sources.registers
+        print(
+            "- regs: "
+            f"{register_source.peripheral_count} peripherals, "
+            f"{register_source.register_count} registers, "
+            f"{register_source.success_count} success, "
+            f"{register_source.failure_count} failure, "
+            f"{register_source.skipped_count} skipped"
+        )
 
 
 def resolve_bundle(
@@ -213,9 +229,12 @@ def resolve_bundle(
             rtt_window=rtt_window,
             export_raw=getattr(args, "export_raw", False),
             export_dir=export_dir or config.snapshot_file.parent,
+            svd_file_path=resolve_workspace_path(getattr(args, "svd_file", None), workspace_root),
         )
     except OSError as error:
         raise SystemExit(f"Unable to read one of the required input files: {error}") from error
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
 
 
 def resolve_required_snapshot(

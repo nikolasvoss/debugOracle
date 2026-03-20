@@ -4,7 +4,7 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
-from ..artifacts.models import ArtifactSources, EvidenceBundle, GdbSource, RttSource, VariableEvidence
+from ..artifacts.models import ArtifactSources, EvidenceBundle, GdbSource, RegisterSource, RttSource, VariableEvidence
 
 
 def build_artifact_from_sources(
@@ -19,6 +19,7 @@ def build_artifact_from_sources(
     rtt_window: int,
     export_raw: bool = False,
     export_dir: str | Path | None = None,
+    register_source: RegisterSource | None = None,
 ) -> EvidenceBundle:
     recent_rtt = _select_recent_rtt(rtt_text, rtt_window)
 
@@ -85,7 +86,20 @@ def build_artifact_from_sources(
             line_count=len(rtt_lines),
             embedded=has_rtt_source,
         ),
+        registers=register_source or RegisterSource(embedded=False),
     )
+
+    register_provenance: dict[str, Any] = {}
+    if sources.registers.embedded:
+        register_provenance = {
+            "register_svd_source": sources.registers.svd_source,
+            "register_device_name": sources.registers.device_name,
+            "register_peripheral_count": sources.registers.peripheral_count,
+            "register_count": sources.registers.register_count,
+            "register_success_count": sources.registers.success_count,
+            "register_failure_count": sources.registers.failure_count,
+            "register_skipped_count": sources.registers.skipped_count,
+        }
 
     return EvidenceBundle(
         snapshot_id=_make_snapshot_id(gdb_text, rtt_text, captured_at),
@@ -122,6 +136,7 @@ def build_artifact_from_sources(
                 for pattern, count in transcript.noise_pattern_counts.most_common(8)
             ],
             "raw_line_warning_count": transcript.non_mi_line_count,
+            **register_provenance,
             **raw_export,
         },
         session_events=gdb_events,

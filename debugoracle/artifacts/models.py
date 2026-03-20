@@ -84,9 +84,43 @@ class RttSource:
 
 
 @dataclass
+class RegisterEntry:
+    name: str
+    address: str
+    width_bits: int
+    read_status: str
+    value_hex: str | None = None
+    failure_reason: str | None = None
+    skip_reason: str | None = None
+    access: str | None = None
+
+
+@dataclass
+class PeripheralRegisterSet:
+    name: str
+    base_address: str
+    registers: list[RegisterEntry] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+
+
+@dataclass
+class RegisterSource:
+    embedded: bool = False
+    svd_source: str | None = None
+    device_name: str | None = None
+    peripheral_count: int = 0
+    register_count: int = 0
+    success_count: int = 0
+    failure_count: int = 0
+    skipped_count: int = 0
+    peripherals: list[PeripheralRegisterSet] = field(default_factory=list)
+
+
+@dataclass
 class ArtifactSources:
     gdb: GdbSource = field(default_factory=GdbSource)
     rtt: RttSource = field(default_factory=RttSource)
+    registers: RegisterSource = field(default_factory=RegisterSource)
 
 
 @dataclass
@@ -125,6 +159,10 @@ class InvestigationArtifact:
     def has_embedded_rtt_source(self) -> bool:
         return self.sources.rtt.embedded
 
+    @property
+    def has_embedded_register_source(self) -> bool:
+        return self.sources.registers.embedded
+
     def require_embedded_gdb_source(self) -> GdbSource:
         if not self.has_embedded_gdb_source:
             raise RuntimeError("embedded gdb source data is unavailable in this snapshot")
@@ -134,6 +172,11 @@ class InvestigationArtifact:
         if not self.has_embedded_rtt_source:
             raise RuntimeError("embedded rtt source data is unavailable in this snapshot")
         return self.sources.rtt
+
+    def require_embedded_register_source(self) -> RegisterSource:
+        if not self.has_embedded_register_source:
+            raise RuntimeError("embedded register source data is unavailable in this snapshot")
+        return self.sources.registers
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -221,7 +264,10 @@ __all__ = [
     "GdbSource",
     "InvestigationArtifact",
     "InvestigationRequest",
+    "PeripheralRegisterSet",
     "PromptPackage",
+    "RegisterEntry",
+    "RegisterSource",
     "RttSource",
     "SessionEvent",
     "StackFrame",
@@ -300,6 +346,7 @@ def _parse_sources(raw: dict[str, Any]) -> ArtifactSources:
     if isinstance(payload, dict):
         gdb_raw = payload.get("gdb") if isinstance(payload.get("gdb"), dict) else {}
         rtt_raw = payload.get("rtt") if isinstance(payload.get("rtt"), dict) else {}
+        registers_raw = payload.get("registers") if isinstance(payload.get("registers"), dict) else {}
         gdb_events = _parse_session_events(gdb_raw.get("events"))
         rtt_lines = [
             _as_optional_str(line, "")
@@ -319,6 +366,7 @@ def _parse_sources(raw: dict[str, Any]) -> ArtifactSources:
                 line_count=_to_int(rtt_raw.get("line_count")) if _to_int(rtt_raw.get("line_count")) is not None else len(rtt_lines),
                 embedded=True,
             ),
+            registers=_parse_register_source(registers_raw),
         )
 
     legacy_events = _parse_session_events(raw.get("session_events"))
@@ -330,6 +378,68 @@ def _parse_sources(raw: dict[str, Any]) -> ArtifactSources:
     return ArtifactSources(
         gdb=GdbSource(raw_text=None, events=legacy_events, event_count=len(legacy_events), embedded=False),
         rtt=RttSource(raw_text=None, lines=legacy_rtt, line_count=len(legacy_rtt), embedded=False),
+        registers=RegisterSource(embedded=False),
+    )
+
+
+def _parse_register_source(value: object) -> RegisterSource:
+    if not isinstance(value, dict):
+        return RegisterSource(embedded=False)
+    embedded = bool(value.get("embedded", False))
+    if not embedded:
+        return RegisterSource(embedded=False)
+    peripherals: list[PeripheralRegisterSet] = []
+    for raw_peripheral in _as_list(value.get("peripherals"), []):
+        if not isinstance(raw_peripheral, dict):
+            continue
+        name = _as_optional_str(raw_peripheral.get("name"))
+        base_address = _as_optional_str(raw_peripheral.get("base_address"))
+        if name is None or base_address is None:
+            continue
+        registers: list[RegisterEntry] = []
+        for raw_register in _as_list(raw_peripheral.get("registers"), []):
+            if not isinstance(raw_register, dict):
+                continue
+            register_name = _as_optional_str(raw_register.get("name"))
+            address = _as_optional_str(raw_register.get("address"))
+            width_bits = _to_int(raw_register.get("width_bits"))
+            read_status = _as_optional_str(raw_register.get("read_status"))
+            if register_name is None or address is None or width_bits is None or read_status is None:
+                continue
+            registers.append(
+                RegisterEntry(
+                    name=register_name,
+                    address=address,
+                    width_bits=width_bits,
+                    read_status=read_status,
+                    value_hex=_as_optional_str(raw_register.get("value_hex")),
+                    failure_reason=_as_optional_str(raw_register.get("failure_reason")),
+                    skip_reason=_as_optional_str(raw_register.get("skip_reason")),
+                    access=_as_optional_str(raw_register.get("access")),
+                )
+            )
+        peripherals.append(
+            PeripheralRegisterSet(
+                name=name,
+                base_address=base_address,
+                registers=registers,
+                warnings=[
+                    _as_optional_str(warning, "")
+                    for warning in _as_list(raw_peripheral.get("warnings"), [])
+                    if warning is not None
+                ],
+            )
+        )
+    return RegisterSource(
+        embedded=True,
+        svd_source=_as_optional_str(value.get("svd_source")),
+        device_name=_as_optional_str(value.get("device_name")),
+        peripheral_count=_to_int(value.get("peripheral_count")) if _to_int(value.get("peripheral_count")) is not None else len(peripherals),
+        register_count=_to_int(value.get("register_count")) if _to_int(value.get("register_count")) is not None else sum(len(item.registers) for item in peripherals),
+        success_count=_to_int(value.get("success_count")) or 0,
+        failure_count=_to_int(value.get("failure_count")) or 0,
+        skipped_count=_to_int(value.get("skipped_count")) or 0,
+        peripherals=peripherals,
     )
 
 
