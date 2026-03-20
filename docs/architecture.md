@@ -47,9 +47,9 @@ DebugOracle has five functional layers:
 3. Investigation artifact persistence
    Canonical storage of the shaped evidence for reuse, rendering, and later agent requests.
 4. Rendering surfaces
-   Human and agent outputs such as status, snapshot, report, and prompt.
+   Human and agent outputs such as status, report, optional prompt packaging, and other read-only inspection views.
 5. Entry surfaces
-   CLI today, MCP and other agent-facing interfaces later.
+   CLI today, with agent-mediated CLI workflows as the near-term operating model; MCP and other agent-facing interfaces later.
 
 ## Source Families
 
@@ -364,12 +364,13 @@ stateDiagram-v2
 
 ## Documentation Layout
 
-Use a two-level documentation structure:
+Use a three-part documentation structure:
 
+- [docs/strategy.md](strategy.md) for the product operating model and canonical story
 - [docs/architecture.md](architecture.md) for the whole-system view and diagrams
 - [docs/specs/README.md](specs/README.md) for code-near module specs
 
-When implementation changes materially alter module boundaries, update this architecture document first, then update the affected module specs.
+When implementation changes materially alter module boundaries, update this architecture document first, then update the affected module specs. When the product operating model changes, update the strategy doc first so the architecture stays aligned to the same story.
 
 ## Migration Direction
 
