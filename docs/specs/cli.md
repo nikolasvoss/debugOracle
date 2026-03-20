@@ -83,6 +83,7 @@ source is available.
 
 - Snapshot file: `--snapshot-file`
 - Optional SVD file during `fetch`: `--svd-file`
+  `fetch --svd-file <file>` opts into halted live peripheral capture; builder-level SVD parsing stays catalog-only unless fetch enables it explicitly.
 
 Snapshots are reusable, machine-readable evidence bundles previously written by `fetch`.
 `report` and `prompt` resolve only snapshots; they do not accept raw evidence inputs.

@@ -14,7 +14,7 @@ from .sources.debuggers.gdb.halt_snapshot import (
     GDB_HALT_SNAPSHOT_SOURCE,
     build_halt_snapshot,
 )
-from .sources.debuggers.gdb.peripheral_registers import collect_peripheral_registers_from_svd
+from .sources.debuggers.gdb.peripheral_registers import capture_peripheral_registers_from_svd, collect_peripheral_registers_from_svd
 from .sources.debuggers.gdb.transcript import (
     GDB_TRANSCRIPT_SOURCE,
     parse_gdb_transcript,
@@ -40,6 +40,7 @@ def build_bundle_from_files(
     export_raw: bool = False,
     export_dir: str | Path | None = None,
     svd_file_path: str | None = None,
+    enable_live_peripheral_capture: bool = False,
 ) -> EvidenceBundle:
     gdb_text = (
         _read_text_file(gdb_mi_path, errors="replace", required=True)
@@ -56,6 +57,7 @@ def build_bundle_from_files(
         export_raw=export_raw,
         export_dir=export_dir,
         svd_file_path=svd_file_path,
+        enable_live_peripheral_capture=enable_live_peripheral_capture,
     )
 
 
@@ -69,6 +71,7 @@ def build_bundle_from_stream(
     export_raw: bool = False,
     export_dir: str | Path | None = None,
     svd_file_path: str | None = None,
+    enable_live_peripheral_capture: bool = False,
 ) -> EvidenceBundle:
     gdb_text = stream.read()
     return build_bundle_from_text(
@@ -80,6 +83,7 @@ def build_bundle_from_stream(
         export_raw=export_raw,
         export_dir=export_dir,
         svd_file_path=svd_file_path,
+        enable_live_peripheral_capture=enable_live_peripheral_capture,
     )
 
 
@@ -93,6 +97,7 @@ def build_bundle_from_text(
     export_raw: bool = False,
     export_dir: str | Path | None = None,
     svd_file_path: str | None = None,
+    enable_live_peripheral_capture: bool = False,
 ) -> EvidenceBundle:
     captured_at = utc_now()
     transcript = parse_gdb_transcript(gdb_text, now_text=utc_now)
@@ -102,7 +107,11 @@ def build_bundle_from_text(
         latest_registers=transcript.latest_registers,
         variable_evidence=transcript.variable_evidence,
     )
-    register_source = _collect_register_source(svd_file_path)
+    register_source = _collect_register_source(
+        svd_file_path,
+        gdb_text=gdb_text,
+        enable_live_peripheral_capture=enable_live_peripheral_capture,
+    )
     artifact = build_artifact_from_sources(
         captured_at=captured_at,
         gdb_text=gdb_text,
@@ -121,9 +130,16 @@ def build_bundle_from_text(
     return artifact
 
 
-def _collect_register_source(svd_file_path: str | None) -> RegisterSource | None:
+def _collect_register_source(
+    svd_file_path: str | None,
+    *,
+    gdb_text: str,
+    enable_live_peripheral_capture: bool = False,
+) -> RegisterSource | None:
     if not svd_file_path:
         return None
+    if enable_live_peripheral_capture:
+        return capture_peripheral_registers_from_svd(svd_file_path, mi_text=gdb_text)
     return collect_peripheral_registers_from_svd(svd_file_path)
 
 def _export_raw_inputs(

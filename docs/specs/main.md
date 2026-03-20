@@ -50,12 +50,17 @@ Parser constraints:
 - inspect flags may be combined, in which case `report` emits one compact JSON object containing
   only the requested sections
 
-
 ## Register Inspection Flags
 
-The parser now owns snapshot-only register inspection flags for `report`:
+The parser owns snapshot-only register inspection flags for `report`:
 
 - `--regs-list [PERIPHERAL]`
 - `--regs [SELECTOR ...]` where selectors are `PERIPHERAL` or `PERIPHERAL:REGISTER`
 
-Dispatch should treat these as snapshot filters only; `fetch` remains the capture surface for SVD-backed register catalogs.
+Dispatch treats these as snapshot filters only.
+
+## Fetch SVD Contract
+
+- `fetch --svd-file <file>` is the capture surface for SVD-backed peripheral register values.
+- The current implementation expects a recent halted stop in the GDB/MI log and uses the default OpenOCD control endpoint for safe peripheral register reads.
+- `fetch` keeps the SVD request on the capture side; `report` remains inspection-only.

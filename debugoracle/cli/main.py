@@ -226,7 +226,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     fetch.add_argument(
         "--svd-file",
-        help="Optional CMSIS-SVD file used to embed the device register catalog into the snapshot",
+        help="Optional CMSIS-SVD file used by fetch to capture safe-readable peripheral register values into the snapshot via the default OpenOCD backend",
     )
     fetch.set_defaults(func=cmd_fetch)
 

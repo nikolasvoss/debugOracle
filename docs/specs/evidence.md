@@ -30,6 +30,7 @@ Own the CLI flows that resolve raw or saved evidence, build or load artifacts, a
 ## Command Resolution Contract
 
 - `cmd_fetch` is raw-only and never loads a snapshot as its primary evidence source.
+- `cmd_fetch --svd-file <file>` is the only CLI path that enables live peripheral capture; it passes an explicit opt-in through the builder instead of relying on `svd_file_path` alone.
 - `cmd_report` is snapshot-only and fails clearly when no snapshot can be resolved.
 - `cmd_report` points users to `fetch` when no snapshot is available.
 - `cmd_prompt` is snapshot-only and fails clearly when no snapshot can be resolved.

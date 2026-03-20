@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import json
+import os
+import socketserver
 import tempfile
+import threading
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from debugoracle.artifacts.models import CURRENT_BUNDLE_SCHEMA_VERSION, EvidenceBundle, VariableEntry
 from debugoracle.renderers.report import ReportRenderOptions, render_report
@@ -99,8 +103,34 @@ class ArtifactSchemaTests(unittest.TestCase):
         self.assertEqual(loaded.variable_evidence.locals[0].value, "READY")
         self.assertEqual(loaded.variable_evidence.unknown[0].name, "dup")
 
+    def test_builder_defaults_to_catalog_only_register_embedding(self) -> None:
+        bundle = build_bundle_from_text(
+            '*stopped,reason="breakpoint-hit"\n^done\n',
+            'line one\n',
+            svd_file_path=str(FIXTURES / "sample.svd"),
+        )
+
+        self.assertTrue(bundle.has_embedded_register_source)
+        self.assertEqual(bundle.sources.registers.success_count, 0)
+        self.assertEqual(bundle.sources.registers.failure_count, 0)
+        self.assertEqual(bundle.provenance["register_capture_mode"], "catalog")
+
     def test_save_and_load_round_trip_embeds_register_sources_object(self) -> None:
-        bundle = build_bundle_from_text("^done\n", "line one\n", svd_file_path=str(FIXTURES / "sample.svd"))
+        with _FakeOpenOcdServer(values={0x48000000: "0xaaaaaaaa", 0x48000010: "0x00000001"}) as server:
+            with patch.dict(
+                os.environ,
+                {
+                    "DEBUGORACLE_OPENOCD_HOST": server.host,
+                    "DEBUGORACLE_OPENOCD_PORT": str(server.port),
+                },
+                clear=False,
+            ):
+                bundle = build_bundle_from_text(
+                    "*stopped,reason=\"breakpoint-hit\"\n^done\n",
+                    "line one\n",
+                    svd_file_path=str(FIXTURES / "sample.svd"),
+                    enable_live_peripheral_capture=True,
+                )
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "snapshot.json"
@@ -111,6 +141,9 @@ class ArtifactSchemaTests(unittest.TestCase):
         self.assertIn("registers", payload["sources"])
         self.assertEqual(payload["sources"]["registers"]["device_name"], "STM32L432KCTest")
         self.assertEqual(payload["sources"]["registers"]["register_count"], 4)
+        self.assertEqual(payload["sources"]["registers"]["success_count"], 2)
+        self.assertEqual(payload["sources"]["registers"]["skipped_count"], 2)
+        self.assertEqual(payload["provenance"]["register_capture_mode"], "live")
         self.assertTrue(loaded.has_embedded_register_source)
         self.assertEqual(loaded.sources.registers.peripherals[0].name, "GPIOA")
 
@@ -267,6 +300,57 @@ class ArtifactSchemaTests(unittest.TestCase):
 
         self.assertEqual(loaded.live_state["source"], "demo")
         self.assertEqual(loaded.provenance["custom_note"]["source"], "fixture")
+
+
+class _FakeOpenOcdHandler(socketserver.BaseRequestHandler):
+    def handle(self) -> None:
+        buffer = b""
+        while True:
+            chunk = self.request.recv(1024)
+            if not chunk:
+                return
+            buffer += chunk
+            while b"\x1a" in buffer:
+                raw_command, buffer = buffer.split(b"\x1a", 1)
+                command = raw_command.decode("utf-8", errors="replace").strip()
+                response = self.server.build_response(command)
+                self.request.sendall(response.encode("utf-8") + b"\x1a")
+
+
+class _FakeOpenOcdServer(socketserver.ThreadingTCPServer):
+    allow_reuse_address = True
+
+    def __init__(self, *, values: dict[int, str]) -> None:
+        super().__init__(("127.0.0.1", 0), _FakeOpenOcdHandler)
+        self._values = values
+        self._thread = threading.Thread(target=self.serve_forever, daemon=True)
+
+    @property
+    def host(self) -> str:
+        return str(self.server_address[0])
+
+    @property
+    def port(self) -> int:
+        return int(self.server_address[1])
+
+    def __enter__(self) -> "_FakeOpenOcdServer":
+        self._thread.start()
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.shutdown()
+        self.server_close()
+        self._thread.join(timeout=1)
+
+    def build_response(self, command: str) -> str:
+        parts = command.split()
+        if len(parts) != 4 or parts[0] != "read_memory":
+            return "unsupported-command"
+        address = int(parts[1], 0)
+        count = int(parts[3], 0)
+        if count != 1 or address not in self._values:
+            return "error"
+        return self._values[address]
 
 
 if __name__ == "__main__":

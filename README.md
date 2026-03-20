@@ -47,6 +47,13 @@ Use the example below to make first capture quick:
 ./dbgoracle report
 ```
 
+Optional halted peripheral capture from an SVD definition:
+
+```bash
+./dbgoracle fetch --svd-file examples/STM32L432.svd
+./dbgoracle report --regs-list
+```
+
 Optional handoff packaging:
 
 ```bash
@@ -69,6 +76,8 @@ What to configure in Cortex-Debug:
 - MI log path should point to `./cortex-debug-shared-mi.log` or `.dbgoracle/cortex-debug-shared-mi.log`.
 - RTT should stay enabled in Cortex-Debug/OpenOCD so the RTT TCP server comes up, but DebugOracle should write `.dbgoracle/session.rtt` via `run` (or `capture-rtt`).
 - Keep captures bounded: stop at the event you care about and end the debug session to avoid mixing multiple stops.
+- `fetch --svd-file <file>` is the explicit CLI trigger for halted live peripheral capture; builder-level SVD parsing stays catalog-only unless fetch enables it.
+- `fetch --svd-file <file>` expects the most recent target-state event in the recent MI tail to still be a stop and uses the default OpenOCD control endpoint for safe peripheral register reads.
 - Refresh Call Stack, Registers, and Variables/Locals before capture so the latest stop has rich context.
 - Use one RTT consumer only while `run`/`capture-rtt` is attached.
 

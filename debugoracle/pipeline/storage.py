@@ -99,6 +99,7 @@ def build_artifact_from_sources(
             "register_success_count": sources.registers.success_count,
             "register_failure_count": sources.registers.failure_count,
             "register_skipped_count": sources.registers.skipped_count,
+            "register_capture_mode": _register_capture_mode(sources.registers),
         }
 
     return EvidenceBundle(
@@ -148,6 +149,12 @@ def _select_recent_rtt(rtt_text: str, rtt_window: int) -> list[str]:
     if rtt_window <= 0:
         return []
     return lines[-rtt_window:] if len(lines) > rtt_window else lines
+
+
+def _register_capture_mode(register_source: RegisterSource) -> str:
+    if register_source.success_count or register_source.failure_count:
+        return "live"
+    return "catalog"
 
 
 def _normalize_non_mi_pattern_key(value: str) -> str:

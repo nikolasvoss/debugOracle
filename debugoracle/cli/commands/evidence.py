@@ -222,6 +222,8 @@ def resolve_bundle(
     )
     if rtt:
         require_readable_file(rtt, "RTT")
+    resolved_svd_file = resolve_workspace_path(getattr(args, "svd_file", None), workspace_root)
+
     try:
         return build_bundle_from_files(
             gdb_mi,
@@ -229,7 +231,8 @@ def resolve_bundle(
             rtt_window=rtt_window,
             export_raw=getattr(args, "export_raw", False),
             export_dir=export_dir or config.snapshot_file.parent,
-            svd_file_path=resolve_workspace_path(getattr(args, "svd_file", None), workspace_root),
+            svd_file_path=resolved_svd_file,
+            enable_live_peripheral_capture=bool(resolved_svd_file and command_name == "fetch"),
         )
     except OSError as error:
         raise SystemExit(f"Unable to read one of the required input files: {error}") from error

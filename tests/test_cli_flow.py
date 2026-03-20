@@ -3,11 +3,14 @@ from __future__ import annotations
 import io
 import json
 import os
+import socketserver
 import tempfile
+import threading
 import unittest
 from contextlib import redirect_stderr
 from contextlib import redirect_stdout
 from pathlib import Path
+from unittest.mock import patch
 
 from debugoracle.builder import build_bundle_from_files, save_bundle
 from debugoracle.cli import main
@@ -15,6 +18,10 @@ from debugoracle.cli.main import build_parser
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
+DEFAULT_OPENOCD_VALUES = {
+    0x48000000: "0xaaaaaaaa",
+    0x48000010: "0x00000001",
+}
 
 
 class DebugOracleCliTests(unittest.TestCase):
@@ -151,7 +158,7 @@ class DebugOracleCliTests(unittest.TestCase):
         self.assertIn("rtt", payload)
         self.assertIn("provenance", payload)
 
-    def test_fetch_with_svd_embeds_register_catalog_and_prints_register_counts(self) -> None:
+    def test_fetch_with_svd_captures_register_values_and_prints_register_counts(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
             (workspace / "cortex-debug-shared-mi.log").write_text(
@@ -163,19 +170,25 @@ class DebugOracleCliTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            previous = os.getcwd()
-            try:
-                os.chdir(workspace)
-                stdout, stderr = self._run_cli(["fetch", "--svd-file", str(FIXTURES / "sample.svd")], capture_stderr=True)
-            finally:
-                os.chdir(previous)
+            with _FakeOpenOcdServer(values=DEFAULT_OPENOCD_VALUES) as server:
+                stdout, stderr = self._run_cli_in_workspace(
+                    workspace,
+                    ["fetch", "--svd-file", str(FIXTURES / "sample.svd")],
+                    env={
+                        "DEBUGORACLE_OPENOCD_HOST": server.host,
+                        "DEBUGORACLE_OPENOCD_PORT": str(server.port),
+                    },
+                    capture_stderr=True,
+                )
 
             payload = json.loads((workspace / "latest_snapshot.json").read_text(encoding="utf-8"))
 
         self.assertIn("- regs:", stdout)
         self.assertEqual(payload["sources"]["registers"]["device_name"], "STM32L432KCTest")
         self.assertEqual(payload["sources"]["registers"]["register_count"], 4)
-        self.assertEqual(payload["sources"]["registers"]["skipped_count"], 4)
+        self.assertEqual(payload["sources"]["registers"]["success_count"], 2)
+        self.assertEqual(payload["sources"]["registers"]["skipped_count"], 2)
+        self.assertIn("Auto-discovered input paths for fetch:", stderr)
 
     def test_report_regs_list_outputs_captured_peripherals(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -185,6 +198,8 @@ class DebugOracleCliTests(unittest.TestCase):
         payload = json.loads(output)
         self.assertEqual(payload["registers_list"]["device_name"], "STM32L432KCTest")
         self.assertEqual([item["name"] for item in payload["registers_list"]["peripherals"]], ["GPIOA", "RCC"])
+        self.assertEqual(payload["registers_list"]["peripherals"][0]["success_count"], 2)
+        self.assertEqual(payload["registers_list"]["peripherals"][1]["skipped_count"], 2)
 
     def test_report_regs_list_peripheral_outputs_registers(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -194,6 +209,7 @@ class DebugOracleCliTests(unittest.TestCase):
         payload = json.loads(output)
         self.assertEqual(payload["registers_list"]["peripheral"], "GPIOA")
         self.assertEqual([item["name"] for item in payload["registers_list"]["registers"]], ["MODER", "IDR"])
+        self.assertEqual([item["read_status"] for item in payload["registers_list"]["registers"]], ["success", "success"])
 
     def test_report_regs_outputs_filtered_register_values(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -203,7 +219,9 @@ class DebugOracleCliTests(unittest.TestCase):
         payload = json.loads(output)
         self.assertEqual([item["name"] for item in payload["registers"]["peripherals"]], ["GPIOA", "RCC"])
         self.assertEqual(payload["registers"]["peripherals"][0]["registers"][0]["name"], "MODER")
-        self.assertEqual(payload["registers"]["peripherals"][0]["registers"][0]["read_status"], "skipped")
+        self.assertEqual(payload["registers"]["peripherals"][0]["registers"][0]["read_status"], "success")
+        self.assertEqual(payload["registers"]["peripherals"][0]["registers"][0]["value_hex"], "0xaaaaaaaa")
+        self.assertEqual(payload["registers"]["peripherals"][1]["registers"][0]["read_status"], "skipped")
 
     def test_report_regs_list_fails_when_register_data_is_unavailable(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -256,11 +274,28 @@ class DebugOracleCliTests(unittest.TestCase):
         self.assertIn("session.rtt", message)
 
     def _write_snapshot(self, path: Path, svd_file: Path | None = None) -> Path:
-        bundle = build_bundle_from_files(
-            str(FIXTURES / "sample.mi"),
-            str(FIXTURES / "sample.rtt"),
-            svd_file_path=str(svd_file) if svd_file else None,
-        )
+        if svd_file is None:
+            bundle = build_bundle_from_files(
+                str(FIXTURES / "sample.mi"),
+                str(FIXTURES / "sample.rtt"),
+                svd_file_path=None,
+            )
+        else:
+            with _FakeOpenOcdServer(values=DEFAULT_OPENOCD_VALUES) as server:
+                with patch.dict(
+                    os.environ,
+                    {
+                        "DEBUGORACLE_OPENOCD_HOST": server.host,
+                        "DEBUGORACLE_OPENOCD_PORT": str(server.port),
+                    },
+                    clear=False,
+                ):
+                    bundle = build_bundle_from_files(
+                        str(FIXTURES / "sample.mi"),
+                        str(FIXTURES / "sample.rtt"),
+                        svd_file_path=str(svd_file),
+                        enable_live_peripheral_capture=True,
+                    )
         save_bundle(bundle, str(path))
         return path
 
@@ -306,6 +341,73 @@ class DebugOracleCliTests(unittest.TestCase):
             stdout.getvalue(),
             stderr_text,
         )
+
+    def _run_cli_in_workspace(
+        self,
+        workspace: Path,
+        argv: list[str],
+        *,
+        env: dict[str, str] | None = None,
+        capture_stderr: bool = False,
+    ) -> str | tuple[str, str]:
+        previous = os.getcwd()
+        try:
+            os.chdir(workspace)
+            with patch.dict(os.environ, env or {}, clear=False):
+                return self._run_cli(argv, capture_stderr=capture_stderr)
+        finally:
+            os.chdir(previous)
+
+
+class _FakeOpenOcdHandler(socketserver.BaseRequestHandler):
+    def handle(self) -> None:
+        buffer = b""
+        while True:
+            chunk = self.request.recv(1024)
+            if not chunk:
+                return
+            buffer += chunk
+            while b"\x1a" in buffer:
+                raw_command, buffer = buffer.split(b"\x1a", 1)
+                command = raw_command.decode("utf-8", errors="replace").strip()
+                response = self.server.build_response(command)
+                self.request.sendall(response.encode("utf-8") + b"\x1a")
+
+
+class _FakeOpenOcdServer(socketserver.ThreadingTCPServer):
+    allow_reuse_address = True
+
+    def __init__(self, *, values: dict[int, str]) -> None:
+        super().__init__(("127.0.0.1", 0), _FakeOpenOcdHandler)
+        self._values = values
+        self._thread = threading.Thread(target=self.serve_forever, daemon=True)
+
+    @property
+    def host(self) -> str:
+        return str(self.server_address[0])
+
+    @property
+    def port(self) -> int:
+        return int(self.server_address[1])
+
+    def __enter__(self) -> "_FakeOpenOcdServer":
+        self._thread.start()
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.shutdown()
+        self.server_close()
+        self._thread.join(timeout=1)
+
+    def build_response(self, command: str) -> str:
+        parts = command.split()
+        if len(parts) != 4 or parts[0] != "read_memory":
+            return "unsupported-command"
+        address = int(parts[1], 0)
+        count = int(parts[3], 0)
+        if count != 1 or address not in self._values:
+            return "error"
+        return self._values[address]
 
 
 if __name__ == "__main__":

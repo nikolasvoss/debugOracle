@@ -43,13 +43,6 @@ For Step 2:
 - `build_bundle_from_*` remains implemented locally
 - callers and tests are allowed to stay on the old builder import path
 
-For Step 4:
-
-- `debugoracle.builder` exposes explicit source descriptors for the current GDB-derived sources:
-  `GDB_TRANSCRIPT_SOURCE` and `GDB_HALT_SNAPSHOT_SOURCE`
-- These descriptors declare stream vs snapshot semantics before the later source-package split
-- The descriptors are metadata only in this step; they do not yet move GDB code into `debugoracle/sources/`
-
 For Step 6:
 
 - Transcript-style GDB handling now lives in `debugoracle/sources/debuggers/gdb/transcript.py`
@@ -78,8 +71,6 @@ For Variable Evidence v1:
 - RTT data is stored both as raw text and as a convenient line-oriented representation.
 - Top-level summary fields remain available for cheap access, but they are derived from the
   embedded source payloads rather than replacing them.
-
-## Migration Note
-
-Do not move bundle-building or shaping logic out of `debugoracle.builder` as part of this step.
-That work belongs to later architecture steps after the persistence boundary is stabilized.
+- When `svd_file_path` is provided without an explicit live-capture opt-in, builder embeds the SVD-derived peripheral/register catalog without touching a live backend.
+- Builder only attempts live peripheral capture when the caller sets `enable_live_peripheral_capture=True`; this is how `fetch --svd-file <file>` opts into halted OpenOCD-backed reads.
+- If live capture is enabled and the transcript does not show a recent stop, or no peripheral values are captured successfully, bundle construction fails instead of silently downgrading to a catalog-only register source.

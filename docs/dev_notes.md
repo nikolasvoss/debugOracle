@@ -8,3 +8,5 @@ these notes are just for the developer. not for agent use.
 - fetch is capture-only. report is inspection-only.
 - optional SVD-backed register catalog capture uses `fetch --svd-file <file>`.
 - default report stays short and points users to `report --regs-list` and `report --regs`.
+- halt detect logic could be flaky.
+- add tests with live openocd backend.
