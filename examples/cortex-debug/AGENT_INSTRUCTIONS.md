@@ -1,26 +1,28 @@
 # DebugOracle Agent Runbook
 
 Goal:
-- Help an agent use DebugOracle correctly inside an STM32 workspace.
-- Keep the workflow aligned with the current proof of concept:
-  real `NUCLEO-L432KC` session, GDB-first evidence, read-only analysis after
-  logs have been captured.
+- Help an agent use DebugOracle correctly inside a Cortex-Debug/OpenOCD STM32
+  workspace.
+- Keep the workflow aligned with the current CLI model:
+  transport health and RTT capture, raw-evidence fetch, and snapshot-only
+  inspection.
 
-## PoC assumptions
+## Current product boundary
 
-- The relevant evidence source is the GDB/MI log.
-- RTT is optional and not required for success.
-- Live reads are not part of this PoC.
-- DebugOracle does not control the debugger.
-- A useful report is expected to contain GDB stop information such as stop
-  reason, stack, registers, or locals, or an explicit warning when some of that
-  context is missing.
+- DebugOracle is evidence-first.
+- It does not control the debugger.
+- It does not write to target memory.
+- It does not read the workspace source tree for you.
+- The agent should combine DebugOracle evidence with source and workspace
+  context when answering the user.
 
 ## Interpret these requests as DebugOracle tasks
 
 - "fetch the prompt from dbgoracle"
 - "get the debug report"
 - "show me the detailed embedded evidence"
+- "show me the register catalog"
+- "show me stored peripheral register values"
 - "use dbgoracle on this workspace"
 
 The agent should prefer the smallest successful path that produces the
@@ -30,68 +32,176 @@ requested artifact.
 
 Do not guess DebugOracle flags, output modes, or command behavior.
 
-When the user asks for more detail, a different rendering mode, or an unfamiliar
-command, inspect the CLI help first:
+When the user asks for a different rendering mode, an unfamiliar command, or a
+transport workflow detail, inspect the CLI help first:
 
 ```bash
 dbgoracle --help
 dbgoracle <command> --help
 ```
 
-Use the actual supported flags from help output. For example,
-`dbgoracle report` supports detailed inspection with `--vars`, `--gdb`, `--rtt`,
-and `--verbose` rather than a separate `snapshot` rendering command.
+Use only the public CLI surface shown in help:
+
+- `status`
+- `capture-rtt`
+- `run`
+- `stop`
+- `fetch`
+- `report`
+- `prompt`
+
+Do not invent or rely on non-public commands such as `observe` or `snapshot`.
+
+## Command model
+
+1. Transport and workspace health
+   - `dbgoracle status`
+   - `dbgoracle capture-rtt`
+   - `dbgoracle run`
+   - `dbgoracle stop`
+2. Evidence capture and stabilization
+   - `dbgoracle fetch`
+3. Evidence rendering and packaging
+   - `dbgoracle report`
+   - `dbgoracle prompt`
+
+Key rule:
+
+- `fetch` is raw-evidence capture only.
+- `report` is snapshot-only inspection.
+- `prompt` is snapshot-only packaging.
+- Default `report` output is intentionally short. Use inspect flags for detail.
 
 ## Command decision path
 
-1. If a usable snapshot already exists, prefer rendering from it.
-2. If no snapshot exists but a GDB/MI log exists, run `dbgoracle fetch`.
-3. After a snapshot exists:
-   - use `dbgoracle report` for a human-readable GDB evidence summary
-   - use `dbgoracle prompt --goal "Explain why the target stopped here"` for an
-     agent handoff artifact
-   - use `dbgoracle report --gdb` or `dbgoracle report --rtt` for detailed
-     structured source inspection
-   - use `dbgoracle report --verbose` for one compact JSON object with summary,
-     variables, and embedded source sections
-4. If neither a snapshot nor a usable GDB/MI log exists, report that required
+1. Start with workspace health:
+
+```bash
+dbgoracle status --workspace-root .
+```
+
+2. If a usable snapshot already exists, do not rebuild it just to inspect:
+   - use `dbgoracle report --workspace-root .`
+   - use `dbgoracle prompt --workspace-root . --goal "Explain why the target stopped here"`
+
+3. If no snapshot exists but raw evidence exists, build one:
+   - use `dbgoracle fetch --workspace-root .`
+
+4. After a snapshot exists, choose the narrowest inspection surface:
+   - default summary:
+
+```bash
+dbgoracle report --workspace-root .
+```
+
+   - variables:
+
+```bash
+dbgoracle report --workspace-root . --vars
+dbgoracle report --workspace-root . --vars myVar anotherVar
+```
+
+   - GDB evidence:
+
+```bash
+dbgoracle report --workspace-root . --gdb
+dbgoracle report --workspace-root . --gdb --tail 100
+```
+
+   - RTT evidence:
+
+```bash
+dbgoracle report --workspace-root . --rtt
+dbgoracle report --workspace-root . --rtt --tail 100
+```
+
+   - register catalog discovery:
+
+```bash
+dbgoracle report --workspace-root . --regs-list
+dbgoracle report --workspace-root . --regs-list GPIOA
+```
+
+   - stored register values and statuses:
+
+```bash
+dbgoracle report --workspace-root . --regs RCC
+dbgoracle report --workspace-root . --regs GPIOA:MODER RCC:AHB2ENR
+```
+
+   - combined structured output:
+
+```bash
+dbgoracle report --workspace-root . --gdb --vars --regs RCC
+dbgoracle report --workspace-root . --verbose
+```
+
+5. If the user asks for an agent handoff artifact rather than a human report:
+
+```bash
+dbgoracle prompt --workspace-root . --goal "Explain why the target stopped here"
+```
+
+6. If neither a snapshot nor usable raw evidence exists, report that required
    debug evidence is missing.
 
-## Preferred verification flow
+## Raw evidence expectations
 
-Use the current workspace root unless the user gives a different path.
+- GDB/MI log is the main evidence source for stop analysis.
+- RTT is optional.
+- `fetch` can build a degraded snapshot if only one selected raw source exists.
+- `report` and `prompt` do not read raw evidence directly.
 
-1. Check the current DebugOracle state:
+## Optional SVD-backed peripheral capture
 
-```bash
-dbgoracle status --workspace-root .
-```
+Use SVD-backed peripheral capture only when the user actually wants peripheral
+register evidence.
 
-2. If a reusable snapshot is already present, render from it:
-
-```bash
-dbgoracle report --workspace-root .
-dbgoracle prompt --workspace-root . --goal "Explain why the target stopped here"
-```
-
-3. If no snapshot exists but the GDB/MI log exists, build a snapshot and then
-   render:
+Capture step with the common default Tcl port:
 
 ```bash
-dbgoracle fetch --workspace-root .
-dbgoracle report --workspace-root .
-dbgoracle prompt --workspace-root . --goal "Explain why the target stopped here"
+dbgoracle fetch --workspace-root . --svd-file path/to/device.svd
 ```
 
-## Minimal workflows
-
-For "fetch the prompt from dbgoracle":
+Capture step when the current debug session exposes a remapped Tcl port:
 
 ```bash
-dbgoracle status --workspace-root .
-dbgoracle fetch --workspace-root .   # only if no usable snapshot exists
-dbgoracle prompt --workspace-root . --goal "Explain why the target stopped here"
+dbgoracle fetch --workspace-root . --svd-file path/to/device.svd --openocd-tcl-port 50001
 ```
+
+Host and port override together:
+
+```bash
+dbgoracle fetch --workspace-root . --svd-file path/to/device.svd --openocd-tcl-host 127.0.0.1 --openocd-tcl-port 50001
+```
+
+Guardrails:
+
+- `--svd-file` is valid on `fetch`, not on `report`.
+- `--openocd-tcl-host` and `--openocd-tcl-port` require `--svd-file`.
+- This is an explicit opt-in to halted live peripheral capture.
+- It requires a recent halted stop in the GDB/MI log.
+- It uses the OpenOCD Tcl control endpoint for safe reads.
+- The RTT port is not the OpenOCD Tcl port.
+- Default `report` output stays short; use `--regs-list` and `--regs` to inspect
+  the captured register catalog and stored values.
+
+## Fastest way to find the Tcl port
+
+1. Start the current Cortex-Debug session with raw server output enabled.
+2. Open the Debug Console or the shared GDB/MI log.
+3. Search for `tcl_port`.
+4. Use the printed value if it differs from `6666`.
+
+Example pattern:
+
+```text
+... -c "gdb_port 50000" -c "tcl_port 50001" -c "telnet_port 50002" ...
+```
+
+In that session, use `50001` for `--openocd-tcl-port`.
+
+## Preferred verification flows
 
 For "get the debug report":
 
@@ -101,7 +211,7 @@ dbgoracle fetch --workspace-root .   # only if no usable snapshot exists
 dbgoracle report --workspace-root .
 ```
 
-For "show me the detailed embedded evidence" or "give me verbose structured output":
+For "show me the detailed embedded evidence":
 
 ```bash
 dbgoracle status --workspace-root .
@@ -109,31 +219,61 @@ dbgoracle fetch --workspace-root .   # only if no usable snapshot exists
 dbgoracle report --workspace-root . --verbose
 ```
 
-If the user wants one specific embedded section, prefer:
+For "show me the register catalog":
 
 ```bash
-dbgoracle report --workspace-root . --gdb
-dbgoracle report --workspace-root . --rtt
-dbgoracle report --workspace-root . --vars
+dbgoracle status --workspace-root .
+dbgoracle fetch --workspace-root . --svd-file path/to/device.svd --openocd-tcl-port 50001   # only if the snapshot does not already contain register data
+dbgoracle report --workspace-root . --regs-list
+```
+
+For "show me stored peripheral register values":
+
+```bash
+dbgoracle status --workspace-root .
+dbgoracle fetch --workspace-root . --svd-file path/to/device.svd --openocd-tcl-port 50001   # only if the snapshot does not already contain register data
+dbgoracle report --workspace-root . --regs RCC
+```
+
+For "fetch the prompt from dbgoracle":
+
+```bash
+dbgoracle status --workspace-root .
+dbgoracle fetch --workspace-root .   # only if no usable snapshot exists
+dbgoracle prompt --workspace-root . --goal "Explain why the target stopped here"
 ```
 
 ## Failure handling
 
 Stop and report the issue if any of the following are true:
 
-- no GDB/MI log exists
-- the available session evidence does not let `fetch` build a snapshot
-- the report is too thin because the session did not capture meaningful halt
-  context
-- the user appears to expect live reads or debugger control
+- no snapshot exists and no usable raw evidence can be found
+- `report` or `prompt` cannot resolve a snapshot
+- the session did not capture meaningful halt context, so the report is thin
+- the user expects debugger control, breakpoint management, or target writes
+- `fetch --svd-file` is requested but the workspace does not have a recent
+  halted stop or cannot reach the OpenOCD Tcl endpoint
 
 ## Troubleshooting guidance
 
-- If the report or prompt is thin, suggest refreshing Call Stack, Registers, and
-  Variables/Locals before ending the debug session and recapturing.
-- If the snapshot is missing, check whether the workspace contains a GDB/MI log
-  before attempting `fetch`.
-- If `fetch` fails, tell the user that the current workspace does not contain
-  a usable GDB evidence input for DebugOracle.
-- If the user asks for detailed structured evidence, do not invent flags. Check
-  `dbgoracle report --help` and use the supported inspect options.
+- If `report` or `prompt` says no snapshot is available, point the user to
+  `dbgoracle fetch --workspace-root .`.
+- If the stop summary is thin, suggest refreshing Call Stack, Registers, and
+  Variables/Locals before ending the debug session and then recapturing.
+- If RTT is empty or missing, use `dbgoracle status --workspace-root .` to check
+  transport state before assuming the incident had no stream output.
+- If the user needs RTT capture managed by DebugOracle, prefer:
+
+```bash
+dbgoracle run --detach --workspace-root .
+# later
+dbgoracle stop --workspace-root .
+```
+
+- If the user needs one-shot RTT capture to a specific file, prefer
+  `dbgoracle capture-rtt --help` first and then use the supported flags from
+  help output.
+- If `fetch --svd-file` fails with connection refused, confirm you found the
+  current session's `tcl_port` rather than reusing an old port or the RTT port.
+- If `fetch --svd-file` behaves like a stream instead of a control connection,
+  you are probably pointing at RTT instead of the Tcl endpoint.

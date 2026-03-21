@@ -27,5 +27,7 @@ Parse a CMSIS-SVD file, classify safe-readable peripheral registers, and shape l
 - Live capture attempts only registers whose access mode is explicitly safe to read in v1: `read-only` and `read-write`.
 - `write-only`, missing access metadata, and unsupported access modes are recorded as `skipped` with a reason.
 - Safe-register live reads happen one register at a time through the OpenOCD Tcl control endpoint.
+- `capture_peripheral_registers_from_svd()` accepts optional explicit OpenOCD Tcl host/port overrides from `fetch`; when absent, the backend falls back to the existing environment/default resolution path.
+- Live reads fail clearly if the backend never emits the Tcl terminator or returns an unexpectedly large unterminated payload; this protects `fetch` from hanging on misconfigured streaming ports such as RTT.
 - Successful values are normalized to hex strings before they are stored.
 - If zero safe-readable registers exist, or zero register reads succeed, live capture fails clearly.

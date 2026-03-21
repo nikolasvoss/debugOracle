@@ -13,6 +13,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from debugoracle.builder import build_bundle_from_text
+from debugoracle.sources.debuggers.gdb import peripheral_registers
 from debugoracle.sources.debuggers.gdb.peripheral_registers import parse_svd_definition
 from debugoracle.cli import main
 from debugoracle.cli.main import build_parser
@@ -124,6 +125,116 @@ class FetchPhase3Tests(unittest.TestCase):
 
             self.assertNotEqual(code, 0)
             self.assertIn("did not read any register values successfully", stdout + stderr)
+
+    def test_openocd_default_tcl_port_matches_documented_openocd_default(self) -> None:
+        self.assertEqual(peripheral_registers.OPENOCD_DEFAULT_PORT, 6666)
+
+    def test_fetch_with_svd_uses_default_tcl_port_when_no_override_is_given(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            (workspace / "cortex-debug-shared-mi.log").write_text(
+                (FIXTURES / "sample.mi").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (workspace / "test.svd").write_text(_minimal_svd_text(), encoding="utf-8")
+
+            with _FakeOpenOcdServer(values={0x40000000: "0x00000011", 0x40000004: "0x00000022"}) as server:
+                previous_port = peripheral_registers.OPENOCD_DEFAULT_PORT
+                peripheral_registers.OPENOCD_DEFAULT_PORT = server.port
+                try:
+                    stdout, _ = self._run_cli_in_workspace(
+                        workspace,
+                        ["fetch", "--svd-file", "test.svd"],
+                        env={
+                            "DEBUGORACLE_OPENOCD_HOST": server.host,
+                            "DEBUGORACLE_OPENOCD_PORT": "",
+                        },
+                        capture_stderr=True,
+                    )
+                finally:
+                    peripheral_registers.OPENOCD_DEFAULT_PORT = previous_port
+
+            self.assertIn("- regs: 1 peripherals, 3 registers, 2 success, 0 failure, 1 skipped", stdout)
+
+    def test_fetch_with_svd_accepts_explicit_openocd_tcl_endpoint_flags(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            (workspace / "cortex-debug-shared-mi.log").write_text(
+                (FIXTURES / "sample.mi").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (workspace / "test.svd").write_text(_minimal_svd_text(), encoding="utf-8")
+
+            with _FakeOpenOcdServer(values={0x40000000: "0x00000011", 0x40000004: "0x00000022"}) as server:
+                stdout, _ = self._run_cli_in_workspace(
+                    workspace,
+                    [
+                        "fetch",
+                        "--svd-file",
+                        "test.svd",
+                        "--openocd-tcl-host",
+                        server.host,
+                        "--openocd-tcl-port",
+                        str(server.port),
+                    ],
+                    env={
+                        "DEBUGORACLE_OPENOCD_HOST": "127.0.0.1",
+                        "DEBUGORACLE_OPENOCD_PORT": "1",
+                    },
+                    capture_stderr=True,
+                )
+
+            self.assertIn("- regs: 1 peripherals, 3 registers, 2 success, 0 failure, 1 skipped", stdout)
+
+    def test_fetch_rejects_openocd_tcl_flags_without_svd_file(self) -> None:
+        code, stdout, stderr = self._run_cli_expect_system_exit(
+            ["fetch", "--openocd-tcl-port", "50001"]
+        )
+
+        self.assertNotEqual(code, 0)
+        self.assertIn("require --svd-file", stdout + stderr)
+
+    def test_fetch_openocd_tcl_flags_override_environment_defaults(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            (workspace / "cortex-debug-shared-mi.log").write_text(
+                (FIXTURES / "sample.mi").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (workspace / "test.svd").write_text(_minimal_svd_text(), encoding="utf-8")
+
+            with _FakeOpenOcdServer(values={0x40000000: "0x00000011", 0x40000004: "0x00000022"}) as server:
+                stdout, _ = self._run_cli_in_workspace(
+                    workspace,
+                    [
+                        "fetch",
+                        "--svd-file",
+                        "test.svd",
+                        "--openocd-tcl-host",
+                        server.host,
+                        "--openocd-tcl-port",
+                        str(server.port),
+                    ],
+                    env={
+                        "DEBUGORACLE_OPENOCD_HOST": "127.0.0.1",
+                        "DEBUGORACLE_OPENOCD_PORT": "9",
+                    },
+                    capture_stderr=True,
+                )
+
+            self.assertIn("- regs: 1 peripherals, 3 registers, 2 success, 0 failure, 1 skipped", stdout)
+
+    def test_openocd_reader_rejects_unterminated_stream_payloads(self) -> None:
+        reader = peripheral_registers.OpenOcdMemoryReader()
+        previous_limit = peripheral_registers.OPENOCD_MAX_RESPONSE_BYTES
+        peripheral_registers.OPENOCD_MAX_RESPONSE_BYTES = 8
+        try:
+            reader._socket = _FakeStreamingSocket([b'boot', b'log', b'more'])
+            with self.assertRaisesRegex(ValueError, 'Tcl endpoint'):
+                reader.read_memory(0x40000000, 32)
+        finally:
+            peripheral_registers.OPENOCD_MAX_RESPONSE_BYTES = previous_limit
+
     def test_parse_svd_definition_resolves_derived_peripherals_from_real_example(self) -> None:
         definition = parse_svd_definition(str(Path(__file__).resolve().parents[1] / "examples" / "STM32L432.svd"))
 
@@ -363,6 +474,20 @@ class _FakeOpenOcdServer(socketserver.ThreadingTCPServer):
         if count != 1 or address not in self._values:
             return "error"
         return self._values[address]
+
+
+class _FakeStreamingSocket:
+    def __init__(self, chunks: list[bytes]) -> None:
+        self._chunks = list(chunks)
+        self.sent_commands: list[bytes] = []
+
+    def sendall(self, payload: bytes) -> None:
+        self.sent_commands.append(payload)
+
+    def recv(self, _: int) -> bytes:
+        if not self._chunks:
+            raise AssertionError('reader kept consuming an unterminated stream past the safety limit')
+        return self._chunks.pop(0)
 
 
 if __name__ == "__main__":

@@ -10,3 +10,5 @@ these notes are just for the developer. not for agent use.
 - default report stays short and points users to `report --regs-list` and `report --regs`.
 - halt detect logic could be flaky.
 - add tests with live openocd backend.
+- add simpler setup script/instruction
+- clean system paths 

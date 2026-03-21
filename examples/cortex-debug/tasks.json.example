@@ -13,19 +13,19 @@
     {
       "label": "Prepare debug logs",
       "type": "shell",
-      "command": "mkdir -p \"${workspaceFolder}/.dbgoracle\" && : > \"${workspaceFolder}/.dbgoracle/cortex-debug-shared-mi.log\" && : > \"${workspaceFolder}/.dbgoracle/session.rtt\" && : > \"${workspaceFolder}/.dbgoracle/session.rtt.launch.log\" && rm -f \"${workspaceFolder}/.dbgoracle/session.rtt.state.json\"",
+      "command": "mkdir -p \"${workspaceFolder}/.dbgoracle\" && : > \"${config:debugoracle.miLogPath}\" && : > \"${config:debugoracle.rttLogPath}\" && : > \"${config:debugoracle.rttLaunchLogPath}\" && rm -f \"${config:debugoracle.rttStatePath}\"",
       "windows": {
-        "command": "New-Item -ItemType Directory -Force -Path \"${workspaceFolder}\\\\.dbgoracle\" | Out-Null; New-Item -ItemType File -Force -Path \"${workspaceFolder}\\\\.dbgoracle\\\\cortex-debug-shared-mi.log\" | Out-Null; New-Item -ItemType File -Force -Path \"${workspaceFolder}\\\\.dbgoracle\\\\session.rtt\" | Out-Null; New-Item -ItemType File -Force -Path \"${workspaceFolder}\\\\.dbgoracle\\\\session.rtt.launch.log\" | Out-Null; Remove-Item -ErrorAction SilentlyContinue \"${workspaceFolder}\\\\.dbgoracle\\\\session.rtt.state.json\""
+        "command": "New-Item -ItemType Directory -Force -Path \"${workspaceFolder}\\\\.dbgoracle\" | Out-Null; New-Item -ItemType File -Force -Path \"${config:debugoracle.miLogPath}\" | Out-Null; New-Item -ItemType File -Force -Path \"${config:debugoracle.rttLogPath}\" | Out-Null; New-Item -ItemType File -Force -Path \"${config:debugoracle.rttLaunchLogPath}\" | Out-Null; Remove-Item -ErrorAction SilentlyContinue \"${config:debugoracle.rttStatePath}\""
       },
       "problemMatcher": []
     },
     {
       "label": "DebugOracle: Start RTT run",
-      "detail": "Required per-project edits: keep --port aligned with the RTT server port in launch.jsonc, and increase --connect-timeout further if your debugger/server startup is slow.",
+      "detail": "Required per-project edits: keep `.vscode/settings.json` aligned with your project values. `debugoracle.rttPort` is only the RTT port, not the OpenOCD Tcl port used by `dbgoracle fetch --svd-file ...`. Increase --connect-timeout further if your debugger/server startup is slow.",
       "type": "shell",
-      "command": "dbgoracle run --detach --workspace-root \"${workspaceFolder}\" --port 60001 --connect-timeout 30 --output \"${workspaceFolder}/.dbgoracle/session.rtt\" --state-out \"${workspaceFolder}/.dbgoracle/session.rtt.state.json\"",
+      "command": "dbgoracle run --detach --workspace-root \"${workspaceFolder}\" --port ${config:debugoracle.rttPort} --connect-timeout 30 --output \"${config:debugoracle.rttLogPath}\" --state-out \"${config:debugoracle.rttStatePath}\"",
       "windows": {
-        "command": "dbgoracle run --detach --workspace-root \"${workspaceFolder}\" --port 60001 --connect-timeout 30 --output \"${workspaceFolder}\\\\.dbgoracle\\\\session.rtt\" --state-out \"${workspaceFolder}\\\\.dbgoracle\\\\session.rtt.state.json\""
+        "command": "dbgoracle run --detach --workspace-root \"${workspaceFolder}\" --port ${config:debugoracle.rttPort} --connect-timeout 30 --output \"${config:debugoracle.rttLogPath}\" --state-out \"${config:debugoracle.rttStatePath}\""
       },
       "problemMatcher": []
     },

@@ -20,6 +20,7 @@ from ...session import (
 
 
 def cmd_fetch(args: argparse.Namespace) -> int:
+    _validate_fetch_live_capture_arguments(args)
     workspace_root = Path(args.workspace_root).resolve()
     discovery = resolve_fetch_inputs(args, workspace_root)
     gdb_mi = discovery["gdb_mi"]
@@ -80,6 +81,17 @@ def cmd_report(args: argparse.Namespace) -> int:
     except RuntimeError as error:
         raise SystemExit(str(error)) from error
     return emit(output, args.output)
+
+
+def _validate_fetch_live_capture_arguments(args: argparse.Namespace) -> None:
+    openocd_tcl_host = getattr(args, "openocd_tcl_host", None)
+    openocd_tcl_port = getattr(args, "openocd_tcl_port", None)
+    if openocd_tcl_host is not None and not openocd_tcl_host.strip():
+        raise SystemExit("--openocd-tcl-host must not be empty.")
+    if openocd_tcl_host is None and openocd_tcl_port is None:
+        return
+    if not getattr(args, "svd_file", None):
+        raise SystemExit("--openocd-tcl-host and --openocd-tcl-port require --svd-file.")
 
 
 def emit_fetch_summary(bundle: InvestigationArtifact, output_path: str) -> None:
@@ -233,6 +245,8 @@ def resolve_bundle(
             export_dir=export_dir or config.snapshot_file.parent,
             svd_file_path=resolved_svd_file,
             enable_live_peripheral_capture=bool(resolved_svd_file and command_name == "fetch"),
+            openocd_tcl_host=getattr(args, "openocd_tcl_host", None),
+            openocd_tcl_port=getattr(args, "openocd_tcl_port", None),
         )
     except OSError as error:
         raise SystemExit(f"Unable to read one of the required input files: {error}") from error

@@ -17,15 +17,15 @@
       ],
       "cwd": "${workspaceFolder}",
       // Required per-project edits:
-      // - update `executable` to your actual ELF path
+      // - update `.vscode/settings.json` with your project values
       // - keep the task label in sync with tasks.json if you rename it
-      "executable": "${workspaceFolder}/build/app.elf",
+      "executable": "${config:debugoracle.executable}",
       "preLaunchTask": "DebugOracle: Prelaunch",
       "postDebugTask": "DebugOracle: Stop RTT run",
       "preLaunchCommands": [
         "set pagination off",
         "set logging overwrite on",
-        "set logging file ${workspaceFolder}/.dbgoracle/cortex-debug-shared-mi.log",
+        "set logging file ${config:debugoracle.miLogPath}",
         "set logging on"
       ],
       "postLaunchCommands": [
@@ -38,6 +38,10 @@
         //   control-block location in RAM
         // - `rtt server start <port> <channel>` must match the port/channel
         //   you will also pass to `dbgoracle run` in tasks.json
+        // - this RTT port is not the OpenOCD Tcl control port used by
+        //   `dbgoracle fetch --svd-file ...` for live peripheral reads
+        // - find the Tcl port separately by searching the debug log for
+        //   `tcl_port`, for example: `... -c "tcl_port 50001" ...`
         // Preferred way to find the RTT address/window:
         // 1. Inspect your ELF symbols first, for example with:
         //    - `arm-none-eabi-nm -a build/app.elf | rg SEGGER`
@@ -54,6 +58,9 @@
         //    search window until it does.
         // 4. If channel 0 or port 60001 is wrong for your setup, use the value
         //    OpenOCD/Cortex-Debug reports and mirror it in tasks.json.
+        // 5. If you plan to use `dbgoracle fetch --svd-file ...`, verify the
+        //    discovered `tcl_port` from the debug log separately. Do not point
+        //    live peripheral capture at the RTT port.
         // "monitor rtt setup 0x20000000 0x1000 \"SEGGER RTT\"",
         // "monitor rtt start",
         // "monitor rtt server start 60001 0"

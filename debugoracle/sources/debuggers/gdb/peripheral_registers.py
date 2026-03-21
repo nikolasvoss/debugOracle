@@ -29,6 +29,7 @@ OPENOCD_HOST_ENV = "DEBUGORACLE_OPENOCD_HOST"
 OPENOCD_PORT_ENV = "DEBUGORACLE_OPENOCD_PORT"
 OPENOCD_SOCKET_TIMEOUT_SECONDS = 1.0
 OPENOCD_TCL_TERMINATOR = b"\x1a"
+OPENOCD_MAX_RESPONSE_BYTES = 16 * 1024
 MI_HALT_TAIL_LINE_COUNT = 50
 SAFE_READ_ACCESS_MODES = {"read-only", "read-write"}
 MI_STATE_STOPPED = "stopped"
@@ -81,13 +82,21 @@ class OpenOcdMemoryReader:
             raise RuntimeError("OpenOCD reader is not connected")
         buffer = bytearray()
         while True:
-            chunk = self._socket.recv(4096)
+            try:
+                chunk = self._socket.recv(4096)
+            except socket.timeout as error:
+                raise OSError("Timed out waiting for an OpenOCD Tcl response terminator.") from error
             if not chunk:
                 raise OSError("OpenOCD closed the connection")
             buffer.extend(chunk)
             if OPENOCD_TCL_TERMINATOR in buffer:
                 raw, _, _ = buffer.partition(OPENOCD_TCL_TERMINATOR)
                 return raw.decode("utf-8", errors="replace").strip()
+            if len(buffer) > OPENOCD_MAX_RESPONSE_BYTES:
+                raise ValueError(
+                    "OpenOCD response exceeded the safe size limit without a Tcl terminator. "
+                    "Check that --openocd-tcl-port points to the OpenOCD Tcl endpoint."
+                )
 
 
 def collect_peripheral_registers_from_svd(svd_file: str) -> RegisterSource:
@@ -95,7 +104,13 @@ def collect_peripheral_registers_from_svd(svd_file: str) -> RegisterSource:
     return _build_register_source(definition)
 
 
-def capture_peripheral_registers_from_svd(svd_file: str, *, mi_text: str) -> RegisterSource:
+def capture_peripheral_registers_from_svd(
+    svd_file: str,
+    *,
+    mi_text: str,
+    openocd_tcl_host: str | None = None,
+    openocd_tcl_port: int | None = None,
+) -> RegisterSource:
     _require_recent_halt(mi_text)
 
     definition = parse_svd_definition(svd_file)
@@ -104,8 +119,8 @@ def capture_peripheral_registers_from_svd(svd_file: str, *, mi_text: str) -> Reg
     if not safe_targets:
         raise ValueError("Peripheral capture did not find any safe-readable registers in the supplied SVD.")
 
-    host = os.environ.get(OPENOCD_HOST_ENV, OPENOCD_DEFAULT_HOST)
-    port = _resolve_openocd_port(os.environ.get(OPENOCD_PORT_ENV))
+    host = openocd_tcl_host or os.environ.get(OPENOCD_HOST_ENV, OPENOCD_DEFAULT_HOST)
+    port = openocd_tcl_port if openocd_tcl_port is not None else _resolve_openocd_port(os.environ.get(OPENOCD_PORT_ENV))
 
     try:
         with OpenOcdMemoryReader(host=host, port=port) as reader:

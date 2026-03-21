@@ -228,6 +228,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--svd-file",
         help="Optional CMSIS-SVD file used by fetch to capture safe-readable peripheral register values into the snapshot via the default OpenOCD backend",
     )
+    fetch.add_argument(
+        "--openocd-tcl-host",
+        help="Optional OpenOCD Tcl host override used only for live peripheral capture with --svd-file",
+    )
+    fetch.add_argument(
+        "--openocd-tcl-port",
+        type=int,
+        help="Optional OpenOCD Tcl port override used only for live peripheral capture with --svd-file",
+    )
     fetch.set_defaults(func=cmd_fetch)
 
     prompt = subparsers.add_parser(

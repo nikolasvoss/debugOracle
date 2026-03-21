@@ -41,6 +41,8 @@ def build_bundle_from_files(
     export_dir: str | Path | None = None,
     svd_file_path: str | None = None,
     enable_live_peripheral_capture: bool = False,
+    openocd_tcl_host: str | None = None,
+    openocd_tcl_port: int | None = None,
 ) -> EvidenceBundle:
     gdb_text = (
         _read_text_file(gdb_mi_path, errors="replace", required=True)
@@ -58,6 +60,8 @@ def build_bundle_from_files(
         export_dir=export_dir,
         svd_file_path=svd_file_path,
         enable_live_peripheral_capture=enable_live_peripheral_capture,
+        openocd_tcl_host=openocd_tcl_host,
+        openocd_tcl_port=openocd_tcl_port,
     )
 
 
@@ -72,6 +76,8 @@ def build_bundle_from_stream(
     export_dir: str | Path | None = None,
     svd_file_path: str | None = None,
     enable_live_peripheral_capture: bool = False,
+    openocd_tcl_host: str | None = None,
+    openocd_tcl_port: int | None = None,
 ) -> EvidenceBundle:
     gdb_text = stream.read()
     return build_bundle_from_text(
@@ -84,6 +90,8 @@ def build_bundle_from_stream(
         export_dir=export_dir,
         svd_file_path=svd_file_path,
         enable_live_peripheral_capture=enable_live_peripheral_capture,
+        openocd_tcl_host=openocd_tcl_host,
+        openocd_tcl_port=openocd_tcl_port,
     )
 
 
@@ -98,6 +106,8 @@ def build_bundle_from_text(
     export_dir: str | Path | None = None,
     svd_file_path: str | None = None,
     enable_live_peripheral_capture: bool = False,
+    openocd_tcl_host: str | None = None,
+    openocd_tcl_port: int | None = None,
 ) -> EvidenceBundle:
     captured_at = utc_now()
     transcript = parse_gdb_transcript(gdb_text, now_text=utc_now)
@@ -111,6 +121,8 @@ def build_bundle_from_text(
         svd_file_path,
         gdb_text=gdb_text,
         enable_live_peripheral_capture=enable_live_peripheral_capture,
+        openocd_tcl_host=openocd_tcl_host,
+        openocd_tcl_port=openocd_tcl_port,
     )
     artifact = build_artifact_from_sources(
         captured_at=captured_at,
@@ -135,11 +147,18 @@ def _collect_register_source(
     *,
     gdb_text: str,
     enable_live_peripheral_capture: bool = False,
+    openocd_tcl_host: str | None = None,
+    openocd_tcl_port: int | None = None,
 ) -> RegisterSource | None:
     if not svd_file_path:
         return None
     if enable_live_peripheral_capture:
-        return capture_peripheral_registers_from_svd(svd_file_path, mi_text=gdb_text)
+        return capture_peripheral_registers_from_svd(
+            svd_file_path,
+            mi_text=gdb_text,
+            openocd_tcl_host=openocd_tcl_host,
+            openocd_tcl_port=openocd_tcl_port,
+        )
     return collect_peripheral_registers_from_svd(svd_file_path)
 
 def _export_raw_inputs(
