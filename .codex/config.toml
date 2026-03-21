@@ -5,7 +5,15 @@ model_reasoning_effort = "medium"
 command = "npx"
 args = ["-y", "@modelcontextprotocol/server-filesystem", "."]
 # Narrow to the minimal file operations you actually use
-enabled_tools = ["read_file", "list_directory", "search_files"]
+enabled_tools = [
+  "read_file",
+  "list_directory",
+  "search_files",
+  "write_file",
+  "edit_file",
+  "create_directory",
+  "move_file"
+]
 
 [mcp_servers.openaiDeveloperDocs]
 url = "https://developers.openai.com/mcp"
@@ -36,3 +44,4 @@ args = ["-y", "mcp-server-cmake"]
 
 [mcp_servers.embedded-debugger-mcp]
 command = "embedded-debugger-mcp"
+enabled = false
