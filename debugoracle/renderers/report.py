@@ -66,6 +66,8 @@ def render_report(
 
 def compose_report_payload(bundle: EvidenceBundle, *, options: ReportRenderOptions) -> dict[str, object]:
     payload: dict[str, object] = {}
+    if _should_include_metadata(options):
+        payload["metadata"] = report_metadata_payload(bundle)
     if options.verbose:
         payload["summary"] = summary_payload(bundle)
         payload["variables"] = grouped_variables_payload(bundle, names=None)
@@ -87,6 +89,30 @@ def compose_report_payload(bundle: EvidenceBundle, *, options: ReportRenderOptio
     if options.include_regs:
         payload["registers"] = regs_payload(bundle, selectors=options.regs_selectors or [])
     return payload
+
+
+def _should_include_metadata(options: ReportRenderOptions) -> bool:
+    return (
+        options.verbose
+        or options.include_gdb
+        or options.include_rtt
+        or options.include_regs_list
+        or options.include_regs
+    )
+
+
+def report_metadata_payload(bundle: EvidenceBundle) -> dict[str, object]:
+    freshness_class = bundle.provenance.get("freshness_class", "unknown")
+    return {
+        "snapshot_id": bundle.snapshot_id,
+        "captured_at": bundle.captured_at,
+        "freshness_class": freshness_class,
+        "source_availability": {
+            "gdb": "present" if bundle.has_embedded_gdb_source else "absent",
+            "rtt": "present" if bundle.has_embedded_rtt_source else "absent",
+            "registers": "present" if bundle.has_embedded_register_source else "absent",
+        },
+    }
 
 
 def summary_payload(bundle: EvidenceBundle) -> dict[str, object]:

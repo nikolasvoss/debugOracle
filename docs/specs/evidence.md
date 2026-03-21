@@ -31,7 +31,8 @@ Own the CLI flows that resolve raw or saved evidence, build or load artifacts, a
 
 - `cmd_fetch` is raw-only and never loads a snapshot as its primary evidence source.
 - `cmd_fetch --svd-file <file>` is the only CLI path that enables live peripheral capture; it passes an explicit opt-in through the builder instead of relying on `svd_file_path` alone.
-- `cmd_fetch` accepts optional `--openocd-tcl-host` and `--openocd-tcl-port` overrides for live peripheral capture, and these flags are valid only when `--svd-file` is present.
+- `cmd_fetch` may auto-resolve exactly one `.dbgoracle/*.svd` candidate for opportunistic live peripheral capture. If discovery is ambiguous or live capture fails, plain `fetch` falls back to non-SVD snapshot capture and emits a clear notice on `stderr`.
+- `cmd_fetch` accepts optional `--openocd-tcl-host` and `--openocd-tcl-port` overrides for live peripheral capture. If no explicit or auto-resolved SVD is available, plain `fetch` ignores these overrides and continues with non-SVD capture after emitting a notice.
 - `cmd_report` is snapshot-only and fails clearly when no snapshot can be resolved.
 - `cmd_report` points users to `fetch` when no snapshot is available.
 - `cmd_prompt` is snapshot-only and fails clearly when no snapshot can be resolved.
@@ -47,3 +48,4 @@ Own the CLI flows that resolve raw or saved evidence, build or load artifacts, a
 - `report --verbose [--tail N]` emits a compact JSON object containing summary, variables, source
   streams, and provenance metadata.
 - Combined inspect flags emit one compact JSON object containing only the requested sections.
+- Inspect payloads that include stream or register sections also include compact snapshot metadata for provenance and freshness.

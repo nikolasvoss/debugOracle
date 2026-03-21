@@ -20,7 +20,6 @@ from ...session import (
 
 
 def cmd_fetch(args: argparse.Namespace) -> int:
-    _validate_fetch_live_capture_arguments(args)
     workspace_root = Path(args.workspace_root).resolve()
     discovery = resolve_fetch_inputs(args, workspace_root)
     gdb_mi = discovery["gdb_mi"]
@@ -31,18 +30,46 @@ def cmd_fetch(args: argparse.Namespace) -> int:
         gdb_mi=gdb_mi,
         rtt=rtt,
     )
-    if getattr(args, "svd_file", None):
-        require_readable_file(resolve_workspace_path(args.svd_file, workspace_root), "SVD")
-    bundle = resolve_bundle(
-        args,
-        gdb_mi=gdb_mi,
-        rtt=rtt,
-        allow_snapshot_fallback=False,
-        command_name="fetch",
-        explicit_gdb=discovery["gdb_mi_explicit"],
-        explicit_rtt=discovery["rtt_explicit"],
-        export_dir=Path(state_out).parent,
-    )
+    resolved_svd_file, svd_discovered, svd_notice = resolve_fetch_svd_file(args, workspace_root)
+    _validate_fetch_live_capture_arguments(args, resolved_svd_file=resolved_svd_file)
+    if svd_notice:
+        print(svd_notice, file=sys.stderr)
+    if resolved_svd_file:
+        require_readable_file(resolved_svd_file, "SVD")
+    try:
+        bundle = resolve_bundle(
+            args,
+            gdb_mi=gdb_mi,
+            rtt=rtt,
+            allow_snapshot_fallback=False,
+            command_name="fetch",
+            explicit_gdb=discovery["gdb_mi_explicit"],
+            explicit_rtt=discovery["rtt_explicit"],
+            export_dir=Path(state_out).parent,
+            resolved_svd_file=resolved_svd_file,
+            svd_discovered=svd_discovered,
+        )
+    except SystemExit as error:
+        if resolved_svd_file and svd_discovered:
+            reason = str(error) or "register enrichment failed"
+            print(
+                f"Auto-discovered SVD '{resolved_svd_file}' could not be used ({reason}). Continuing without register capture.",
+                file=sys.stderr,
+            )
+            bundle = resolve_bundle(
+                args,
+                gdb_mi=gdb_mi,
+                rtt=rtt,
+                allow_snapshot_fallback=False,
+                command_name="fetch",
+                explicit_gdb=discovery["gdb_mi_explicit"],
+                explicit_rtt=discovery["rtt_explicit"],
+                export_dir=Path(state_out).parent,
+                resolved_svd_file=None,
+                svd_discovered=False,
+            )
+        else:
+            raise
     save_artifact(bundle, state_out)
     emit_fetch_summary(bundle, state_out)
     return 0
@@ -83,15 +110,22 @@ def cmd_report(args: argparse.Namespace) -> int:
     return emit(output, args.output)
 
 
-def _validate_fetch_live_capture_arguments(args: argparse.Namespace) -> None:
+def _validate_fetch_live_capture_arguments(
+    args: argparse.Namespace,
+    *,
+    resolved_svd_file: str | None = None,
+) -> None:
     openocd_tcl_host = getattr(args, "openocd_tcl_host", None)
     openocd_tcl_port = getattr(args, "openocd_tcl_port", None)
     if openocd_tcl_host is not None and not openocd_tcl_host.strip():
         raise SystemExit("--openocd-tcl-host must not be empty.")
     if openocd_tcl_host is None and openocd_tcl_port is None:
         return
-    if not getattr(args, "svd_file", None):
-        raise SystemExit("--openocd-tcl-host and --openocd-tcl-port require --svd-file.")
+    if resolved_svd_file is None and not getattr(args, "svd_file", None):
+        print(
+            "OpenOCD Tcl overrides were provided, but no SVD file was resolved. Continuing without register capture.",
+            file=sys.stderr,
+        )
 
 
 def emit_fetch_summary(bundle: InvestigationArtifact, output_path: str) -> None:
@@ -143,6 +177,8 @@ def resolve_bundle(
     explicit_gdb: bool = False,
     explicit_rtt: bool = False,
     export_dir: Path | None = None,
+    resolved_svd_file: str | None = None,
+    svd_discovered: bool = False,
 ) -> InvestigationArtifact:
     workspace_root = Path(args.workspace_root).resolve()
     config = resolve_session_config(args, workspace_root)
@@ -219,6 +255,7 @@ def resolve_bundle(
         "snapshot-file": False,
         "gdb-mi": gdb_discovered,
         "rtt": rtt_discovered,
+        "svd-file": svd_discovered,
     }
 
     if gdb_mi is not None:
@@ -229,12 +266,14 @@ def resolve_bundle(
         {
             "gdb-mi": gdb_mi,
             "rtt": rtt,
+            "svd-file": resolved_svd_file,
         },
         discovered_inputs,
     )
     if rtt:
         require_readable_file(rtt, "RTT")
-    resolved_svd_file = resolve_workspace_path(getattr(args, "svd_file", None), workspace_root)
+    if resolved_svd_file is None:
+        resolved_svd_file = resolve_workspace_path(getattr(args, "svd_file", None), workspace_root)
 
     try:
         return build_bundle_from_files(
@@ -344,6 +383,37 @@ def resolve_fetch_inputs(
         "gdb_mi_explicit": explicit_gdb,
         "rtt_explicit": explicit_rtt,
     }
+
+
+def resolve_fetch_svd_file(
+    args: argparse.Namespace,
+    workspace_root: Path,
+) -> tuple[str | None, bool, str | None]:
+    explicit_svd = getattr(args, "svd_file", None)
+    if explicit_svd:
+        return resolve_workspace_path(explicit_svd, workspace_root), False, None
+
+    session_dir = workspace_root / DEFAULT_SESSION_DIR
+    if not session_dir.is_dir():
+        return None, False, None
+
+    candidates = [
+        session_dir / name
+        for name in sorted(os.listdir(session_dir))
+    ]
+    svd_candidates = [path for path in candidates if path.is_file() and path.suffix.lower() == ".svd"]
+    if len(svd_candidates) == 1:
+        resolved = str(svd_candidates[0])
+        return resolved, True, f"Auto-discovered SVD for fetch: {resolved}"
+    if len(svd_candidates) > 1:
+        joined = ", ".join(str(path.name) for path in svd_candidates)
+        return (
+            None,
+            False,
+            "Multiple SVD candidates were found in .dbgoracle "
+            f"({joined}). Continuing without register capture.",
+        )
+    return None, False, "No SVD candidate was found in .dbgoracle. Continuing without register capture."
 
 
 def missing_inputs_error(

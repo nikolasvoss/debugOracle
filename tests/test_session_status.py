@@ -58,6 +58,25 @@ class SessionStatusTests(unittest.TestCase):
         self.assertTrue(status.rtt.stale)
         self.assertIn("Snapshot file is stale", "\n".join(status.warnings))
 
+    def test_collect_session_status_recommends_refresh_when_raw_evidence_is_newer(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = self._prepare_workspace(tmpdir)
+            session_dir = Path(workspace) / ".dbgoracle"
+            now = datetime.now(timezone.utc)
+            snapshot_time = (now - timedelta(hours=2)).timestamp()
+            fresh_time = (now - timedelta(seconds=30)).timestamp()
+            os.utime(session_dir / "latest_snapshot.json", (snapshot_time, snapshot_time))
+            os.utime(session_dir / "cortex-debug-shared-mi.log", (fresh_time, fresh_time))
+            os.utime(session_dir / "session.rtt", (fresh_time, fresh_time))
+
+            status = collect_session_status(
+                SessionConfig.from_workspace(workspace, stale_after_seconds=60)
+            )
+
+        self.assertEqual(status.action_state, "refresh_recommended")
+        self.assertEqual(status.recommended_next_command, "dbgoracle fetch --workspace-root .")
+        self.assertIn("raw evidence is newer than the snapshot", status.action_reason.lower())
+
     def test_collect_session_status_surfaces_corrupt_snapshot_warning(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             session_dir = Path(tmpdir) / ".dbgoracle"
@@ -77,6 +96,8 @@ class SessionStatusTests(unittest.TestCase):
         self.assertEqual(status.health, "degraded")
         self.assertEqual(status.snapshot_id, "invalid-snapshot")
         self.assertEqual(status.parse_warning_count, 1)
+        self.assertEqual(status.action_state, "capture_needed")
+        self.assertEqual(status.recommended_next_command, "dbgoracle fetch --workspace-root .")
         self.assertIn("Could not parse snapshot JSON", status.parse_warnings[0])
 
     def test_collect_session_status_keeps_optional_rtt_warning_non_fatal(self) -> None:

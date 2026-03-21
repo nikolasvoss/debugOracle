@@ -155,7 +155,9 @@ dbgoracle prompt --workspace-root . --goal "Explain why the target stopped here"
 ## Optional SVD-backed peripheral capture
 
 Use SVD-backed peripheral capture only when the user actually wants peripheral
-register evidence.
+register evidence. A plain `fetch` may opportunistically use exactly one
+workspace `.dbgoracle/*.svd` file when it can do so unambiguously; otherwise it
+falls back to non-SVD capture with a clear notice.
 
 Capture step with the common default Tcl port:
 
@@ -178,7 +180,7 @@ dbgoracle fetch --workspace-root . --svd-file path/to/device.svd --openocd-tcl-h
 Guardrails:
 
 - `--svd-file` is valid on `fetch`, not on `report`.
-- `--openocd-tcl-host` and `--openocd-tcl-port` require `--svd-file`.
+- `--openocd-tcl-host` and `--openocd-tcl-port` are used only when an explicit or auto-discovered SVD is available. Otherwise `fetch` falls back to non-SVD capture and says so clearly.
 - This is an explicit opt-in to halted live peripheral capture.
 - It requires a recent halted stop in the GDB/MI log.
 - It uses the OpenOCD Tcl control endpoint for safe reads.

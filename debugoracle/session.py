@@ -120,6 +120,9 @@ class SessionStatus:
     gdb_mi: ArtifactStatus | None = None
     rtt: ArtifactStatus | None = None
     rtt_capture: RttCaptureStatus | None = None
+    action_state: str = "evidence_missing"
+    action_reason: str = "No DebugOracle artifacts were found in the session directory."
+    recommended_next_command: str = "dbgoracle fetch --workspace-root ."
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -149,11 +152,13 @@ def collect_session_status(
 
     snapshot_id: str | None = None
     parse_warnings: list[str] = []
+    snapshot_usable = False
     if snapshot.exists:
         bundle = load_artifact(snapshot.path)
         snapshot_id = bundle.snapshot_id
         parse_warnings = list(bundle.parse_warnings)
         halt_policy = evaluate_artifact_live_state(bundle.live_state)
+        snapshot_usable = snapshot_id != "invalid-snapshot" and halt_policy.allowed
         if not halt_policy.allowed:
             health_issues.extend(halt_policy.warnings)
         critical_warning_count = _as_int(bundle.provenance.get("critical_warning_count"))
@@ -170,6 +175,12 @@ def collect_session_status(
         health_issues.append("No DebugOracle artifacts were found in the session directory.")
 
     health = "healthy" if not health_issues else "degraded"
+    action_state, action_reason, recommended_next_command = _derive_action_guidance(
+        snapshot=snapshot,
+        snapshot_usable=snapshot_usable,
+        gdb_mi=gdb_mi,
+        rtt=rtt,
+    )
     return SessionStatus(
         checked_at=checked_at_dt.replace(microsecond=0).isoformat(),
         workspace_root=str(config.workspace_root),
@@ -182,6 +193,9 @@ def collect_session_status(
         gdb_mi=gdb_mi,
         rtt=rtt,
         rtt_capture=rtt_capture,
+        action_state=action_state,
+        action_reason=action_reason,
+        recommended_next_command=recommended_next_command,
     )
 
 
@@ -402,3 +416,49 @@ def _ensure_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc)
+
+
+def _derive_action_guidance(
+    *,
+    snapshot: ArtifactStatus,
+    snapshot_usable: bool,
+    gdb_mi: ArtifactStatus,
+    rtt: ArtifactStatus,
+) -> tuple[str, str, str]:
+    raw_artifacts = [artifact for artifact in (gdb_mi, rtt) if artifact.exists]
+    fresher_raw = [
+        artifact
+        for artifact in raw_artifacts
+        if snapshot.exists
+        and snapshot.updated_at is not None
+        and artifact.updated_at is not None
+        and artifact.updated_at > snapshot.updated_at
+    ]
+    if snapshot_usable and fresher_raw:
+        return (
+            "refresh_recommended",
+            "Raw evidence is newer than the snapshot. Refresh the snapshot before relying on the current report.",
+            "dbgoracle fetch --workspace-root .",
+        )
+    if snapshot_usable:
+        return (
+            "ready",
+            "A reusable snapshot is available for inspection.",
+            "dbgoracle report --workspace-root .",
+        )
+    if raw_artifacts:
+        reason = (
+            "Raw evidence is newer than the snapshot, but the existing snapshot is not usable for inspection."
+            if snapshot.exists else
+            "Raw evidence is available, but no usable snapshot has been built yet."
+        )
+        return (
+            "capture_needed",
+            reason,
+            "dbgoracle fetch --workspace-root .",
+        )
+    return (
+        "evidence_missing",
+        "No snapshot or usable raw evidence is available in this workspace.",
+        "dbgoracle fetch --workspace-root .",
+    )

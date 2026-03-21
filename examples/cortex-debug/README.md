@@ -27,6 +27,7 @@ Expect to edit the target-specific fields before using it on another project:
 - RTT should be captured by `dbgoracle run` into `.dbgoracle/session.rtt`
 - Live peripheral capture via `dbgoracle fetch --svd-file <file>` needs the
   OpenOCD Tcl control port in addition to MI data
+- A plain `dbgoracle fetch` can auto-use exactly one `.dbgoracle/*.svd` candidate and otherwise falls back to non-SVD capture with a notice
 - If your Cortex-Debug version uses different MI or RTT key names, update only the
   logging lines
 - `serverpath` in the sample is optional and commented out by default

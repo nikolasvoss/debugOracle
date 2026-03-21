@@ -134,8 +134,10 @@ class DebugOracleCliTests(unittest.TestCase):
             output = self._run_cli(["report", "--snapshot-file", str(snapshot_path), "--gdb"])
 
         payload = json.loads(output)
-        self.assertEqual(set(payload.keys()), {"gdb"})
+        self.assertEqual(set(payload.keys()), {"metadata", "gdb"})
         self.assertIn("events", payload["gdb"])
+        self.assertTrue(payload["metadata"]["snapshot_id"].startswith("snap-"))
+        self.assertEqual(payload["metadata"]["source_availability"]["gdb"], "present")
 
     def test_report_rtt_outputs_rtt_object(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -143,8 +145,9 @@ class DebugOracleCliTests(unittest.TestCase):
             output = self._run_cli(["report", "--snapshot-file", str(snapshot_path), "--rtt"])
 
         payload = json.loads(output)
-        self.assertEqual(set(payload.keys()), {"rtt"})
+        self.assertEqual(set(payload.keys()), {"metadata", "rtt"})
         self.assertIn("lines", payload["rtt"])
+        self.assertEqual(payload["metadata"]["source_availability"]["rtt"], "present")
 
     def test_report_verbose_outputs_composite_json_object(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

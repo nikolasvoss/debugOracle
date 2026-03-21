@@ -186,13 +186,95 @@ class FetchPhase3Tests(unittest.TestCase):
 
             self.assertIn("- regs: 1 peripherals, 3 registers, 2 success, 0 failure, 1 skipped", stdout)
 
-    def test_fetch_rejects_openocd_tcl_flags_without_svd_file(self) -> None:
-        code, stdout, stderr = self._run_cli_expect_system_exit(
-            ["fetch", "--openocd-tcl-port", "50001"]
-        )
+    def test_fetch_auto_resolves_single_workspace_svd_candidate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            session_dir = workspace / ".dbgoracle"
+            session_dir.mkdir()
+            (workspace / "cortex-debug-shared-mi.log").write_text(
+                (FIXTURES / "sample.mi").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (session_dir / "STM32L432.svd").write_text(_minimal_svd_text(), encoding="utf-8")
 
-        self.assertNotEqual(code, 0)
-        self.assertIn("require --svd-file", stdout + stderr)
+            with _FakeOpenOcdServer(values={0x40000000: "0x00000011", 0x40000004: "0x00000022"}) as server:
+                stdout, stderr = self._run_cli_in_workspace(
+                    workspace,
+                    ["fetch"],
+                    env={
+                        "DEBUGORACLE_OPENOCD_HOST": server.host,
+                        "DEBUGORACLE_OPENOCD_PORT": str(server.port),
+                    },
+                    capture_stderr=True,
+                )
+
+            self.assertIn("- regs: 1 peripherals, 3 registers, 2 success, 0 failure, 1 skipped", stdout)
+            self.assertIn("svd-file", stderr)
+            self.assertIn("STM32L432.svd", stderr)
+
+    def test_fetch_with_ambiguous_workspace_svd_candidates_falls_back_to_raw_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            session_dir = workspace / ".dbgoracle"
+            session_dir.mkdir()
+            (workspace / "cortex-debug-shared-mi.log").write_text(
+                (FIXTURES / "sample.mi").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (session_dir / "A.svd").write_text(_minimal_svd_text(), encoding="utf-8")
+            (session_dir / "B.svd").write_text(_minimal_svd_text(), encoding="utf-8")
+
+            stdout, stderr = self._run_cli_in_workspace(
+                workspace,
+                ["fetch"],
+                capture_stderr=True,
+            )
+
+            self.assertNotIn("- regs:", stdout)
+            self.assertIn("Multiple SVD candidates were found", stderr)
+            self.assertIn("Continuing without register capture", stderr)
+
+    def test_fetch_with_auto_discovered_svd_falls_back_to_raw_only_when_live_capture_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            session_dir = workspace / ".dbgoracle"
+            session_dir.mkdir()
+            (workspace / "cortex-debug-shared-mi.log").write_text(
+                (FIXTURES / "sample.mi").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (session_dir / "STM32L432.svd").write_text(_minimal_svd_text(), encoding="utf-8")
+
+            stdout, stderr = self._run_cli_in_workspace(
+                workspace,
+                ["fetch"],
+                env={
+                    "DEBUGORACLE_OPENOCD_HOST": "127.0.0.1",
+                    "DEBUGORACLE_OPENOCD_PORT": "1",
+                },
+                capture_stderr=True,
+            )
+
+            self.assertNotIn("- regs:", stdout)
+            self.assertIn("Auto-discovered SVD", stderr)
+            self.assertIn("Continuing without register capture", stderr)
+
+    def test_fetch_ignores_openocd_tcl_flags_without_resolved_svd_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            (workspace / "cortex-debug-shared-mi.log").write_text(
+                (FIXTURES / "sample.mi").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+
+            stdout, stderr = self._run_cli_in_workspace(
+                workspace,
+                ["fetch", "--openocd-tcl-port", "50001"],
+                capture_stderr=True,
+            )
+
+        self.assertIn("Embedded Sources: gdb", stdout)
+        self.assertIn("no SVD file was resolved", stderr)
 
     def test_fetch_openocd_tcl_flags_override_environment_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

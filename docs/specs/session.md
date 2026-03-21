@@ -7,12 +7,14 @@
 
 ## Purpose
 
-Resolve workspace artifact locations and report overall session health.
+Resolve workspace artifact locations, report overall session health, and derive the next recommended CLI step.
 
 ## Responsibilities
 
 - Resolve default snapshot, MI, RTT, and RTT-state paths from a workspace root.
 - Inspect artifact freshness and managed RTT capture status.
+- Derive an actionable workspace state plus a deterministic recommended next command.
+- Treat corrupt or policy-invalid snapshots as unusable when recommending the next command.
 - Apply shared halt-analysis policy to artifact live-state metadata when present.
 - Render session health in text or JSON form via `debugoracle/renderers/status.py`.
 

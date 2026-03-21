@@ -44,9 +44,11 @@ class Phase56ReportModesTests(unittest.TestCase):
             output = self._run_cli(["report", "--snapshot-file", str(snapshot_path), "--gdb"])
 
         payload = json.loads(output)
-        self.assertEqual(set(payload.keys()), {"gdb"})
+        self.assertEqual(set(payload.keys()), {"metadata", "gdb"})
         self.assertIn("events", payload["gdb"])
         self.assertGreater(payload["gdb"]["total_event_count"], 0)
+        self.assertTrue(payload["metadata"]["snapshot_id"].startswith("snap-"))
+        self.assertEqual(payload["metadata"]["source_availability"]["gdb"], "present")
 
     def test_report_rtt_outputs_embedded_lines(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -54,8 +56,9 @@ class Phase56ReportModesTests(unittest.TestCase):
             output = self._run_cli(["report", "--snapshot-file", str(snapshot_path), "--rtt"])
 
         payload = json.loads(output)
-        self.assertEqual(set(payload.keys()), {"rtt"})
+        self.assertEqual(set(payload.keys()), {"metadata", "rtt"})
         self.assertEqual(payload["rtt"]["lines"][0], "[00:00.001] boot start")
+        self.assertEqual(payload["metadata"]["source_availability"]["rtt"], "present")
 
     def test_report_verbose_outputs_composite_json_object(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -75,7 +78,7 @@ class Phase56ReportModesTests(unittest.TestCase):
             output = self._run_cli(["report", "--snapshot-file", str(snapshot_path), "--vars", "--gdb"])
 
         payload = json.loads(output)
-        self.assertEqual(set(payload.keys()), {"variables", "gdb"})
+        self.assertEqual(set(payload.keys()), {"metadata", "variables", "gdb"})
 
     def test_report_tail_applies_to_stream_sections_only(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
