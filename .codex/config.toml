@@ -1,5 +1,8 @@
 model = "gpt-5.3-codex-spark"
 model_reasoning_effort = "medium"
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+
 
 [mcp_servers.filesystem]
 command = "npx"
