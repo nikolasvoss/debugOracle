@@ -7,7 +7,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .artifacts.repository import load_artifact
-from .policy.halted_analysis import evaluate_artifact_live_state
+from .policy.halted_analysis import HaltPolicyDecision, evaluate_artifact_live_state
+from .policy.trust import evaluate_artifact_trust
 from .renderers.status import render_session_status
 from .sources.streams.rtt import default_state_path as default_rtt_state_path
 from .sources.streams.rtt import load_capture_state
@@ -115,6 +116,7 @@ class SessionStatus:
     snapshot_id: str | None
     parse_warning_count: int
     parse_warnings: list[str] = field(default_factory=list)
+    trust: dict[str, object] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
     snapshot: ArtifactStatus | None = None
     gdb_mi: ArtifactStatus | None = None
@@ -153,12 +155,18 @@ def collect_session_status(
     snapshot_id: str | None = None
     parse_warnings: list[str] = []
     snapshot_usable = False
+    halt_policy = HaltPolicyDecision(allowed=True, target_state="unspecified")
+    variable_count: int | None = None
+    has_embedded_gdb_source: bool | None = None
+    critical_warnings: list[str] = []
     if snapshot.exists:
         bundle = load_artifact(snapshot.path)
         snapshot_id = bundle.snapshot_id
         parse_warnings = list(bundle.parse_warnings)
         halt_policy = evaluate_artifact_live_state(bundle.live_state)
         snapshot_usable = snapshot_id != "invalid-snapshot" and halt_policy.allowed
+        variable_count = bundle.variable_evidence.count()
+        has_embedded_gdb_source = bundle.has_embedded_gdb_source
         if not halt_policy.allowed:
             health_issues.extend(halt_policy.warnings)
         critical_warning_count = _as_int(bundle.provenance.get("critical_warning_count"))
@@ -181,6 +189,20 @@ def collect_session_status(
         gdb_mi=gdb_mi,
         rtt=rtt,
     )
+    trust = evaluate_artifact_trust(
+        snapshot_exists=snapshot.exists,
+        snapshot_usable=snapshot_usable,
+        snapshot_stale=snapshot.stale if snapshot is not None else False,
+        action_state=action_state,
+        action_reason=action_reason,
+        recommended_next_command=recommended_next_command,
+        halt_policy=halt_policy,
+        critical_warnings=critical_warnings,
+        parse_warnings=parse_warnings,
+        variable_count=variable_count,
+        has_embedded_gdb_source=has_embedded_gdb_source,
+    ).to_dict()
+
     return SessionStatus(
         checked_at=checked_at_dt.replace(microsecond=0).isoformat(),
         workspace_root=str(config.workspace_root),
@@ -188,6 +210,7 @@ def collect_session_status(
         snapshot_id=snapshot_id,
         parse_warning_count=len(parse_warnings),
         parse_warnings=parse_warnings,
+        trust=trust,
         warnings=health_issues + warnings,
         snapshot=snapshot,
         gdb_mi=gdb_mi,

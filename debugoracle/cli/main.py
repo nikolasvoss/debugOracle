@@ -311,6 +311,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=positive_int,
         help="Limit embedded stream sections to the last N events or lines",
     )
+    report.add_argument(
+        "--allow-unsafe",
+        action="store_true",
+        help="Render the full text report even when the trust verdict is unsafe",
+    )
     report.set_defaults(func=cmd_report)
 
     return parser

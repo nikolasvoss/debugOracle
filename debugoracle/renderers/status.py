@@ -7,11 +7,14 @@ def render_session_status(status, fmt: str = "text") -> str:
     if fmt == "json":
         return json.dumps(status.to_dict(), indent=2) + "\n"
 
+    trust = getattr(status, "trust", {}) or {}
     lines = [
         "DebugOracle Session Status",
         "",
         "Current State:",
         f"- Health: {status.health}",
+        f"- Trust: {str(trust.get('verdict', 'unknown')).upper()}",
+        f"- Trust Summary: {trust.get('summary', 'unavailable')}",
         f"- Action: {status.action_state}",
         f"- Reason: {status.action_reason}",
         f"- Snapshot: {_snapshot_summary(status)}",
@@ -23,6 +26,9 @@ def render_session_status(status, fmt: str = "text") -> str:
         _artifact_summary_line("GDB/MI", status.gdb_mi),
         _artifact_summary_line("RTT", status.rtt),
         _rtt_capture_summary_line(status.rtt_capture),
+        "",
+        "Trust Reasons:",
+        *_bullet_lines(list(trust.get("reasons", [])) or ["None"]),
         "",
         "Next Useful Command:",
         f"- {status.recommended_next_command}",

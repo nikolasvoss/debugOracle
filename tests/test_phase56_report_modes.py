@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import tempfile
 import unittest
 from contextlib import redirect_stderr
@@ -16,13 +17,78 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 
 class Phase56ReportModesTests(unittest.TestCase):
+    def test_default_report_surfaces_unsafe_trust_header_for_running_target_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            snapshot_path = self._write_snapshot(
+                Path(tmpdir) / "latest_snapshot.json",
+                live_state={"backend": "demo", "target_state": "running", "warnings": []},
+            )
+            output = self._run_cli(["report", "--snapshot-file", str(snapshot_path)])
+
+        self.assertIn("Trust:", output)
+        self.assertIn("UNSAFE", output)
+        self.assertIn("not safe for grounded reasoning", output)
+        self.assertIn("Target state 'running' is not safe for correlated live reads.", output)
+        self.assertNotIn("Session Summary:", output)
+
+    def test_report_allow_unsafe_restores_full_report_body(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            snapshot_path = self._write_snapshot(
+                Path(tmpdir) / "latest_snapshot.json",
+                live_state={"backend": "demo", "target_state": "running", "warnings": []},
+            )
+            output = self._run_cli(
+                ["report", "--snapshot-file", str(snapshot_path), "--allow-unsafe"]
+            )
+
+        self.assertIn("Trust:", output)
+        self.assertIn("UNSAFE", output)
+        self.assertIn("Session Summary:", output)
+
+    def test_explicit_snapshot_ignores_unrelated_newer_workspace_raw_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            snapshot_dir = root / "snapshot"
+            workspace_dir = root / "workspace"
+            snapshot_dir.mkdir()
+            workspace_dir.mkdir()
+            snapshot_path = self._write_snapshot(snapshot_dir / "latest_snapshot.json")
+            (workspace_dir / "cortex-debug-shared-mi.log").write_text(
+                (FIXTURES / "sample.mi").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (workspace_dir / "session.rtt").write_text(
+                (FIXTURES / "sample.rtt").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            snapshot_time = 1_700_000_000
+            raw_time = snapshot_time + 300
+            os.utime(snapshot_path, (snapshot_time, snapshot_time))
+            os.utime(workspace_dir / "cortex-debug-shared-mi.log", (raw_time, raw_time))
+            os.utime(workspace_dir / "session.rtt", (raw_time, raw_time))
+
+            output = self._run_cli(
+                [
+                    "report",
+                    "--workspace-root",
+                    str(workspace_dir),
+                    "--snapshot-file",
+                    str(snapshot_path),
+                    "--gdb",
+                ]
+            )
+
+        payload = json.loads(output)
+        self.assertEqual(payload["trust"]["verdict"], "safe")
+        self.assertNotIn("Raw evidence is newer than the snapshot.", payload["trust"]["reasons"])
+
     def test_report_vars_outputs_grouped_json_object(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             snapshot_path = self._write_snapshot(Path(tmpdir) / "latest_snapshot.json")
             output = self._run_cli(["report", "--snapshot-file", str(snapshot_path), "--vars"])
 
         payload = json.loads(output)
-        self.assertEqual(set(payload.keys()), {"variables"})
+        self.assertEqual(set(payload.keys()), {"trust", "variables"})
         self.assertEqual(
             list(payload["variables"].keys()),
             ["locals", "globals", "watchpoints", "unknown"],
@@ -44,7 +110,7 @@ class Phase56ReportModesTests(unittest.TestCase):
             output = self._run_cli(["report", "--snapshot-file", str(snapshot_path), "--gdb"])
 
         payload = json.loads(output)
-        self.assertEqual(set(payload.keys()), {"metadata", "gdb"})
+        self.assertEqual(set(payload.keys()), {"trust", "metadata", "gdb"})
         self.assertIn("events", payload["gdb"])
         self.assertGreater(payload["gdb"]["total_event_count"], 0)
         self.assertTrue(payload["metadata"]["snapshot_id"].startswith("snap-"))
@@ -56,7 +122,7 @@ class Phase56ReportModesTests(unittest.TestCase):
             output = self._run_cli(["report", "--snapshot-file", str(snapshot_path), "--rtt"])
 
         payload = json.loads(output)
-        self.assertEqual(set(payload.keys()), {"metadata", "rtt"})
+        self.assertEqual(set(payload.keys()), {"trust", "metadata", "rtt"})
         self.assertEqual(payload["rtt"]["lines"][0], "[00:00.001] boot start")
         self.assertEqual(payload["metadata"]["source_availability"]["rtt"], "present")
 
@@ -66,6 +132,7 @@ class Phase56ReportModesTests(unittest.TestCase):
             output = self._run_cli(["report", "--snapshot-file", str(snapshot_path), "--verbose"])
 
         payload = json.loads(output)
+        self.assertIn("trust", payload)
         self.assertIn("summary", payload)
         self.assertIn("variables", payload)
         self.assertIn("gdb", payload)
@@ -78,7 +145,7 @@ class Phase56ReportModesTests(unittest.TestCase):
             output = self._run_cli(["report", "--snapshot-file", str(snapshot_path), "--vars", "--gdb"])
 
         payload = json.loads(output)
-        self.assertEqual(set(payload.keys()), {"metadata", "variables", "gdb"})
+        self.assertEqual(set(payload.keys()), {"trust", "metadata", "variables", "gdb"})
 
     def test_report_tail_applies_to_stream_sections_only(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -102,6 +169,7 @@ class Phase56ReportModesTests(unittest.TestCase):
             output = self._run_cli(["report", "--snapshot-file", str(snapshot_path)])
 
         self.assertIn("DebugOracle Evidence Report", output)
+        self.assertIn("Trust:", output)
         self.assertIn("Current State:", output)
         self.assertIn("Gaps:", output)
         self.assertIn("Next Useful Commands:", output)
@@ -111,11 +179,13 @@ class Phase56ReportModesTests(unittest.TestCase):
         self.assertIn("GDB embedded source data: present", output)
         self.assertIn("RTT embedded source data: present", output)
 
-    def _write_snapshot(self, path: Path) -> Path:
+    def _write_snapshot(self, path: Path, live_state: dict | None = None) -> Path:
         bundle = build_bundle_from_files(
             str(FIXTURES / "sample.mi"),
             str(FIXTURES / "sample.rtt"),
         )
+        if live_state is not None:
+            bundle.live_state = live_state
         save_bundle(bundle, str(path))
         return path
 

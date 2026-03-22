@@ -148,7 +148,7 @@ class DebugOracleCliTests(unittest.TestCase):
             output = self._run_cli(["report", "--snapshot-file", str(snapshot_path), "--vars"])
 
         payload = json.loads(output)
-        self.assertEqual(set(payload.keys()), {"variables"})
+        self.assertEqual(set(payload.keys()), {"trust", "variables"})
         self.assertEqual(
             list(payload["variables"].keys()),
             ["locals", "globals", "watchpoints", "unknown"],
@@ -161,7 +161,7 @@ class DebugOracleCliTests(unittest.TestCase):
             output = self._run_cli(["report", "--snapshot-file", str(snapshot_path), "--gdb"])
 
         payload = json.loads(output)
-        self.assertEqual(set(payload.keys()), {"metadata", "gdb"})
+        self.assertEqual(set(payload.keys()), {"trust", "metadata", "gdb"})
         self.assertIn("events", payload["gdb"])
         self.assertTrue(payload["metadata"]["snapshot_id"].startswith("snap-"))
         self.assertEqual(payload["metadata"]["source_availability"]["gdb"], "present")
@@ -172,7 +172,7 @@ class DebugOracleCliTests(unittest.TestCase):
             output = self._run_cli(["report", "--snapshot-file", str(snapshot_path), "--rtt"])
 
         payload = json.loads(output)
-        self.assertEqual(set(payload.keys()), {"metadata", "rtt"})
+        self.assertEqual(set(payload.keys()), {"trust", "metadata", "rtt"})
         self.assertIn("lines", payload["rtt"])
         self.assertEqual(payload["metadata"]["source_availability"]["rtt"], "present")
 

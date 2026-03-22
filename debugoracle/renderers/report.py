@@ -3,7 +3,13 @@ from __future__ import annotations
 import json
 from dataclasses import asdict, dataclass
 
-from ..artifacts.models import EvidenceBundle, PeripheralRegisterSet, RegisterEntry, VariableEntry, VARIABLE_BUCKETS
+from ..artifacts.models import (
+    EvidenceBundle,
+    PeripheralRegisterSet,
+    RegisterEntry,
+    VariableEntry,
+    VARIABLE_BUCKETS,
+)
 from ._evidence_common import (
     mapping_section,
     parsing_summary_section,
@@ -25,6 +31,7 @@ class ReportRenderOptions:
     tail: int | None = None
     regs_list_selector: str | None = None
     regs_selectors: list[str] | None = None
+    allow_unsafe: bool = False
 
     @property
     def include_variables(self) -> bool:
@@ -56,16 +63,23 @@ def render_report(
     *,
     options: ReportRenderOptions | None = None,
     variable_options=None,
+    trust: dict[str, object] | None = None,
 ) -> str:
     options = options or ReportRenderOptions()
+    trust = trust or default_trust_payload()
     if options.inspect_mode:
-        payload = compose_report_payload(bundle, options=options)
+        payload = compose_report_payload(bundle, options=options, trust=trust)
         return json.dumps(payload, separators=(",", ":"))
-    return _render_report_text(bundle)
+    return _render_report_text(bundle, trust=trust, allow_unsafe=options.allow_unsafe)
 
 
-def compose_report_payload(bundle: EvidenceBundle, *, options: ReportRenderOptions) -> dict[str, object]:
-    payload: dict[str, object] = {}
+def compose_report_payload(
+    bundle: EvidenceBundle,
+    *,
+    options: ReportRenderOptions,
+    trust: dict[str, object],
+) -> dict[str, object]:
+    payload: dict[str, object] = {"trust": trust}
     if _should_include_metadata(options):
         payload["metadata"] = report_metadata_payload(bundle)
     if options.verbose:
@@ -135,7 +149,10 @@ def summary_payload(bundle: EvidenceBundle) -> dict[str, object]:
     return payload
 
 
-def grouped_variables_payload(bundle: EvidenceBundle, names: list[str] | None) -> dict[str, list[dict[str, object]]]:
+def grouped_variables_payload(
+    bundle: EvidenceBundle,
+    names: list[str] | None,
+) -> dict[str, list[dict[str, object]]]:
     wanted = {name.lower() for name in (names or [])}
     grouped: dict[str, list[dict[str, object]]] = {}
     matched = 0
@@ -152,8 +169,7 @@ def grouped_variables_payload(bundle: EvidenceBundle, names: list[str] | None) -
 
 
 def variable_entry_payload(entry: VariableEntry) -> dict[str, object]:
-    payload = asdict(entry)
-    return payload
+    return asdict(entry)
 
 
 def gdb_payload(bundle: EvidenceBundle, *, tail: int | None) -> dict[str, object]:
@@ -195,9 +211,15 @@ def regs_list_payload(bundle: EvidenceBundle, *, selector: str | None) -> dict[s
                     "name": peripheral.name,
                     "base_address": peripheral.base_address,
                     "register_count": len(peripheral.registers),
-                    "success_count": sum(1 for register in peripheral.registers if register.read_status == "success"),
-                    "failure_count": sum(1 for register in peripheral.registers if register.read_status == "failure"),
-                    "skipped_count": sum(1 for register in peripheral.registers if register.read_status == "skipped"),
+                    "success_count": sum(
+                        1 for register in peripheral.registers if register.read_status == "success"
+                    ),
+                    "failure_count": sum(
+                        1 for register in peripheral.registers if register.read_status == "failure"
+                    ),
+                    "skipped_count": sum(
+                        1 for register in peripheral.registers if register.read_status == "skipped"
+                    ),
                 }
                 for peripheral in source.peripherals
             ],
@@ -283,11 +305,13 @@ def _peripheral_payload(peripheral: PeripheralRegisterSet) -> dict[str, object]:
 
 
 def _register_payload(register: RegisterEntry) -> dict[str, object]:
-    payload = asdict(register)
-    return payload
+    return asdict(register)
 
 
-def _match_peripheral(peripherals: list[PeripheralRegisterSet], selector: str) -> PeripheralRegisterSet | None:
+def _match_peripheral(
+    peripherals: list[PeripheralRegisterSet],
+    selector: str,
+) -> PeripheralRegisterSet | None:
     wanted = selector.lower()
     for peripheral in peripherals:
         if peripheral.name.lower() == wanted:
@@ -295,9 +319,39 @@ def _match_peripheral(peripherals: list[PeripheralRegisterSet], selector: str) -
     return None
 
 
-def _render_report_text(bundle: EvidenceBundle) -> str:
+def _render_report_text(
+    bundle: EvidenceBundle,
+    *,
+    trust: dict[str, object],
+    allow_unsafe: bool,
+) -> str:
+    header = _trust_header_lines(trust)
+    if trust.get("verdict") == "unsafe" and not allow_unsafe:
+        sections = [
+            "DebugOracle Evidence Report",
+            "",
+            *header,
+            "",
+            "Current State:",
+            render_bullets(_current_state_lines(bundle)),
+            "",
+            "Trust Reasons:",
+            render_bullets(list(trust.get("reasons", [])) or ["None"]),
+            "",
+            "Next Useful Commands:",
+            render_bullets([f"`{trust.get('recommended_action', 'dbgoracle fetch --workspace-root .')}`"]),
+        ]
+        return (
+            "\n".join(
+                with_parse_warnings(sections, bundle.parse_warnings, header="Parse Warnings Detail:")
+            ).rstrip()
+            + "\n"
+        )
+
     sections = [
         "DebugOracle Evidence Report",
+        "",
+        *header,
         "",
         "Current State:",
         render_bullets(_current_state_lines(bundle)),
@@ -332,7 +386,35 @@ def _render_report_text(bundle: EvidenceBundle) -> str:
         "Source Availability:",
         _source_availability_lines(bundle),
     ]
-    return "\n".join(with_parse_warnings(sections, bundle.parse_warnings, header="Parse Warnings Detail:")).rstrip() + "\n"
+    return (
+        "\n".join(with_parse_warnings(sections, bundle.parse_warnings, header="Parse Warnings Detail:")).rstrip()
+        + "\n"
+    )
+
+
+def _trust_header_lines(trust: dict[str, object]) -> list[str]:
+    verdict = str(trust.get("verdict", "unknown")).upper()
+    summary = str(trust.get("summary", "Trust status unavailable."))
+    recommended_action = str(trust.get("recommended_action", "dbgoracle fetch --workspace-root ."))
+    lines = [
+        f"Trust: {verdict}",
+        f"- Summary: {summary}",
+        f"- Recommended action: `{recommended_action}`",
+    ]
+    reasons = list(trust.get("reasons", []))
+    if reasons:
+        lines.append("- Reasons:")
+        lines.extend(f"  - {reason}" for reason in reasons)
+    return lines
+
+
+def default_trust_payload() -> dict[str, object]:
+    return {
+        "verdict": "unknown",
+        "summary": "Trust status unavailable.",
+        "reasons": [],
+        "recommended_action": "dbgoracle fetch --workspace-root .",
+    }
 
 
 def _current_state_lines(bundle: EvidenceBundle) -> list[str]:
@@ -382,18 +464,22 @@ def _embedded_evidence_summary(bundle: EvidenceBundle) -> str:
 
 def _register_availability_lines(bundle: EvidenceBundle) -> str:
     if not bundle.has_embedded_register_source:
-        return "\n".join([
-            "- Peripheral register data is not available in this snapshot.",
-            "- Capture it with `fetch --svd-file <file>` if peripheral state matters.",
-        ])
+        return "\n".join(
+            [
+                "- Peripheral register data is not available in this snapshot.",
+                "- Capture it with `fetch --svd-file <file>` if peripheral state matters.",
+            ]
+        )
     source = bundle.sources.registers
-    return "\n".join([
-        f"- Peripheral register snapshot data is available for {source.device_name or 'the supplied SVD'}.",
-        f"- Captured catalog: {source.peripheral_count} peripherals, {source.register_count} registers, {source.success_count} success, {source.failure_count} failure, {source.skipped_count} skipped.",
-        "- Use `report --regs-list` to list captured peripherals.",
-        "- Use `report --regs-list GPIOA` to list captured registers in one peripheral.",
-        "- Use `report --regs GPIOA:MODER` to inspect stored register values and statuses.",
-    ])
+    return "\n".join(
+        [
+            f"- Peripheral register snapshot data is available for {source.device_name or 'the supplied SVD'}.",
+            f"- Captured catalog: {source.peripheral_count} peripherals, {source.register_count} registers, {source.success_count} success, {source.failure_count} failure, {source.skipped_count} skipped.",
+            "- Use `report --regs-list` to list captured peripherals.",
+            "- Use `report --regs-list GPIOA` to list captured registers in one peripheral.",
+            "- Use `report --regs GPIOA:MODER` to inspect stored register values and statuses.",
+        ]
+    )
 
 
 def _source_availability_lines(bundle: EvidenceBundle) -> str:

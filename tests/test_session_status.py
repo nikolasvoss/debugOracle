@@ -22,6 +22,7 @@ class SessionStatusTests(unittest.TestCase):
             status = collect_session_status(SessionConfig.from_workspace(workspace))
 
         self.assertEqual(status.health, "healthy")
+        self.assertEqual(status.trust["verdict"], "safe")
         self.assertTrue(status.snapshot.exists)
         self.assertTrue(status.gdb_mi.exists)
         self.assertTrue(status.rtt.exists)
@@ -34,6 +35,7 @@ class SessionStatusTests(unittest.TestCase):
             status = collect_session_status(SessionConfig.from_workspace(tmpdir))
 
         self.assertEqual(status.health, "degraded")
+        self.assertEqual(status.trust["verdict"], "unsafe")
         self.assertFalse(status.snapshot.exists)
         self.assertFalse(status.gdb_mi.exists)
         self.assertFalse(status.rtt.exists)
@@ -74,6 +76,7 @@ class SessionStatusTests(unittest.TestCase):
             )
 
         self.assertEqual(status.action_state, "refresh_recommended")
+        self.assertEqual(status.trust["verdict"], "unsafe")
         self.assertEqual(status.recommended_next_command, "dbgoracle fetch --workspace-root .")
         self.assertIn("raw evidence is newer than the snapshot", status.action_reason.lower())
 
@@ -94,6 +97,7 @@ class SessionStatusTests(unittest.TestCase):
             status = collect_session_status(SessionConfig.from_workspace(tmpdir))
 
         self.assertEqual(status.health, "degraded")
+        self.assertEqual(status.trust["verdict"], "unsafe")
         self.assertEqual(status.snapshot_id, "invalid-snapshot")
         self.assertEqual(status.parse_warning_count, 1)
         self.assertEqual(status.action_state, "capture_needed")

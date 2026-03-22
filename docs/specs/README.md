@@ -32,4 +32,5 @@ during this refactor. It is intentionally curated rather than a flat dump of eve
 | `registers` | `debugoracle/sources/debuggers/gdb/registers.py` | [`registers.md`](registers.md) |
 | `rtt` | `debugoracle/rtt.py` | [`rtt.md`](rtt.md) |
 | `session` | `debugoracle/session.py` | [`session.md`](session.md) |
+| `trust` | `debugoracle/policy/trust.py` | [`trust.md`](trust.md) |
 | `transcript` | `debugoracle/sources/debuggers/gdb/transcript.py` | [`transcript.md`](transcript.md) |

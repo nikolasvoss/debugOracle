@@ -41,11 +41,12 @@ Own the CLI flows that resolve raw or saved evidence, build or load artifacts, a
 
 ## Report Inspect Contract
 
-- Default `report` output is a concise human-readable summary that starts with current state, gaps, and next useful commands.
+- Default `report` output is a concise human-readable summary that starts with an explicit trust verdict, then current state, gaps, and next useful commands.
+- When trust is unsafe, default `report` output degrades to a short trust-first report unless `--allow-unsafe` is supplied.
 - `report --vars [NAME ...]` emits a compact JSON object under `variables`.
 - `report --gdb [--tail N]` emits a compact JSON object under `gdb`.
 - `report --rtt [--tail N]` emits a compact JSON object under `rtt`.
 - `report --verbose [--tail N]` emits a compact JSON object containing summary, variables, source
   streams, and provenance metadata.
-- Combined inspect flags emit one compact JSON object containing only the requested sections.
+- Combined inspect flags emit one compact JSON object containing only the requested sections plus a top-level `trust` object.
 - Inspect payloads that include stream or register sections also include compact snapshot metadata for provenance and freshness.

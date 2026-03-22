@@ -8,9 +8,12 @@ from pathlib import Path
 from ...artifacts.models import InvestigationArtifact, InvestigationRequest
 from ...artifacts.repository import ArtifactLoadError, load_artifact, save_artifact
 from ...builder import DEFAULT_RTT_WINDOW, FULL_RTT_WINDOW, build_bundle_from_files
+from ...policy.halted_analysis import evaluate_artifact_live_state
+from ...policy.trust import evaluate_artifact_trust
 from ...renderers.prompt import render_prompt
 from ...renderers.report import ReportRenderOptions, render_report
 from ...session import (
+    collect_session_status,
     DEFAULT_GDB_MI_FILENAME,
     DEFAULT_RTT_FILENAME,
     DEFAULT_SESSION_DIR,
@@ -94,6 +97,11 @@ def cmd_prompt(args: argparse.Namespace) -> int:
 
 def cmd_report(args: argparse.Namespace) -> int:
     bundle = resolve_required_snapshot(args, command_name="report")
+    workspace_root = Path(args.workspace_root).resolve()
+    if getattr(args, "snapshot_file", None):
+        trust = derive_bundle_trust(bundle)
+    else:
+        trust = collect_session_status(resolve_session_config(args, workspace_root)).trust
     options = ReportRenderOptions(
         variable_names=list(args.vars or []) if args.vars is not None else None,
         include_gdb=bool(getattr(args, "gdb", False)),
@@ -102,9 +110,10 @@ def cmd_report(args: argparse.Namespace) -> int:
         tail=getattr(args, "tail", None),
         regs_list_selector=getattr(args, "regs_list", None),
         regs_selectors=list(args.regs or []) if args.regs is not None else None,
+        allow_unsafe=bool(getattr(args, "allow_unsafe", False)),
     )
     try:
-        output = render_report(bundle, options=options)
+        output = render_report(bundle, options=options, trust=trust)
     except RuntimeError as error:
         raise SystemExit(str(error)) from error
     return emit(output, args.output)
@@ -555,3 +564,48 @@ def emit(output: str, path: str | None) -> int:
     else:
         print(output, end="")
     return 0
+
+
+def derive_bundle_trust(bundle: InvestigationArtifact) -> dict[str, object]:
+    halt_policy = evaluate_artifact_live_state(bundle.live_state)
+    snapshot_usable = bundle.snapshot_id != "invalid-snapshot" and halt_policy.allowed
+    critical_warning_count = _as_int(bundle.provenance.get("critical_warning_count"))
+    critical_warnings = _critical_warnings(bundle, critical_warning_count)
+    action_reason = (
+        "A reusable snapshot is available for inspection."
+        if snapshot_usable else
+        "The requested snapshot is not usable for inspection."
+    )
+    return evaluate_artifact_trust(
+        snapshot_exists=True,
+        snapshot_usable=snapshot_usable,
+        snapshot_stale=False,
+        action_state="ready" if snapshot_usable else "capture_needed",
+        action_reason=action_reason,
+        recommended_next_command="dbgoracle report --workspace-root .",
+        halt_policy=halt_policy,
+        critical_warnings=critical_warnings,
+        parse_warnings=list(bundle.parse_warnings),
+        variable_count=bundle.variable_evidence.count(),
+        has_embedded_gdb_source=bundle.has_embedded_gdb_source,
+    ).to_dict()
+
+
+def _critical_warnings(bundle: InvestigationArtifact, critical_warning_count: int | None) -> list[str]:
+    if critical_warning_count is not None and critical_warning_count <= 0:
+        return []
+    raw = bundle.provenance.get("critical_warnings")
+    if isinstance(raw, list):
+        warnings = [item for item in raw if isinstance(item, str)]
+        if warnings:
+            return warnings
+    if critical_warning_count is None:
+        return []
+    return ["Parser reported unresolved critical events while processing the snapshot."]
+
+
+def _as_int(value: object) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
