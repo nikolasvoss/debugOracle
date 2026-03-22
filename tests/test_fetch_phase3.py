@@ -58,7 +58,7 @@ class FetchPhase3Tests(unittest.TestCase):
             self.assertEqual(registers["success_count"], 2)
             self.assertEqual(registers["failure_count"], 0)
             self.assertEqual(registers["skipped_count"], 1)
-            self.assertIn("- regs: 1 peripherals, 3 registers, 2 success, 0 failure, 1 skipped", stdout)
+            self.assertIn("Registers: present, 1 peripherals, 3 registers, 2 success, 0 failure, 1 skipped", stdout)
 
     def test_fetch_with_svd_fails_when_recent_mi_tail_ends_in_running_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -154,7 +154,7 @@ class FetchPhase3Tests(unittest.TestCase):
                 finally:
                     peripheral_registers.OPENOCD_DEFAULT_PORT = previous_port
 
-            self.assertIn("- regs: 1 peripherals, 3 registers, 2 success, 0 failure, 1 skipped", stdout)
+            self.assertIn("Registers: present, 1 peripherals, 3 registers, 2 success, 0 failure, 1 skipped", stdout)
 
     def test_fetch_with_svd_accepts_explicit_openocd_tcl_endpoint_flags(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -184,7 +184,7 @@ class FetchPhase3Tests(unittest.TestCase):
                     capture_stderr=True,
                 )
 
-            self.assertIn("- regs: 1 peripherals, 3 registers, 2 success, 0 failure, 1 skipped", stdout)
+            self.assertIn("Registers: present, 1 peripherals, 3 registers, 2 success, 0 failure, 1 skipped", stdout)
 
     def test_fetch_auto_resolves_single_workspace_svd_candidate(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -208,7 +208,7 @@ class FetchPhase3Tests(unittest.TestCase):
                     capture_stderr=True,
                 )
 
-            self.assertIn("- regs: 1 peripherals, 3 registers, 2 success, 0 failure, 1 skipped", stdout)
+            self.assertIn("Registers: present, 1 peripherals, 3 registers, 2 success, 0 failure, 1 skipped", stdout)
             self.assertIn("svd-file", stderr)
             self.assertIn("STM32L432.svd", stderr)
 
@@ -230,7 +230,7 @@ class FetchPhase3Tests(unittest.TestCase):
                 capture_stderr=True,
             )
 
-            self.assertNotIn("- regs:", stdout)
+            self.assertNotIn("Registers: present", stdout)
             self.assertIn("Multiple SVD candidates were found", stderr)
             self.assertIn("Continuing without register capture", stderr)
 
@@ -255,7 +255,7 @@ class FetchPhase3Tests(unittest.TestCase):
                 capture_stderr=True,
             )
 
-            self.assertNotIn("- regs:", stdout)
+            self.assertNotIn("Registers: present", stdout)
             self.assertIn("Auto-discovered SVD", stderr)
             self.assertIn("Continuing without register capture", stderr)
 
@@ -273,7 +273,8 @@ class FetchPhase3Tests(unittest.TestCase):
                 capture_stderr=True,
             )
 
-        self.assertIn("Embedded Sources: gdb", stdout)
+        self.assertIn("GDB: present", stdout)
+        self.assertIn("Registers: absent", stdout)
         self.assertIn("no SVD file was resolved", stderr)
 
     def test_fetch_openocd_tcl_flags_override_environment_defaults(self) -> None:
@@ -304,7 +305,7 @@ class FetchPhase3Tests(unittest.TestCase):
                     capture_stderr=True,
                 )
 
-            self.assertIn("- regs: 1 peripherals, 3 registers, 2 success, 0 failure, 1 skipped", stdout)
+            self.assertIn("Registers: present, 1 peripherals, 3 registers, 2 success, 0 failure, 1 skipped", stdout)
 
     def test_openocd_reader_rejects_unterminated_stream_payloads(self) -> None:
         reader = peripheral_registers.OpenOcdMemoryReader()
@@ -343,7 +344,7 @@ class FetchPhase3Tests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             parser.parse_args(["snapshot"])
 
-    def test_fetch_writes_latest_snapshot_and_prints_operational_summary(self) -> None:
+    def test_fetch_writes_latest_snapshot_and_prints_agent_summary(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
             (workspace / "cortex-debug-shared-mi.log").write_text(
@@ -364,13 +365,15 @@ class FetchPhase3Tests(unittest.TestCase):
 
             snapshot_path = workspace / "latest_snapshot.json"
             self.assertTrue(snapshot_path.exists())
-            self.assertIn("Snapshot ID:", stdout)
-            self.assertIn("Output Path:", stdout)
+            self.assertIn("DebugOracle Fetch Summary", stdout)
+            self.assertIn("Outcome:", stdout)
+            self.assertIn("Evidence:", stdout)
+            self.assertIn("Next:", stdout)
+            self.assertIn("Snapshot saved:", stdout)
             self.assertIn(str(snapshot_path), stdout)
-            self.assertIn("Embedded Sources: gdb, rtt", stdout)
-            self.assertIn("Source Sizes/Counts:", stdout)
-            self.assertIn("- gdb:", stdout)
-            self.assertIn("- rtt:", stdout)
+            self.assertIn("GDB: present", stdout)
+            self.assertIn("RTT: present", stdout)
+            self.assertIn("Registers: absent", stdout)
             self.assertIn("Auto-discovered input paths for fetch:", stderr)
 
     def test_fetch_discovery_failure_lists_checked_raw_candidates(self) -> None:

@@ -306,6 +306,20 @@ class SessionStatusTests(unittest.TestCase):
             encoding="utf-8",
         )
 
+    def test_render_session_status_surfaces_action_first_summary(self) -> None:
+        from debugoracle.renderers.status import render_session_status
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = self._prepare_workspace(tmpdir)
+            status = collect_session_status(SessionConfig.from_workspace(workspace))
+
+        rendered = render_session_status(status)
+        self.assertIn("Current State:", rendered)
+        self.assertIn("Evidence Availability:", rendered)
+        self.assertIn("Next Useful Command:", rendered)
+        self.assertIn("- Snapshot: available", rendered)
+
+
 
 if __name__ == "__main__":
     unittest.main()

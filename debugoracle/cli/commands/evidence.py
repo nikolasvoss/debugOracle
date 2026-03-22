@@ -71,7 +71,7 @@ def cmd_fetch(args: argparse.Namespace) -> int:
         else:
             raise
     save_artifact(bundle, state_out)
-    emit_fetch_summary(bundle, state_out)
+    emit_fetch_summary(bundle, state_out, workspace_root=str(workspace_root))
     return 0
 
 
@@ -128,41 +128,54 @@ def _validate_fetch_live_capture_arguments(
         )
 
 
-def emit_fetch_summary(bundle: InvestigationArtifact, output_path: str) -> None:
+def emit_fetch_summary(bundle: InvestigationArtifact, output_path: str, *, workspace_root: str) -> None:
     gdb_source = bundle.sources.gdb
     rtt_source = bundle.sources.rtt
-    embedded_sources: list[str] = []
-    if gdb_source.raw_text:
-        embedded_sources.append("gdb")
-    if rtt_source.raw_text:
-        embedded_sources.append("rtt")
-    if bundle.has_embedded_register_source:
-        embedded_sources.append("registers")
+    workspace_arg = f"--workspace-root {workspace_root}"
 
-    print(f"Snapshot ID: {bundle.snapshot_id}")
-    print(f"Output Path: {output_path}")
-    print("Embedded Sources: " + (", ".join(embedded_sources) if embedded_sources else "none"))
-    print("Source Sizes/Counts:")
+    print("DebugOracle Fetch Summary")
+    print("")
+    print("Outcome:")
+    print(f"- Snapshot saved: {bundle.snapshot_id}")
+    print(f"- Output path: {output_path}")
+    print("Evidence:")
     print(
-        "- gdb: "
-        f"{len((gdb_source.raw_text or '').encode('utf-8'))} bytes, "
-        f"{gdb_source.event_count} events"
+        "- GDB: "
+        + (
+            f"present, {gdb_source.event_count} events, {len((gdb_source.raw_text or '').encode('utf-8'))} bytes"
+            if gdb_source.raw_text
+            else "absent"
+        )
     )
     print(
-        "- rtt: "
-        f"{len((rtt_source.raw_text or '').encode('utf-8'))} bytes, "
-        f"{rtt_source.line_count} lines"
+        "- RTT: "
+        + (
+            f"present, {rtt_source.line_count} lines, {len((rtt_source.raw_text or '').encode('utf-8'))} bytes"
+            if rtt_source.raw_text
+            else "absent"
+        )
     )
     if bundle.has_embedded_register_source:
         register_source = bundle.sources.registers
         print(
-            "- regs: "
-            f"{register_source.peripheral_count} peripherals, "
+            "- Registers: "
+            f"present, {register_source.peripheral_count} peripherals, "
             f"{register_source.register_count} registers, "
             f"{register_source.success_count} success, "
             f"{register_source.failure_count} failure, "
             f"{register_source.skipped_count} skipped"
         )
+    else:
+        print("- Registers: absent")
+    print("Next:")
+    print(f"- dbgoracle report {workspace_arg}")
+    print(f"- dbgoracle report {workspace_arg} --vars [NAME ...]")
+    if gdb_source.raw_text:
+        print(f"- dbgoracle report {workspace_arg} --gdb --tail 50")
+    if rtt_source.raw_text:
+        print(f"- dbgoracle report {workspace_arg} --rtt --tail 50")
+    if bundle.has_embedded_register_source:
+        print(f"- dbgoracle report {workspace_arg} --regs-list")
 
 
 def resolve_bundle(

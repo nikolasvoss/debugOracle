@@ -26,7 +26,7 @@ args = ["-y", "@modelcontextprotocol/server-git", "."]
 command = "npx"
 args = ["-y", "@modelcontextprotocol/server-shell"]
 # Keep disabled by default unless you truly need it often
-enabled = false
+enabled = true
 
 [mcp_servers.docs]
 command = "npx"

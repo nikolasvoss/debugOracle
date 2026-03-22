@@ -10,14 +10,22 @@ def render_session_status(status, fmt: str = "text") -> str:
     lines = [
         "DebugOracle Session Status",
         "",
-        f"- Checked At: {status.checked_at}",
-        f"- Workspace Root: {status.workspace_root}",
+        "Current State:",
         f"- Health: {status.health}",
-        f"- Action State: {status.action_state}",
-        f"- Action Reason: {status.action_reason}",
-        f"- Recommended Next Command: {status.recommended_next_command}",
+        f"- Action: {status.action_state}",
+        f"- Reason: {status.action_reason}",
+        f"- Snapshot: {_snapshot_summary(status)}",
         f"- Snapshot ID: {status.snapshot_id or 'unavailable'}",
         f"- Snapshot Parse Warnings: {status.parse_warning_count}",
+        "",
+        "Evidence Availability:",
+        _artifact_summary_line("Snapshot", status.snapshot),
+        _artifact_summary_line("GDB/MI", status.gdb_mi),
+        _artifact_summary_line("RTT", status.rtt),
+        _rtt_capture_summary_line(status.rtt_capture),
+        "",
+        "Next Useful Command:",
+        f"- {status.recommended_next_command}",
         "",
         "Snapshot:",
         *_artifact_lines(status.snapshot),
@@ -38,6 +46,31 @@ def render_session_status(status, fmt: str = "text") -> str:
         lines.extend(["", "Snapshot Parse Warnings Detail:"])
         lines.extend(_bullet_lines(status.parse_warnings))
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _snapshot_summary(status) -> str:
+    if not status.snapshot or not status.snapshot.exists:
+        return "unavailable"
+    freshness = "stale" if status.snapshot.stale else "fresh"
+    snapshot_id = status.snapshot_id or "unavailable"
+    return f"available ({snapshot_id}, {freshness})"
+
+
+def _artifact_summary_line(label: str, artifact) -> str:
+    if artifact is None or not artifact.exists:
+        return f"- {label}: absent"
+    freshness = "stale" if artifact.stale else "fresh"
+    age = artifact.age_seconds if artifact.age_seconds is not None else "unavailable"
+    return f"- {label}: present, {freshness}, age {age}s"
+
+
+def _rtt_capture_summary_line(capture) -> str:
+    if capture is None or not capture.exists:
+        return "- RTT Capture: absent"
+    freshness = "stale" if capture.stale else "fresh"
+    status_text = capture.status or "no managed capture detected"
+    bytes_captured = capture.bytes_captured if capture.bytes_captured is not None else "unavailable"
+    return f"- RTT Capture: present, {freshness}, {status_text}, {bytes_captured} bytes"
 
 
 def _artifact_lines(artifact) -> list[str]:

@@ -96,14 +96,18 @@ class Phase56ReportModesTests(unittest.TestCase):
         self.assertNotEqual(code, 0)
         self.assertIn("--tail requires", stdout + stderr)
 
-    def test_default_report_is_plain_text_with_hints_and_source_availability(self) -> None:
+    def test_default_report_is_plain_text_with_decision_block_and_source_aware_guidance(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             snapshot_path = self._write_snapshot(Path(tmpdir) / "latest_snapshot.json")
             output = self._run_cli(["report", "--snapshot-file", str(snapshot_path)])
 
         self.assertIn("DebugOracle Evidence Report", output)
-        self.assertIn("Session Summary:", output)
-        self.assertIn("Hint: inspect exact variables with `report --vars [NAME ...]`", output)
+        self.assertIn("Current State:", output)
+        self.assertIn("Gaps:", output)
+        self.assertIn("Next Useful Commands:", output)
+        self.assertIn("`report --gdb --tail 50`", output)
+        self.assertIn("`report --rtt --tail 50`", output)
+        self.assertIn("`fetch --svd-file <file>`", output)
         self.assertIn("GDB embedded source data: present", output)
         self.assertIn("RTT embedded source data: present", output)
 

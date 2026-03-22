@@ -9,6 +9,13 @@ This roadmap is ranked by product impact for the current direction:
 - strict read-only operation
 - low-level verification before higher-level features
 
+## Product guardrails
+
+- Core user question: "Why does my code not do x?"
+- DebugOracle should help an agent explain the gap between intended behavior and observed target state.
+- Default CLI feedback should answer three things quickly: current state, available evidence, and the next best debugging step.
+- Future features should be judged by whether they improve that explanation loop, not just by whether they expose more raw debugger detail.
+
 ## Highest impact
 
 1. Stable live debug backend

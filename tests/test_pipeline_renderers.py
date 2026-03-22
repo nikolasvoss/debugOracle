@@ -135,7 +135,9 @@ class PipelineAndRendererTests(unittest.TestCase):
 
         request = InvestigationRequest(goal_text="Explain why the target stopped here")
 
-        self.assertIn("DebugOracle Evidence Report", render_report(artifact))
+        rendered_report = render_report(artifact)
+        self.assertIn("DebugOracle Evidence Report", rendered_report)
+        self.assertIn("Current State:", rendered_report)
         self.assertIn("DebugOracle Prompt Package", render_prompt(artifact, request))
         self.assertIn('"snapshot_id"', render_snapshot(artifact, fmt="json"))
 
@@ -216,7 +218,7 @@ class PipelineAndRendererTests(unittest.TestCase):
         self.assertIn("- Unknown Classification: 1 total", report)
         self.assertIn("mystery: ??", report)
 
-    def test_canonical_status_renderer_matches_legacy_session_output(self) -> None:
+    def test_canonical_status_renderer_surfaces_action_first_output(self) -> None:
         from debugoracle.renderers.status import render_session_status
         from debugoracle.session import SessionConfig, collect_session_status
 
@@ -228,7 +230,8 @@ class PipelineAndRendererTests(unittest.TestCase):
 
         rendered = render_session_status(status)
         self.assertIn("DebugOracle Session Status", rendered)
-        self.assertIn("Snapshot Parse Warnings", rendered)
+        self.assertIn("Current State:", rendered)
+        self.assertIn("Next Useful Command:", rendered)
 
 
 if __name__ == "__main__":

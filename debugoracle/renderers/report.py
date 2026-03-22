@@ -299,6 +299,15 @@ def _render_report_text(bundle: EvidenceBundle) -> str:
     sections = [
         "DebugOracle Evidence Report",
         "",
+        "Current State:",
+        render_bullets(_current_state_lines(bundle)),
+        "",
+        "Gaps:",
+        render_bullets(_gap_lines(bundle)),
+        "",
+        "Next Useful Commands:",
+        render_bullets(_next_command_lines(bundle)),
+        "",
         "Session Summary:",
         session_summary(bundle, plain=True),
         "",
@@ -310,11 +319,9 @@ def _render_report_text(bundle: EvidenceBundle) -> str:
         "",
         "Variable Summary:",
         variable_section(bundle.variable_evidence, _default_variable_options(), plain=True),
-        "Hint: inspect exact variables with `report --vars [NAME ...]`",
         "",
         "Parsing Summary:",
         parsing_summary_section(bundle, plain=True),
-        "Hint: inspect embedded GDB events with `report --gdb`",
         "",
         "Register Data:",
         _register_availability_lines(bundle),
@@ -324,16 +331,60 @@ def _render_report_text(bundle: EvidenceBundle) -> str:
         "",
         "Source Availability:",
         _source_availability_lines(bundle),
-        "Hint: inspect embedded RTT lines with `report --rtt`",
     ]
-    return "\n".join(with_parse_warnings(sections, bundle.parse_warnings, header="Parse Warnings:")).rstrip() + "\n"
+    return "\n".join(with_parse_warnings(sections, bundle.parse_warnings, header="Parse Warnings Detail:")).rstrip() + "\n"
+
+
+def _current_state_lines(bundle: EvidenceBundle) -> list[str]:
+    return [
+        f"Snapshot ID: {bundle.snapshot_id}",
+        f"Stop reason: {bundle.stop_reason or 'unavailable'}",
+        f"PC: {bundle.pc or 'unavailable'}",
+        f"Embedded evidence: {_embedded_evidence_summary(bundle)}",
+    ]
+
+
+def _gap_lines(bundle: EvidenceBundle) -> list[str]:
+    gaps: list[str] = []
+    if not bundle.has_embedded_gdb_source:
+        gaps.append("GDB data: absent.")
+    if not bundle.has_embedded_rtt_source:
+        gaps.append("RTT data: absent.")
+    if not bundle.has_embedded_register_source:
+        gaps.append("Register data: absent. Use `fetch --svd-file <file>` if peripheral state matters.")
+    if bundle.parse_warnings:
+        gaps.append(f"Parse warnings: {len(bundle.parse_warnings)} present.")
+    return gaps or ["None"]
+
+
+def _next_command_lines(bundle: EvidenceBundle) -> list[str]:
+    commands = ["`report --vars [NAME ...]`"]
+    if bundle.has_embedded_gdb_source:
+        commands.append("`report --gdb --tail 50`")
+    if bundle.has_embedded_rtt_source:
+        commands.append("`report --rtt --tail 50`")
+    if bundle.has_embedded_register_source:
+        commands.append("`report --regs-list`")
+    else:
+        commands.append("`fetch --svd-file <file>`")
+    return commands
+
+
+def _embedded_evidence_summary(bundle: EvidenceBundle) -> str:
+    return ", ".join(
+        [
+            f"gdb {'present' if bundle.has_embedded_gdb_source else 'absent'}",
+            f"rtt {'present' if bundle.has_embedded_rtt_source else 'absent'}",
+            f"registers {'present' if bundle.has_embedded_register_source else 'absent'}",
+        ]
+    )
 
 
 def _register_availability_lines(bundle: EvidenceBundle) -> str:
     if not bundle.has_embedded_register_source:
         return "\n".join([
             "- Peripheral register data is not available in this snapshot.",
-            "- Re-run `fetch --svd-file <file>` to capture peripheral register values.",
+            "- Capture it with `fetch --svd-file <file>` if peripheral state matters.",
         ])
     source = bundle.sources.registers
     return "\n".join([

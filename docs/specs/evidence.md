@@ -17,7 +17,7 @@ Own the CLI flows that resolve raw or saved evidence, build or load artifacts, a
 - Resolve snapshot input for `report` and `prompt`.
 - Build investigation artifacts from raw evidence when required.
 - Save snapshots for `fetch` and render report/prompt outputs for reuse.
-- Keep `fetch` stdout operational by summarizing the saved snapshot rather than rendering interpretive evidence.
+- Keep `fetch` stdout operational by summarizing the saved snapshot as outcome, evidence coverage, and next-step guidance rather than rendering interpretive evidence.
 - Thread `report` inspect-mode flags into the renderer layer without rebuilding from raw evidence.
 - Keep prompt-specific variable selectors isolated from the report parser surface.
 
@@ -41,7 +41,7 @@ Own the CLI flows that resolve raw or saved evidence, build or load artifacts, a
 
 ## Report Inspect Contract
 
-- Default `report` output is a human-readable summary.
+- Default `report` output is a concise human-readable summary that starts with current state, gaps, and next useful commands.
 - `report --vars [NAME ...]` emits a compact JSON object under `variables`.
 - `report --gdb [--tail N]` emits a compact JSON object under `gdb`.
 - `report --rtt [--tail N]` emits a compact JSON object under `rtt`.

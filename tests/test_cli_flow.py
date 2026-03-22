@@ -48,7 +48,7 @@ class DebugOracleCliTests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             parser.parse_args(["report", "--var-detail", "full"])
 
-    def test_fetch_writes_latest_snapshot_and_prints_operational_summary(self) -> None:
+    def test_fetch_writes_latest_snapshot_and_prints_agent_summary(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
             (workspace / "cortex-debug-shared-mi.log").write_text(
@@ -69,20 +69,47 @@ class DebugOracleCliTests(unittest.TestCase):
 
             snapshot_path = workspace / "latest_snapshot.json"
             self.assertTrue(snapshot_path.exists())
-            self.assertIn("Snapshot ID:", stdout)
-            self.assertIn("Output Path:", stdout)
+            self.assertIn("DebugOracle Fetch Summary", stdout)
+            self.assertIn("Outcome:", stdout)
+            self.assertIn("Evidence:", stdout)
+            self.assertIn("Next:", stdout)
+            self.assertIn("Snapshot saved:", stdout)
             self.assertIn(str(snapshot_path), stdout)
-            self.assertIn("Embedded Sources:", stdout)
-            self.assertIn("Source Sizes/Counts:", stdout)
+            self.assertIn("GDB: present", stdout)
+            self.assertIn("RTT: present", stdout)
+            self.assertIn("Registers: absent", stdout)
+            self.assertIn(f"dbgoracle report --workspace-root {workspace.resolve()}", stdout)
             self.assertIn("Auto-discovered input paths for fetch:", stderr)
+
+    def test_fetch_next_commands_use_resolved_workspace_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir, tempfile.TemporaryDirectory() as otherdir:
+            workspace = Path(tmpdir)
+            (workspace / "cortex-debug-shared-mi.log").write_text(
+                (FIXTURES / "sample.mi").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (workspace / "session.rtt").write_text(
+                (FIXTURES / "sample.rtt").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+
+            previous = os.getcwd()
+            try:
+                os.chdir(otherdir)
+                stdout, _ = self._run_cli(["fetch", "--workspace-root", tmpdir], capture_stderr=True)
+            finally:
+                os.chdir(previous)
+
+        self.assertIn(f"dbgoracle report --workspace-root {workspace.resolve()}", stdout)
+        self.assertNotIn("dbgoracle report --workspace-root .", stdout)
 
     def test_report_notes_when_svd_register_data_is_unavailable(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             snapshot_path = self._write_snapshot(Path(tmpdir) / "latest_snapshot.json")
             output = self._run_cli(["report", "--snapshot-file", str(snapshot_path)])
 
-        lowered = output.lower()
-        self.assertIn("peripheral register data is not available in this snapshot", lowered)
+        self.assertIn("Gaps:", output)
+        self.assertIn("Register data: absent", output)
         self.assertIn("fetch --svd-file", output)
 
     def test_report_requires_snapshot_and_tells_user_to_run_fetch(self) -> None:
@@ -161,7 +188,7 @@ class DebugOracleCliTests(unittest.TestCase):
         self.assertIn("rtt", payload)
         self.assertIn("provenance", payload)
 
-    def test_fetch_with_svd_captures_register_values_and_prints_register_counts(self) -> None:
+    def test_fetch_with_svd_captures_register_values_and_prints_register_guidance(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
             (workspace / "cortex-debug-shared-mi.log").write_text(
@@ -186,7 +213,8 @@ class DebugOracleCliTests(unittest.TestCase):
 
             payload = json.loads((workspace / "latest_snapshot.json").read_text(encoding="utf-8"))
 
-        self.assertIn("- regs:", stdout)
+        self.assertIn("Registers: present", stdout)
+        self.assertIn(f"dbgoracle report --workspace-root {workspace.resolve()} --regs-list", stdout)
         self.assertEqual(payload["sources"]["registers"]["device_name"], "STM32L432KCTest")
         self.assertEqual(payload["sources"]["registers"]["register_count"], 4)
         self.assertEqual(payload["sources"]["registers"]["success_count"], 2)
