@@ -22,6 +22,7 @@ Own the top-level CLI parser, shared argument groups, and command dispatch wirin
 - `status`, `capture-rtt` -> `debugoracle/cli/commands/status_capture.py`
 - `run`, `stop` -> `debugoracle/cli/commands/run_stop.py`
 - `fetch`, `report` -> `debugoracle/cli/commands/evidence.py`
+- `init-workspace` -> `debugoracle/cli/commands/init_workspace.py`
 - `observe`, `snapshot`, and `prompt` are not exposed on the public CLI surface.
 
 ## Constraints
@@ -61,5 +62,6 @@ Dispatch treats these as snapshot filters only.
 ## Fetch SVD Contract
 
 - `fetch --svd-file <file>` is the capture surface for SVD-backed peripheral register values.
+- If no explicit `--svd-file` is provided, `fetch` may use `debugoracle.svdFile` from `.vscode/settings.json` before falling back to `.dbgoracle/*.svd` auto-discovery.
 - The current implementation expects a recent halted stop in the GDB/MI log and uses the default OpenOCD control endpoint for safe peripheral register reads.
 - `fetch` keeps the SVD request on the capture side; `report` remains inspection-only.

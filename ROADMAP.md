@@ -38,8 +38,7 @@ Near-term, DebugOracle is:
 
 6. Serial as optional evidence
    Add serial capture as another evidence source for setups where RTT is unavailable, while preserving the same provenance rules.
-7. Source-context enrichment
-   Add source around the current PC, current function context, and related symbol lookup after the core evidence flow is dependable.
+7. Streamline project setup to maximize setup success rate.
 8. Session history and multi-stop timeline
    Preserve more than the latest stop so an agent can reason about sequence, transitions, and change over time.
 9. Interface selection and evidence shaping

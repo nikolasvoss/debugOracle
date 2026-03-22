@@ -30,6 +30,40 @@ The most useful MI capture includes:
 
 ## Commands
 
+### Bootstrap a workspace
+
+For a fresh project with an installed CLI, start here:
+
+```bash
+dbgoracle init-workspace --workspace-root . --executable build/app.elf
+```
+
+Optional workspace-default SVD path:
+
+```bash
+dbgoracle init-workspace --workspace-root . --executable build/app.elf --svd-file boards/sample.svd
+```
+
+`init-workspace` creates `.dbgoracle/` plus the supported `.vscode` scaffold when the workspace is fresh.
+If existing VS Code files block automation, it returns `partial` and prints exact follow-up actions.
+
+Software dependencies checked during `init-workspace`:
+
+- `openocd` on `PATH`
+- the configured executable path
+- the Cortex-Debug VS Code dependency as a reported requirement
+
+### File dependencies by input source
+
+| Input source / capability | Required workspace files | Required software dependencies | Notes |
+| --- | --- | --- | --- |
+| GDB/MI capture for `fetch` | `.vscode/settings.json`, `.vscode/launch.json`, `.dbgoracle/` | VS Code, Cortex-Debug | Launch config must write MI logs to the configured path. |
+| RTT capture via `run` / `stop` | `.dbgoracle/` | `openocd` with RTT endpoint | VS Code files are optional for manual CLI use. |
+| Default `fetch -> report` workflow | `.dbgoracle/`, `.vscode/settings.json`, `.vscode/launch.json` | VS Code, Cortex-Debug | `tasks.json` helps automation but is not required for the basic path. |
+| Managed prelaunch/postdebug RTT workflow | `.vscode/settings.json`, `.vscode/tasks.json`, `.dbgoracle/` | `openocd` | Active when the launch config references the DebugOracle RTT tasks. |
+| Workspace-default SVD for `fetch` | `.vscode/settings.json` | readable SVD file | Stored as `debugoracle.svdFile`. |
+| Live peripheral capture with SVD | `.vscode/settings.json` | `openocd`, usable Tcl port, readable SVD file | `init-workspace` stores the default SVD path but does not discover the Tcl port. |
+
 ### Easy setup for Cortex-Debug
 
 Use the example below to make first capture quick:
@@ -70,6 +104,7 @@ What to configure in Cortex-Debug:
 - RTT should stay enabled in Cortex-Debug/OpenOCD so the RTT TCP server comes up, but DebugOracle should write `.dbgoracle/session.rtt` via `run` (or `capture-rtt`).
 - Keep captures bounded: stop at the event you care about and end the debug session to avoid mixing multiple stops.
 - `fetch --svd-file <file>` is the explicit CLI trigger for halted live peripheral capture; builder-level SVD parsing stays catalog-only unless fetch enables it.
+- Without `--svd-file`, `fetch` first checks `.vscode/settings.json` for `debugoracle.svdFile`, then falls back to auto-discovering exactly one `.dbgoracle/*.svd` candidate.
 - `fetch --svd-file <file>` expects the most recent target-state event in the recent MI tail to still be a stop and uses the default OpenOCD control endpoint for safe peripheral register reads.
 - Refresh Call Stack, Registers, and Variables/Locals before capture so the latest stop has rich context.
 - Use one RTT consumer only while `run`/`capture-rtt` is attached.

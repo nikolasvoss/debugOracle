@@ -31,12 +31,183 @@ class DebugOracleCliTests(unittest.TestCase):
 
         self.assertEqual(parsed.command, "fetch")
 
+        parsed = parser.parse_args(
+            ["init-workspace", "--workspace-root", ".", "--executable", "build/app.elf"]
+        )
+        self.assertEqual(parsed.command, "init_workspace")
+
         for argv in (["observe"], ["snapshot"], ["prompt"]):
             with self.assertRaises(SystemExit) as error:
                 with redirect_stderr(io.StringIO()) as stderr:
                     parser.parse_args(argv)
             self.assertEqual(error.exception.code, 2)
             self.assertIn("invalid choice", stderr.getvalue())
+
+    def test_init_workspace_creates_fresh_workspace_scaffold(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            with patch("debugoracle.cli.commands.init_workspace.shutil.which", return_value="/usr/bin/openocd"):
+                stdout, stderr, exit_code = self._run_cli_capture(
+                    [
+                        "init-workspace",
+                        "--workspace-root",
+                        str(workspace),
+                        "--executable",
+                        "build/app.elf",
+                    ]
+                )
+
+            settings_path = workspace / ".vscode" / "settings.json"
+            launch_path = workspace / ".vscode" / "launch.json"
+            tasks_path = workspace / ".vscode" / "tasks.json"
+            session_dir = workspace / ".dbgoracle"
+
+            self.assertEqual(exit_code, 0)
+            self.assertTrue(session_dir.is_dir())
+            self.assertTrue(settings_path.is_file())
+            self.assertTrue(launch_path.is_file())
+            self.assertTrue(tasks_path.is_file())
+
+            settings = json.loads(settings_path.read_text(encoding="utf-8"))
+            self.assertEqual(settings["debugoracle.executable"], "build/app.elf")
+            self.assertEqual(
+                settings["debugoracle.miLogPath"],
+                "${workspaceFolder}/.dbgoracle/cortex-debug-shared-mi.log",
+            )
+            launch_text = launch_path.read_text(encoding="utf-8")
+            self.assertIn('"preLaunchTask": "Prepare debug logs"', launch_text)
+            self.assertNotIn('"postDebugTask": "DebugOracle: Stop RTT run"', launch_text)
+            self.assertIn("init-workspace", stdout)
+            self.assertEqual(stderr, "")
+
+    def test_init_workspace_resolves_executable_relative_to_workspace_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir, tempfile.TemporaryDirectory() as otherdir:
+            workspace = Path(tmpdir)
+            (workspace / "build").mkdir()
+            (workspace / "build" / "app.elf").write_text("elf", encoding="utf-8")
+            previous = os.getcwd()
+            try:
+                os.chdir(otherdir)
+                with patch("debugoracle.cli.commands.init_workspace.shutil.which", return_value="/usr/bin/openocd"):
+                    stdout, stderr, exit_code = self._run_cli_capture(
+                        [
+                            "init-workspace",
+                            "--workspace-root",
+                            str(workspace),
+                            "--executable",
+                            "build/app.elf",
+                            "--format",
+                            "json",
+                        ]
+                    )
+            finally:
+                os.chdir(previous)
+
+            payload = json.loads(stdout)
+
+        self.assertEqual(exit_code, 0)
+        executable = next(item for item in payload["dependency_checks"] if item["name"] == "executable")
+        self.assertEqual(executable["status"], "available")
+        self.assertEqual(stderr, "")
+
+    def test_init_workspace_returns_partial_json_when_existing_settings_block_automation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            vscode_dir = workspace / ".vscode"
+            vscode_dir.mkdir(parents=True)
+            (vscode_dir / "settings.json").write_text("{}\n", encoding="utf-8")
+
+            stdout, stderr, exit_code = self._run_cli_capture(
+                [
+                    "init-workspace",
+                    "--workspace-root",
+                    str(workspace),
+                    "--executable",
+                    "build/app.elf",
+                    "--format",
+                    "json",
+                ]
+            )
+
+            payload = json.loads(stdout)
+            self.assertEqual(exit_code, 2)
+            self.assertEqual(payload["status"], "partial")
+            self.assertIn(str(vscode_dir / "settings.json"), payload["blocked_files"])
+            self.assertEqual(payload["required_actions"][0]["path"], str(vscode_dir / "settings.json"))
+            self.assertIn("debugoracle.executable", payload["required_actions"][0]["fragment"])
+            self.assertTrue((workspace / ".vscode" / "launch.json").is_file())
+            self.assertTrue((workspace / ".vscode" / "tasks.json").is_file())
+            self.assertTrue((workspace / ".dbgoracle").is_dir())
+            self.assertEqual(stderr, "")
+
+    def test_init_workspace_text_output_includes_required_fragment_for_blocked_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            vscode_dir = workspace / ".vscode"
+            vscode_dir.mkdir(parents=True)
+            (vscode_dir / "settings.json").write_text("{}\n", encoding="utf-8")
+
+            stdout, stderr, exit_code = self._run_cli_capture(
+                [
+                    "init-workspace",
+                    "--workspace-root",
+                    str(workspace),
+                    "--executable",
+                    "build/app.elf",
+                ]
+            )
+
+        self.assertEqual(exit_code, 2)
+        self.assertIn("Required actions:", stdout)
+        self.assertIn('"debugoracle.executable": "build/app.elf"', stdout)
+        self.assertEqual(stderr, "")
+
+    def test_init_workspace_writes_workspace_default_svd_setting(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            with patch("debugoracle.cli.commands.init_workspace.shutil.which", return_value="/usr/bin/openocd"):
+                stdout, stderr, exit_code = self._run_cli_capture(
+                    [
+                        "init-workspace",
+                        "--workspace-root",
+                        str(workspace),
+                        "--executable",
+                        "build/app.elf",
+                        "--svd-file",
+                        "boards/sample.svd",
+                    ]
+                )
+
+            settings = json.loads((workspace / ".vscode" / "settings.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(settings["debugoracle.svdFile"], "boards/sample.svd")
+        self.assertEqual(stderr, "")
+        self.assertIn("init-workspace", stdout)
+
+    def test_init_workspace_reports_missing_openocd_as_partial(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            with patch("debugoracle.cli.commands.init_workspace.shutil.which", return_value=None):
+                stdout, stderr, exit_code = self._run_cli_capture(
+                    [
+                        "init-workspace",
+                        "--workspace-root",
+                        str(workspace),
+                        "--executable",
+                        "build/app.elf",
+                        "--format",
+                        "json",
+                    ]
+                )
+
+            payload = json.loads(stdout)
+
+        self.assertEqual(exit_code, 2)
+        self.assertEqual(payload["status"], "partial")
+        openocd = next(item for item in payload["dependency_checks"] if item["name"] == "openocd")
+        self.assertEqual(openocd["status"], "missing")
+        self.assertEqual(stderr, "")
 
     def test_report_rejects_removed_legacy_flags(self) -> None:
         parser = build_parser()
@@ -173,6 +344,78 @@ class DebugOracleCliTests(unittest.TestCase):
         self.assertIn("gdb", payload)
         self.assertIn("rtt", payload)
         self.assertIn("provenance", payload)
+
+    def test_fetch_uses_workspace_default_svd_file_from_vscode_settings(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            (workspace / "cortex-debug-shared-mi.log").write_text(
+                (FIXTURES / "sample.mi").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (workspace / "session.rtt").write_text(
+                (FIXTURES / "sample.rtt").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (workspace / ".vscode").mkdir()
+            (workspace / ".vscode" / "settings.json").write_text(
+                json.dumps({"debugoracle.svdFile": str(FIXTURES / "sample.svd")}) + "\n",
+                encoding="utf-8",
+            )
+
+            with _FakeOpenOcdServer(values=DEFAULT_OPENOCD_VALUES) as server:
+                stdout, stderr = self._run_cli_in_workspace(
+                    workspace,
+                    ["fetch"],
+                    env={
+                        "DEBUGORACLE_OPENOCD_HOST": server.host,
+                        "DEBUGORACLE_OPENOCD_PORT": str(server.port),
+                    },
+                    capture_stderr=True,
+                )
+
+            payload = json.loads((workspace / "latest_snapshot.json").read_text(encoding="utf-8"))
+
+        self.assertIn("Registers: present", stdout)
+        self.assertIn("Workspace default SVD for fetch:", stderr)
+        self.assertEqual(payload["sources"]["registers"]["device_name"], "STM32L432KCTest")
+
+    def test_fetch_reads_workspace_default_svd_from_jsonc_with_url_string(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            (workspace / "cortex-debug-shared-mi.log").write_text(
+                (FIXTURES / "sample.mi").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (workspace / "session.rtt").write_text(
+                (FIXTURES / "sample.rtt").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (workspace / ".vscode").mkdir()
+            (workspace / ".vscode" / "settings.json").write_text(
+                '{\n'
+                '  // workspace metadata\n'
+                '  "debugoracle.svdFile": "' + str(FIXTURES / "sample.svd") + '",\n'
+                '  "test.url": "https://example.com/debug",\n'
+                '}\n',
+                encoding="utf-8",
+            )
+
+            with _FakeOpenOcdServer(values=DEFAULT_OPENOCD_VALUES) as server:
+                stdout, stderr = self._run_cli_in_workspace(
+                    workspace,
+                    ["fetch"],
+                    env={
+                        "DEBUGORACLE_OPENOCD_HOST": server.host,
+                        "DEBUGORACLE_OPENOCD_PORT": str(server.port),
+                    },
+                    capture_stderr=True,
+                )
+
+            payload = json.loads((workspace / "latest_snapshot.json").read_text(encoding="utf-8"))
+
+        self.assertIn("Registers: present", stdout)
+        self.assertIn("Workspace default SVD for fetch:", stderr)
+        self.assertEqual(payload["sources"]["registers"]["device_name"], "STM32L432KCTest")
 
     def test_fetch_with_svd_captures_register_values_and_prints_register_guidance(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -374,6 +617,16 @@ class DebugOracleCliTests(unittest.TestCase):
                 return self._run_cli(argv, capture_stderr=capture_stderr)
         finally:
             os.chdir(previous)
+
+    def _run_cli_capture(
+        self,
+        argv: list[str],
+    ) -> tuple[str, str, int]:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            exit_code = main(argv)
+        return stdout.getvalue(), stderr.getvalue(), exit_code
 
 
 class _FakeOpenOcdHandler(socketserver.BaseRequestHandler):

@@ -10,6 +10,14 @@ from ..sources.streams.rtt import (
     DEFAULT_RTT_POLL_INTERVAL,
 )
 from .commands.evidence import cmd_fetch, cmd_report
+from .commands.init_workspace import (
+    DEFAULT_MI_LOG_PATH,
+    DEFAULT_RTT_LAUNCH_LOG_PATH,
+    DEFAULT_RTT_LOG_PATH,
+    DEFAULT_RTT_PORT as DEFAULT_INIT_RTT_PORT,
+    DEFAULT_RTT_STATE_PATH,
+    cmd_init_workspace,
+)
 from .commands.run_stop import (
     DEFAULT_RUN_PORT,
     cmd_run,
@@ -294,6 +302,71 @@ def build_parser() -> argparse.ArgumentParser:
         help="Render the full text report even when the trust verdict is unsafe",
     )
     report.set_defaults(func=cmd_report)
+
+    init_workspace = subparsers.add_parser(
+        "init-workspace",
+        help="Create a DebugOracle workspace scaffold for a fresh project",
+        description=(
+            "Create the .dbgoracle and .vscode files needed for the supported "
+            "Cortex-Debug/OpenOCD workspace flow."
+        ),
+    )
+    init_workspace.add_argument(
+        "--workspace-root",
+        default=".",
+        help="Workspace root where the scaffold should be created",
+    )
+    init_workspace.add_argument(
+        "--executable",
+        required=True,
+        help="ELF or executable path stored in workspace settings",
+    )
+    init_workspace.add_argument(
+        "--svd-file",
+        help="Optional default SVD file path stored in workspace settings",
+    )
+    init_workspace.add_argument(
+        "--mi-log-path",
+        default=DEFAULT_MI_LOG_PATH,
+        help="Workspace MI log path stored in settings.json",
+    )
+    init_workspace.add_argument(
+        "--rtt-log-path",
+        default=DEFAULT_RTT_LOG_PATH,
+        help="Workspace RTT log path stored in settings.json",
+    )
+    init_workspace.add_argument(
+        "--rtt-state-path",
+        default=DEFAULT_RTT_STATE_PATH,
+        help="Workspace RTT state sidecar path stored in settings.json",
+    )
+    init_workspace.add_argument(
+        "--rtt-launch-log-path",
+        default=DEFAULT_RTT_LAUNCH_LOG_PATH,
+        help="Workspace RTT launch log path stored in settings.json",
+    )
+    init_workspace.add_argument(
+        "--rtt-port",
+        default=DEFAULT_INIT_RTT_PORT,
+        help="Default RTT port stored in settings.json",
+    )
+    init_workspace.add_argument(
+        "--with-rtt",
+        action="store_true",
+        help="Reserved flag for enabling RTT-specific guidance in the scaffold",
+    )
+    init_workspace.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite existing DebugOracle-managed scaffold files",
+    )
+    init_workspace.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="Output format",
+    )
+    init_workspace.set_defaults(command="init_workspace", func=cmd_init_workspace)
 
     return parser
 

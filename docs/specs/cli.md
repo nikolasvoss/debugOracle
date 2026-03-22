@@ -43,14 +43,17 @@ implementation lives in:
 - `debugoracle/cli/commands/status_capture.py` for `status` and `capture-rtt`
 - `debugoracle/cli/commands/run_stop.py` for `run` and `stop`
 - `debugoracle/cli/commands/evidence.py` for `fetch` and `report`
+- `debugoracle/cli/commands/init_workspace.py` for `init-workspace`
 
-The CLI has three behavioral layers:
+The CLI has four behavioral layers:
 
-1. Transport and workspace health
+1. Workspace bootstrap
+   Command: `init-workspace`
+2. Transport and workspace health
    Commands: `status`, `capture-rtt`, `run`, `stop`
-2. Evidence capture and stabilization
+3. Evidence capture and stabilization
    Command: `fetch`
-3. Evidence rendering and inspection
+4. Evidence rendering and inspection
    Command: `report`
 
 ## Shared Inputs
@@ -163,6 +166,26 @@ Outputs:
 Meaning:
 - Stops only managed DebugOracle run processes and cleans up stale runtime metadata.
 
+### `init-workspace`
+
+Purpose:
+- Bootstrap a supported DebugOracle workspace for the installed CLI path.
+
+Inputs:
+- Workspace root
+- Required executable path
+- Optional workspace-default SVD path
+- Optional RTT-related workspace defaults
+
+Outputs:
+- Scaffolded `.dbgoracle` and `.vscode` files when safe
+- `text` or `json` status with created files, blocked files, required follow-up actions, and dependency checks
+
+Meaning:
+- `init-workspace` is a setup helper, not an evidence command.
+- It refuses to overwrite existing user-owned VS Code config files by default.
+- It may return `partial` when setup is recoverable but needs follow-up edits or software dependencies.
+
 ### `fetch`
 
 Purpose:
@@ -172,6 +195,7 @@ Inputs:
 - Raw evidence, by explicit path or discovery
 - Optional `--state-out`
 - Optional `--svd-file` for embedded register catalog capture
+- Optional workspace-default `debugoracle.svdFile` from `.vscode/settings.json` when no explicit SVD flag is provided
 
 Outputs:
 - Snapshot JSON written to disk

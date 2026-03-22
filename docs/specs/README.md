@@ -24,6 +24,7 @@ during this refactor. It is intentionally curated rather than a flat dump of eve
 | `status_capture` | `debugoracle/cli/commands/status_capture.py` | [`status_capture.md`](status_capture.md) |
 | `run_stop` | `debugoracle/cli/commands/run_stop.py` | [`run_stop.md`](run_stop.md) |
 | `evidence` | `debugoracle/cli/commands/evidence.py` | [`evidence.md`](evidence.md) |
+| `init_workspace` | `debugoracle/cli/commands/init_workspace.py` | [`init_workspace.md`](init_workspace.md) |
 | `halt_snapshot` | `debugoracle/sources/debuggers/gdb/halt_snapshot.py` | [`halt_snapshot.md`](halt_snapshot.md) |
 | `live` | `debugoracle/live.py` | [`live.md`](live.md) |
 | `memory` | `debugoracle/sources/debuggers/gdb/memory.py` | [`memory.md`](memory.md) |
