@@ -5,12 +5,11 @@ import os
 import sys
 from pathlib import Path
 
-from ...artifacts.models import InvestigationArtifact, InvestigationRequest
+from ...artifacts.models import InvestigationArtifact
 from ...artifacts.repository import ArtifactLoadError, load_artifact, save_artifact
 from ...builder import DEFAULT_RTT_WINDOW, FULL_RTT_WINDOW, build_bundle_from_files
 from ...policy.halted_analysis import evaluate_artifact_live_state
 from ...policy.trust import evaluate_artifact_trust
-from ...renderers.prompt import render_prompt
 from ...renderers.report import ReportRenderOptions, render_report
 from ...session import (
     collect_session_status,
@@ -76,24 +75,6 @@ def cmd_fetch(args: argparse.Namespace) -> int:
     save_artifact(bundle, state_out)
     emit_fetch_summary(bundle, state_out, workspace_root=str(workspace_root))
     return 0
-
-
-def cmd_prompt(args: argparse.Namespace) -> int:
-    bundle = resolve_required_snapshot(args, command_name="prompt")
-    intent = read_intent(args.intent, args.intent_file)
-    request = InvestigationRequest(
-        goal_text=args.goal,
-        intent_text=intent,
-        snapshot_ref=bundle.snapshot_id,
-        format=args.format,
-        detail_level="full" if args.full else "compact",
-        var_scope=args.var_scope,
-        var_names=list(args.var_name or []),
-        var_detail=args.var_detail,
-    )
-    output = render_prompt(bundle, request)
-    return emit(output, args.output)
-
 
 def cmd_report(args: argparse.Namespace) -> int:
     bundle = resolve_required_snapshot(args, command_name="report")
@@ -544,16 +525,6 @@ def resolve_state_out_path(
         return str(Path(rtt).parent / DEFAULT_SNAPSHOT_FILENAME)
 
     return str(workspace_root / DEFAULT_SESSION_DIR / DEFAULT_SNAPSHOT_FILENAME)
-
-
-def read_intent(intent: str | None, intent_file: str | None) -> str | None:
-    if intent is not None:
-        return intent
-    if intent_file:
-        if intent_file == "-":
-            return sys.stdin.read().strip()
-        return Path(intent_file).read_text(encoding="utf-8").strip()
-    return None
 
 
 def emit(output: str, path: str | None) -> int:

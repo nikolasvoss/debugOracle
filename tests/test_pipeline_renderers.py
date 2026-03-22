@@ -6,7 +6,6 @@ from pathlib import Path
 
 from debugoracle.artifacts.models import (
     InvestigationArtifact,
-    InvestigationRequest,
     VariableEntry,
     VariableEvidence,
 )
@@ -110,7 +109,6 @@ class PipelineAndRendererTests(unittest.TestCase):
         self.assertEqual(len(artifact.recent_rtt), 3)
 
     def test_canonical_renderers_produce_expected_outputs(self) -> None:
-        from debugoracle.renderers.prompt import render_prompt
         from debugoracle.renderers.report import render_report
         from debugoracle.renderers.snapshot import render_snapshot
 
@@ -133,12 +131,9 @@ class PipelineAndRendererTests(unittest.TestCase):
             rtt_window=40,
         )
 
-        request = InvestigationRequest(goal_text="Explain why the target stopped here")
-
         rendered_report = render_report(artifact)
         self.assertIn("DebugOracle Evidence Report", rendered_report)
         self.assertIn("Current State:", rendered_report)
-        self.assertIn("DebugOracle Prompt Package", render_prompt(artifact, request))
         self.assertIn('"snapshot_id"', render_snapshot(artifact, fmt="json"))
 
     def test_partial_snapshot_marks_missing_rtt_source_absent_and_report_rtt_fails(self) -> None:

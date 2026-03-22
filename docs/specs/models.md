@@ -3,7 +3,7 @@
 - Module: `models`
 - Code Path: `debugoracle/artifacts/models.py`
 - Public Entrypoints: `InvestigationArtifact`, `ArtifactSources`, `GdbSource`, `RttSource`, `VariableEvidence`, `VariableEntry`
-- Last Updated: `2026-03-20`
+- Last Updated: `2026-03-22`
 
 # SPEC: Artifact Models
 
@@ -13,7 +13,7 @@ Define the canonical snapshot schema for DebugOracle artifacts.
 
 ## Responsibilities
 
-- Preserve cheap top-level summary fields for report and prompt flows.
+- Preserve cheap top-level summary fields for report and status flows.
 - Store embedded source payloads under a top-level `sources` object.
 - Support best-effort loading of older snapshots that still use legacy top-level stream fields.
 

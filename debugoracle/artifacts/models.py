@@ -232,29 +232,6 @@ class InvestigationArtifact:
         )
 
 
-@dataclass
-class InvestigationRequest:
-    goal_text: str
-    intent_text: str | None = None
-    snapshot_ref: str | None = None
-    format: str = "markdown"
-    detail_level: str = "compact"
-    var_scope: str = "all"
-    var_names: list[str] = field(default_factory=list)
-    var_detail: str = "compact"
-
-
-@dataclass
-class PromptPackage:
-    goal: str
-    intent: str | None
-    summary: str
-    evidence_appendix: str
-    unknowns_and_gaps: list[str]
-    instructions: str
-    citations: list[str]
-
-
 EvidenceBundle = InvestigationArtifact
 
 __all__ = [
@@ -263,9 +240,7 @@ __all__ = [
     "EvidenceBundle",
     "GdbSource",
     "InvestigationArtifact",
-    "InvestigationRequest",
     "PeripheralRegisterSet",
-    "PromptPackage",
     "RegisterEntry",
     "RegisterSource",
     "RttSource",

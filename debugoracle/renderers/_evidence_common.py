@@ -5,12 +5,10 @@ from typing import Iterable
 
 from ..artifacts.models import (
     EvidenceBundle,
-    InvestigationRequest,
     VariableEntry,
     VariableEvidence,
     VARIABLE_BUCKETS,
 )
-from ..builder import DEFAULT_RTT_WINDOW, FULL_RTT_WINDOW
 
 COMPACT_VARIABLE_LIMIT = 5
 
@@ -22,102 +20,7 @@ class VariableRenderOptions:
     detail: str = "compact"
 
 
-def summary(bundle: EvidenceBundle, request: InvestigationRequest) -> str:
-    top = bundle.frames[0] if bundle.frames else None
-    location = frame_label(top) if top else "No stack frame available"
-    log_window = bundle.provenance.get("rtt_window", DEFAULT_RTT_WINDOW)
-    variable_options = variable_options_from_request(request)
-    lines = [
-        f"- Snapshot ID: {bundle.snapshot_id}",
-        f"- Captured At: {bundle.captured_at}",
-        f"- Stop Reason: {bundle.stop_reason or 'unknown'}",
-        f"- Current Location: {location}",
-        f"- PC/LR/SP: {bundle.pc or 'unknown'} / {bundle.lr or 'unknown'} / {bundle.sp or 'unknown'}",
-        f"- Stack Frames: {len(bundle.frames)}",
-        f"- Registers Captured: {len(bundle.registers)}",
-        f"- Variable Entries: {bundle.variable_evidence.count()}",
-        f"- RTT Window Included: {len(bundle.recent_rtt)} lines (configured window {log_window})",
-        f"- Requested Goal: {request.goal_text}",
-    ]
-    evidence_quality = bundle.provenance.get("evidence_quality_score")
-    if evidence_quality is not None:
-        lines.append(f"- Evidence Quality Score: {evidence_quality}/100")
-    if request.detail_level == "full":
-        lines.append("- Detail Mode: full")
-    else:
-        lines.append("- Detail Mode: compact")
-    lines.append(f"- Variable Scope: {variable_options.scope}")
-    lines.append(f"- Variable Detail: {variable_options.detail}")
-    return "\n".join(lines)
-
-
-def appendix(bundle: EvidenceBundle, request: InvestigationRequest) -> str:
-    rtt_limit = FULL_RTT_WINDOW if request.detail_level == "full" else DEFAULT_RTT_WINDOW
-    recent_rtt = bundle.recent_rtt[-rtt_limit:]
-    variable_options = variable_options_from_request(request)
-    sections = [
-        "### Session Context",
-        session_summary(bundle),
-        "",
-        "### Stack Trace",
-        stack_section(bundle.frames),
-        "",
-        "### Registers",
-        mapping_section(bundle.registers),
-        "",
-        "### Variable Evidence",
-        variable_section(bundle.variable_evidence, variable_options),
-        "",
-        "### Recent RTT",
-        lines_section(recent_rtt),
-        "",
-        "### Parsing Summary",
-        parsing_summary_section(bundle),
-        "",
-        "### Raw Non-MI Excerpt",
-        lines_section(non_mi_excerpt(bundle)),
-        "",
-        "### Source Context",
-        mapping_section(bundle.source_context),
-        "",
-        "### Provenance",
-        mapping_section(bundle.provenance),
-    ]
-    if bundle.parse_warnings:
-        sections.extend(["", "### Parse Warnings", lines_section(bundle.parse_warnings)])
-    return "\n".join(sections).rstrip()
-
-
-def instructions(request: InvestigationRequest) -> str:
-    return "\n".join(
-        [
-            "- Use the provided evidence bundle as the primary source of truth.",
-            "- Separate observed facts from inferred hypotheses.",
-            "- Call out missing or ambiguous evidence before reaching conclusions.",
-            "- If an intended system state is provided, compare it explicitly against the observed state.",
-            "- Recommend concrete next debug steps that gather more evidence without assuming unsupported facts.",
-            f"- Answer the user goal directly: {request.goal_text}",
-        ]
-    )
-
-
-def citations(bundle: EvidenceBundle) -> list[str]:
-    gdb_source = bundle.provenance.get("gdb_mi_source", "<unknown>")
-    rtt_source = bundle.provenance.get("rtt_source")
-    citations = [
-        f"C1 Session context and stop state from GDB/MI transcript: {gdb_source}",
-        "C2 Stack trace extracted from the latest observed stop-context snapshot",
-        "C3 Register values extracted from the latest register-values result record",
-        "C4 Variable evidence extracted from the latest locals/variables/watchpoint records",
-    ]
-    if rtt_source:
-        citations.append(f"C5 Recent RTT lines from: {rtt_source}")
-    else:
-        citations.append("C5 RTT evidence unavailable in this snapshot")
-    return citations
-
-
-def unknowns(bundle: EvidenceBundle, request: InvestigationRequest | None) -> list[str]:
+def unknowns(bundle: EvidenceBundle) -> list[str]:
     unknowns_list: list[str] = []
     _, _, mi_parse_error_count = parsing_summary_counts(bundle)
     if bundle.stop_reason is None:
@@ -139,11 +42,7 @@ def unknowns(bundle: EvidenceBundle, request: InvestigationRequest | None) -> li
         unknowns_list.append(f"MI parse errors detected: {mi_parse_error_count} (see Parsing Summary).")
     for warning in critical_warnings(bundle):
         unknowns_list.append(f"Critical parser warning: {warning}")
-    if request and request.intent_text is None:
-        unknowns_list.append("No intended system state text was provided.")
-    if request and len(request.goal_text.strip()) < 10:
-        unknowns_list.append("The requested goal is very short and may be underspecified.")
-    return unknowns_list or ["No major evidence gaps detected in the packaged snapshot."]
+    return unknowns_list or ["No major evidence gaps detected in the captured snapshot."]
 
 
 def session_summary(bundle: EvidenceBundle, plain: bool = False) -> str:
@@ -195,22 +94,6 @@ def lines_section(lines: Iterable[str], plain: bool = False) -> str:
 
 def render_bullets(items: Iterable[str], bullet: str = "- ") -> str:
     return "\n".join(f"{bullet}{item}" for item in items)
-
-
-def variable_options_from_request(request: InvestigationRequest) -> VariableRenderOptions:
-    return VariableRenderOptions(
-        scope=request.var_scope,
-        names=list(request.var_names),
-        detail=request.var_detail,
-    )
-
-
-def variable_options_from_args(args: object) -> VariableRenderOptions:
-    scope = getattr(args, "var_scope", "all")
-    names = list(getattr(args, "var_name", []) or [])
-    detail = getattr(args, "var_detail", "compact")
-    return VariableRenderOptions(scope=scope, names=names, detail=detail)
-
 
 def variable_section(
     evidence: VariableEvidence,

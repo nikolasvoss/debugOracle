@@ -3,15 +3,15 @@
 - Module: `cli`
 - Code Path: `debugoracle/cli/__init__.py`
 - Public Entrypoints: `main`
-- Last Updated: `2026-03-20`
+- Last Updated: `2026-03-22`
 
 # SPEC: DebugOracle CLI
 
 ## Purpose
 
 DebugOracle is an agent-first CLI for collecting, stabilizing, and rendering embedded debug evidence.
-It packages bounded GDB/MI and optional RTT artifacts into a reusable snapshot, then renders either a
-human report or an agent-ready prompt from that evidence.
+It packages bounded GDB/MI and optional RTT artifacts into a reusable snapshot, then renders a
+human-readable report or structured inspection payloads from that evidence.
 
 The CLI does not drive the debugger, write to target memory, or execute LLM calls.
 
@@ -42,7 +42,7 @@ implementation lives in:
 - `debugoracle/cli/main.py` for parser construction and dispatch
 - `debugoracle/cli/commands/status_capture.py` for `status` and `capture-rtt`
 - `debugoracle/cli/commands/run_stop.py` for `run` and `stop`
-- `debugoracle/cli/commands/evidence.py` for `fetch`, `report`, and `prompt`
+- `debugoracle/cli/commands/evidence.py` for `fetch` and `report`
 
 The CLI has three behavioral layers:
 
@@ -50,8 +50,8 @@ The CLI has three behavioral layers:
    Commands: `status`, `capture-rtt`, `run`, `stop`
 2. Evidence capture and stabilization
    Command: `fetch`
-3. Evidence rendering and packaging
-   Commands: `report`, `prompt`
+3. Evidence rendering and inspection
+   Command: `report`
 
 ## Shared Inputs
 
@@ -86,7 +86,7 @@ source is available.
   `fetch --svd-file <file>` opts into halted live peripheral capture; builder-level SVD parsing stays catalog-only unless fetch enables it explicitly.
 
 Snapshots are reusable, machine-readable evidence bundles previously written by `fetch`.
-`report` and `prompt` resolve only snapshots; they do not accept raw evidence inputs.
+`report` resolves only snapshots; it does not accept raw evidence inputs.
 Snapshot completeness is defined by embedded source sections, not by raw sidecar export metadata.
 
 ### Output
@@ -210,23 +210,6 @@ Meaning:
 - Full embedded source payloads remain inside the snapshot and can be surfaced through inspect modes.
 - `--regs-list` is the discovery surface for captured register catalogs, while `--regs` is the stored-value/status surface.
 
-### `prompt`
-
-Purpose:
-- Render an agent-ready prompt package from stable evidence.
-
-Inputs:
-- Snapshot input only
-- Required `--goal`
-- Optional intent text or intent file
-
-Outputs:
-- Prompt package in `text` or `markdown`
-
-Meaning:
-- `prompt` is snapshot-only.
-- It never rebuilds from raw evidence.
-
 ## Source Resolution
 
 ### Explicit Inputs Override Discovery
@@ -259,7 +242,7 @@ Examples:
 
 - only GDB/MI found: build degraded evidence from GDB/MI only
 - only RTT found: build degraded evidence from RTT only
-- snapshot found and no raw found: `report` and `prompt` may use the discovered snapshot
+- snapshot found and no raw found: `report` may use the discovered snapshot
 
 All auto-discovered choices must be reported on `stderr`.
 
@@ -299,7 +282,7 @@ Examples:
 
 - missing GDB/MI during `fetch`
 - missing RTT during `fetch`
-- missing selected sources for `report` or `prompt`
+- missing selected sources for `report`
 - non-MI transcript noise
 - MI parse warnings
 - thin stop context

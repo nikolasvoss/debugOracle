@@ -25,16 +25,18 @@ DEFAULT_OPENOCD_VALUES = {
 
 
 class DebugOracleCliTests(unittest.TestCase):
-    def test_fetch_exists_and_observe_snapshot_commands_are_gone(self) -> None:
+    def test_fetch_exists_and_observe_snapshot_prompt_commands_are_gone(self) -> None:
         parser = build_parser()
         parsed = parser.parse_args(["fetch"])
 
         self.assertEqual(parsed.command, "fetch")
 
-        with self.assertRaises(SystemExit):
-            parser.parse_args(["observe"])
-        with self.assertRaises(SystemExit):
-            parser.parse_args(["snapshot"])
+        for argv in (["observe"], ["snapshot"], ["prompt"]):
+            with self.assertRaises(SystemExit) as error:
+                with redirect_stderr(io.StringIO()) as stderr:
+                    parser.parse_args(argv)
+            self.assertEqual(error.exception.code, 2)
+            self.assertIn("invalid choice", stderr.getvalue())
 
     def test_report_rejects_removed_legacy_flags(self) -> None:
         parser = build_parser()
@@ -124,22 +126,6 @@ class DebugOracleCliTests(unittest.TestCase):
         self.assertNotEqual(code, 0)
         message = (stdout + stderr).strip()
         self.assertIn("report requires a snapshot", message)
-        self.assertIn("run `fetch`", message)
-
-    def test_prompt_requires_snapshot_and_tells_user_to_run_fetch(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            previous = os.getcwd()
-            try:
-                os.chdir(tmpdir)
-                code, stdout, stderr = self._run_cli_expect_system_exit(
-                    ["prompt", "--goal", "Explain why the target stopped here"]
-                )
-            finally:
-                os.chdir(previous)
-
-        self.assertNotEqual(code, 0)
-        message = (stdout + stderr).strip()
-        self.assertIn("prompt requires a snapshot", message)
         self.assertIn("run `fetch`", message)
 
     def test_report_vars_outputs_grouped_json_object(self) -> None:

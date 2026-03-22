@@ -381,7 +381,7 @@ def _render_report_text(
         _register_availability_lines(bundle),
         "",
         "Unknowns And Gaps:",
-        render_bullets(unknowns(bundle, None)),
+        render_bullets(unknowns(bundle)),
         "",
         "Source Availability:",
         _source_availability_lines(bundle),

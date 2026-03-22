@@ -3,7 +3,7 @@
 - Module: `main`
 - Code Path: `debugoracle/cli/main.py`
 - Public Entrypoints: `main`, `build_parser`
-- Last Updated: `2026-03-20`
+- Last Updated: `2026-03-22`
 
 # SPEC: DebugOracle CLI Parser And Dispatch
 
@@ -21,9 +21,8 @@ Own the top-level CLI parser, shared argument groups, and command dispatch wirin
 
 - `status`, `capture-rtt` -> `debugoracle/cli/commands/status_capture.py`
 - `run`, `stop` -> `debugoracle/cli/commands/run_stop.py`
-- `fetch`, `report`, `prompt` -> `debugoracle/cli/commands/evidence.py`
-- `observe` and `snapshot` are not exposed on the public CLI surface.
-- `prompt` does not expose raw-input-only flags such as `--rtt-window`.
+- `fetch`, `report` -> `debugoracle/cli/commands/evidence.py`
+- `observe`, `snapshot`, and `prompt` are not exposed on the public CLI surface.
 
 ## Constraints
 

@@ -185,12 +185,6 @@ dbgoracle report --workspace-root . --regs-list
 dbgoracle report --workspace-root . --regs RCC
 ```
 
-For an agent-ready handoff artifact:
-
-```bash
-dbgoracle prompt --workspace-root . --goal "Explain why the target stopped here"
-```
-
 ## Minimal validation checklist
 
 - Your `.vscode/settings.json` contains the normal project values in one place.

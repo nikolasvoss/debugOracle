@@ -1,79 +1,73 @@
-# DebugOracle Product Extension Roadmap
+# DebugOracle Product Roadmap
 
-This roadmap is ranked by product impact for the current direction:
+This roadmap tracks product sequencing for the current DebugOracle direction.
 
-- agent-driven CLI evidence workflow first
-- report-first evidence inspection
-- MCP later, after the CLI contract is proven
-- probe-backed live reads later
-- strict read-only operation
-- low-level verification before higher-level features
+The canonical product story lives in [`docs/strategy.md`](docs/strategy.md).
+The product promise and primary user journey live in [`GOAL.md`](GOAL.md).
+The supported workflow and command contract live in [`README.md`](README.md).
+
+Near-term, DebugOracle is:
+
+- an agent-driven CLI evidence workflow
+- `fetch` for capture
+- `report` for inspection
+- read-only by default
+- trust, freshness, and provenance first
 
 ## Product guardrails
 
 - Core user question: "Why does my code not do x?"
 - DebugOracle should help an agent explain the gap between intended behavior and observed target state.
 - Default CLI feedback should answer three things quickly: current state, available evidence, and the next best debugging step.
-- Future features should be judged by whether they improve that explanation loop, not just by whether they expose more raw debugger detail.
+- New work should strengthen the evidence loop, not just expose more raw debugger detail.
 
-## Highest impact
+## Now
 
-1. Stable live debug backend
-   Build trustworthy low-level reads first: backend status, register reads, bounded memory reads, and clean error mapping.
-2. Agent-usable CLI evidence workflow
-   Make `fetch` and `report` the durable same-workspace interface that an agent can drive deterministically before any MCP layer exists.
-3. Freshness and provenance model
-   Separate captured snapshot data from live reads so stale files never masquerade as current target state.
-4. Agent guidance layer
-   Suggest the next best evidence request after `report` instead of relying only on free-form prompting.
-5. MCP server with snapshot and live tools
-   Expose the same proven evidence model through read-only tool calls after the CLI workflow and backend contracts are stable.
-6. Safe peripheral read model
-   Add allowlisted peripheral reads only after side-effect review and bounded output rules are in place.
-7. Serial log ingestion
-   Support setups that have no RTT by adding serial as another optional evidence source with the same provenance rules.
+1. Stable capture and reporting
+   Make the `fetch -> report` workflow reliable, deterministic, and easy for an agent or engineer to repeat in the same workspace.
+2. Freshness and provenance model
+   Keep captured snapshot data, optional live reads, and older artifacts clearly separated so stale evidence never looks current.
+3. Session health and observability
+   Surface probe connectivity, artifact freshness, parse warnings, and transport health early enough to prevent silent failure.
+4. Safe halted live reads
+   Support bounded, read-only live enrichment only when the target state is trustworthy and the read path is clearly safe.
+5. Clear agent-facing guidance
+   Keep command behavior, evidence expectations, and fallback paths obvious so an agent can use the CLI without guessing.
 
-## Next expansion wave
+## Next
 
-8. Session health and observability
-   Report probe connectivity, snapshot freshness, parse warnings, and last successful live-read timestamps.
-9. Source-context enrichment
-   Add source around PC, current function context, and related symbol lookup after raw state access is reliable.
-10. Session history and multi-stop timeline
-   Preserve more than the latest stop so the agent can reason about sequence and change over time.
-11. Interface selector profile
-   Add user-controlled interface toggles (RTT, registers, MI, future peripheral sources) so a session can collect or render only relevant streams.
-12. Redaction and trust-boundary controls
-   Add memory, RTT, and serial scrubbing before wider use on real firmware and customer codebases.
-13. Shareable debug bundles
-   Package portable evidence bundles for handoff, bug reports, and offline replay.
-14. Add better CLI descriptions and examples for human understanding.
-15. Add CLI short commands, like -h for --help or -o for --output for more efficient usage.
+6. Serial as optional evidence
+   Add serial capture as another evidence source for setups where RTT is unavailable, while preserving the same provenance rules.
+7. Source-context enrichment
+   Add source around the current PC, current function context, and related symbol lookup after the core evidence flow is dependable.
+8. Session history and multi-stop timeline
+   Preserve more than the latest stop so an agent can reason about sequence, transitions, and change over time.
+9. Interface selection and evidence shaping
+   Let a session collect or render only the evidence streams that matter without weakening the default path.
+10. Redaction and trust-boundary controls
+   Add memory, RTT, and serial scrubbing before broader artifact sharing becomes a routine workflow.
 
-## Later leverage and UX work
+## Later
 
-16. VS Code-specific bridge
-   Bring the experience closer to an in-editor chat flow after the backend and tool contract are stable.
-17. Multi-session and multi-target support
-   Handle more advanced probe and workspace setups without breaking the single-session default.
-18. Recorded replay and offline investigation mode
-   Reuse the same tool surface with saved sessions when hardware is unavailable.
-19. Advanced live tools
-   Add watch expressions, structured fault-register decoding, and RTOS-aware views after safety and trust are mature.
+11. Shareable debug bundles
+   Package portable evidence bundles for handoff, bug reports, and offline reuse once trust-boundary controls are in place.
+12. VS Code-specific workflow improvements
+   Reduce setup friction and make the in-editor path smoother after the CLI workflow is boringly reliable.
+13. Multi-session and multi-target support
+   Expand beyond the single-session default without making the common case harder to understand or operate.
+14. Recorded replay and offline investigation
+   Reuse the same evidence surfaces with saved sessions when hardware is unavailable.
+15. Advanced live views
+   Add higher-level live inspection such as watch expressions, structured fault decoding, and RTOS-aware views after safety and trust are mature.
 
-## Current implementation priority
+## Current milestone
 
-The current slice focuses only on the low-level-first foundation:
+The current milestone is a trustworthy low-level foundation for agent-assisted CLI debugging:
 
-- an agent-usable same-workspace CLI flow
-- session and freshness inspection
-- managed RTT capture and workspace status
-- strict snapshot integrity for user-facing rendering (`report` first, optional `prompt` packaging) with hard-fail on unreadable or malformed snapshot JSON
-- `dbgoracle --version` contract with fixed output `0.1.0`
-- placeholder source-context cleanup from `future.py` and related placeholder output
+- a same-workspace `fetch -> report` flow that is easy to verify directly
+- explicit session status, freshness, and trust reporting
+- managed RTT capture and workspace health checks
+- strict snapshot integrity for user-facing rendering
+- optional halted peripheral enrichment that stays read-only and bounded
 
-Current release framing: **0.1.0**.
-
-The primary near-term operating model is: engineer in chat, agent drives the CLI in the same workspace, human verifies directly when needed.
-
-MCP integration and real hardware adapters are intentionally deferred until the CLI workflow and artifact contracts are stable. The high-level direction for live reads remains: an agent-facing, read-only tool surface for requesting extra target state after snapshot-based evidence is exhausted, rather than public ad hoc CLI commands.
+The operating model remains: engineer in chat, agent drives deterministic CLI commands in the same workspace, and the engineer verifies directly when needed.

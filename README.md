@@ -18,7 +18,6 @@ DebugOracle does not drive the probe or debugger. The primary near-term workflow
 5. If runtime breadcrumbs matter, capture RTT from the OpenOCD RTT TCP port with `run` (or low-level `capture-rtt`).
 6. Build a reusable snapshot with `fetch`.
 7. Inspect the evidence with `report`.
-8. Optionally package the same snapshot with `prompt` for downstream handoff.
 
 The same CLI commands remain useful as a direct verification and fallback path when the engineer wants to inspect the evidence without the chat workflow.
 
@@ -54,12 +53,6 @@ Optional halted peripheral capture from an SVD definition:
 ./dbgoracle report --regs-list
 ```
 
-Optional handoff packaging:
-
-```bash
-./dbgoracle prompt --goal "Explain why the target stopped here"
-```
-
 Fetch output path behavior:
 - `--state-out` always wins when provided.
 - Without `--state-out`, `fetch` writes `latest_snapshot.json` next to the resolved GDB/MI input when available,
@@ -87,7 +80,6 @@ Quick check after run:
   (next to explicit/auto-resolved GDB/MI input when present, otherwise next to explicit/auto-resolved RTT,
   otherwise `<workspace>/.dbgoracle`).
 - `report` shows stop reason + frame + register/local context.
-- `prompt` remains available when you want a packaged handoff artifact.
 
 If `source .vscode/dump-registers.gdb` causes `Python is not supported`, remove that
 line from `postLaunchCommands` until you switch to a Python-enabled GDB binary.
@@ -100,7 +92,6 @@ Typical Cortex-Debug flow:
 ./dbgoracle run --detach --workspace-root /path/to/workspace --port 60001 --output /path/to/session.rtt
 ./dbgoracle fetch --workspace-root /path/to/workspace
 ./dbgoracle report --workspace-root /path/to/workspace
-./dbgoracle prompt --workspace-root /path/to/workspace --goal "Explain why the target stopped here"
 ./dbgoracle stop --workspace-root /path/to/workspace
 ./dbgoracle --version
 ```
@@ -124,7 +115,7 @@ Compact JSON inspect modes are not required for the everyday `fetch -> report` w
 New snapshots already embed the full selected raw source payloads plus derived parsed structures,
 so `report --gdb`, `report --rtt`, and `report --verbose` can surface them without raw sidecars.
 
-`report` and `prompt` now render non-MI frequency summaries in explicit form, for example:
+`report` now renders non-MI frequency summaries in explicit form, for example:
 
 - `Unable to match requested speed 500 kHz, using 480 kHz
  (repeated 6 times)`
@@ -152,7 +143,6 @@ evidence after a snapshot has been inspected.
 
 - v1 is read-only and does not call an LLM.
 - `report` is the primary inspection surface for both agents and engineers.
-- `prompt` produces optional text or Markdown packaging for downstream handoff.
 - If the MI log only contains `*stopped` without follow-up stack, register, or local queries, the snapshot is valid but thinner.
 - If the MI log spans several stops, DebugOracle packages the latest stop-context it finds. Keep captures tight and per-stop when possible.
 - RTT is optional. Missing RTT weakens the bundle but does not fail the run.

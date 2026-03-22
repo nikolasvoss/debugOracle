@@ -3,8 +3,6 @@ from .models import (
     CURRENT_BUNDLE_SCHEMA_VERSION,
     EvidenceBundle,
     InvestigationArtifact,
-    InvestigationRequest,
-    PromptPackage,
     SessionEvent,
     StackFrame,
 )
@@ -15,8 +13,6 @@ __all__ = [
     "CURRENT_BUNDLE_SCHEMA_VERSION",
     "EvidenceBundle",
     "InvestigationArtifact",
-    "InvestigationRequest",
-    "PromptPackage",
     "SessionEvent",
     "SnapshotLoadError",
     "StackFrame",

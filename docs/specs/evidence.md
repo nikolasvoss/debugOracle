@@ -2,8 +2,8 @@
 
 - Module: `evidence`
 - Code Path: `debugoracle/cli/commands/evidence.py`
-- Public Entrypoints: `cmd_fetch`, `cmd_report`, `cmd_prompt`
-- Last Updated: `2026-03-20`
+- Public Entrypoints: `cmd_fetch`, `cmd_report`
+- Last Updated: `2026-03-22`
 
 # SPEC: DebugOracle Evidence Commands
 
@@ -14,12 +14,11 @@ Own the CLI flows that resolve raw or saved evidence, build or load artifacts, a
 ## Responsibilities
 
 - Resolve raw evidence for `fetch`.
-- Resolve snapshot input for `report` and `prompt`.
+- Resolve snapshot input for `report`.
 - Build investigation artifacts from raw evidence when required.
-- Save snapshots for `fetch` and render report/prompt outputs for reuse.
+- Save snapshots for `fetch` and render report output for reuse.
 - Keep `fetch` stdout operational by summarizing the saved snapshot as outcome, evidence coverage, and next-step guidance rather than rendering interpretive evidence.
 - Thread `report` inspect-mode flags into the renderer layer without rebuilding from raw evidence.
-- Keep prompt-specific variable selectors isolated from the report parser surface.
 
 ## Boundaries
 
@@ -35,9 +34,6 @@ Own the CLI flows that resolve raw or saved evidence, build or load artifacts, a
 - `cmd_fetch` accepts optional `--openocd-tcl-host` and `--openocd-tcl-port` overrides for live peripheral capture. If no explicit or auto-resolved SVD is available, plain `fetch` ignores these overrides and continues with non-SVD capture after emitting a notice.
 - `cmd_report` is snapshot-only and fails clearly when no snapshot can be resolved.
 - `cmd_report` points users to `fetch` when no snapshot is available.
-- `cmd_prompt` is snapshot-only and fails clearly when no snapshot can be resolved.
-- `cmd_prompt` does not accept stale raw-build tuning flags.
-- `cmd_prompt` points users to `fetch` when no snapshot is available.
 
 ## Report Inspect Contract
 

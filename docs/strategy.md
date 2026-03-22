@@ -25,7 +25,6 @@ This is an agent-first operating model, not a different product identity. DebugO
 
 - Evidence engine first, interface second.
 - `report` is the primary agent-facing evidence surface.
-- `prompt` remains supported as optional packaging for downstream reasoning.
 - Direct CLI use remains a first-class verification and fallback path.
 - MCP is a later interface upgrade, not a dependency for the near-term story.
 

@@ -47,7 +47,7 @@ DebugOracle has five functional layers:
 3. Investigation artifact persistence
    Canonical storage of the shaped evidence for reuse, rendering, and later agent requests.
 4. Rendering surfaces
-   Human and agent outputs such as status, report, optional prompt packaging, and other read-only inspection views.
+   Human and agent outputs such as status, report, and other read-only inspection views.
 5. Entry surfaces
    CLI today, with agent-mediated CLI workflows as the near-term operating model; MCP and other agent-facing interfaces later.
 
@@ -152,7 +152,7 @@ The artifact should be the system boundary for:
 
 - provenance
 - reuse across commands
-- prompt/report rendering
+- report rendering
 - regression fixtures
 - future MCP tool responses
 
@@ -208,7 +208,6 @@ debugoracle/
   renderers/
     snapshot.py
     report.py
-    prompt.py
     status.py
 
   policy/
@@ -356,7 +355,7 @@ stateDiagram-v2
     Halted --> Collecting: capture stream tails / snapshot reads
     Collecting --> Shaping: normalize + reduce + add provenance
     Shaping --> Persisted: save investigation artifact
-    Persisted --> Rendered: report / prompt / snapshot
+    Persisted --> Rendered: report / snapshot
     Halted --> Invalid: target resumes before required reads
     Invalid --> [*]
     Rendered --> [*]

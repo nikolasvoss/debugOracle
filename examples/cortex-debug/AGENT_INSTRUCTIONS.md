@@ -18,7 +18,7 @@ Goal:
 
 ## Interpret these requests as DebugOracle tasks
 
-- "fetch the prompt from dbgoracle"
+- "summarize the latest dbgoracle evidence"
 - "get the debug report"
 - "show me the detailed embedded evidence"
 - "show me the register catalog"
@@ -48,7 +48,6 @@ Use only the public CLI surface shown in help:
 - `stop`
 - `fetch`
 - `report`
-- `prompt`
 
 Do not invent or rely on non-public commands such as `observe` or `snapshot`.
 
@@ -61,15 +60,13 @@ Do not invent or rely on non-public commands such as `observe` or `snapshot`.
    - `dbgoracle stop`
 2. Evidence capture and stabilization
    - `dbgoracle fetch`
-3. Evidence rendering and packaging
+3. Evidence rendering and inspection
    - `dbgoracle report`
-   - `dbgoracle prompt`
 
 Key rule:
 
 - `fetch` is raw-evidence capture only.
 - `report` is snapshot-only inspection.
-- `prompt` is snapshot-only packaging.
 - Default `report` output is intentionally short. Use inspect flags for detail.
 
 ## Command decision path
@@ -82,7 +79,6 @@ dbgoracle status --workspace-root .
 
 2. If a usable snapshot already exists, do not rebuild it just to inspect:
    - use `dbgoracle report --workspace-root .`
-   - use `dbgoracle prompt --workspace-root . --goal "Explain why the target stopped here"`
 
 3. If no snapshot exists but raw evidence exists, build one:
    - use `dbgoracle fetch --workspace-root .`
@@ -136,13 +132,7 @@ dbgoracle report --workspace-root . --gdb --vars --regs RCC
 dbgoracle report --workspace-root . --verbose
 ```
 
-5. If the user asks for an agent handoff artifact rather than a human report:
-
-```bash
-dbgoracle prompt --workspace-root . --goal "Explain why the target stopped here"
-```
-
-6. If neither a snapshot nor usable raw evidence exists, report that required
+5. If neither a snapshot nor usable raw evidence exists, report that required
    debug evidence is missing.
 
 ## Raw evidence expectations
@@ -150,7 +140,7 @@ dbgoracle prompt --workspace-root . --goal "Explain why the target stopped here"
 - GDB/MI log is the main evidence source for stop analysis.
 - RTT is optional.
 - `fetch` can build a degraded snapshot if only one selected raw source exists.
-- `report` and `prompt` do not read raw evidence directly.
+- `report` does not read raw evidence directly.
 
 ## Optional SVD-backed peripheral capture
 
@@ -237,12 +227,12 @@ dbgoracle fetch --workspace-root . --svd-file path/to/device.svd --openocd-tcl-p
 dbgoracle report --workspace-root . --regs RCC
 ```
 
-For "fetch the prompt from dbgoracle":
+For "summarize the latest dbgoracle evidence":
 
 ```bash
 dbgoracle status --workspace-root .
 dbgoracle fetch --workspace-root .   # only if no usable snapshot exists
-dbgoracle prompt --workspace-root . --goal "Explain why the target stopped here"
+dbgoracle report --workspace-root .
 ```
 
 ## Failure handling
@@ -250,7 +240,7 @@ dbgoracle prompt --workspace-root . --goal "Explain why the target stopped here"
 Stop and report the issue if any of the following are true:
 
 - no snapshot exists and no usable raw evidence can be found
-- `report` or `prompt` cannot resolve a snapshot
+- `report` cannot resolve a snapshot
 - the session did not capture meaningful halt context, so the report is thin
 - the user expects debugger control, breakpoint management, or target writes
 - `fetch --svd-file` is requested but the workspace does not have a recent
@@ -258,7 +248,7 @@ Stop and report the issue if any of the following are true:
 
 ## Troubleshooting guidance
 
-- If `report` or `prompt` says no snapshot is available, point the user to
+- If `report` says no snapshot is available, point the user to
   `dbgoracle fetch --workspace-root .`.
 - If the stop summary is thin, suggest refreshing Call Stack, Registers, and
   Variables/Locals before ending the debug session and then recapturing.

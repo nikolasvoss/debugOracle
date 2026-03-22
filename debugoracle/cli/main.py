@@ -9,7 +9,7 @@ from ..sources.streams.rtt import (
     DEFAULT_RTT_HOST,
     DEFAULT_RTT_POLL_INTERVAL,
 )
-from .commands.evidence import cmd_fetch, cmd_prompt, cmd_report
+from .commands.evidence import cmd_fetch, cmd_report
 from .commands.run_stop import (
     DEFAULT_RUN_PORT,
     cmd_run,
@@ -239,29 +239,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     fetch.set_defaults(func=cmd_fetch)
 
-    prompt = subparsers.add_parser(
-        "prompt",
-        help="Build a ChatGPT-ready prompt package from a saved snapshot",
-        description=(
-            "Package a saved snapshot into a prompt you can paste into ChatGPT. "
-            "If omitted, --snapshot-file defaults to a discovered latest_snapshot.json."
-        ),
-    )
-    add_snapshot_arguments(prompt)
-    prompt.add_argument("--goal", required=True, help="Investigation goal to hand to ChatGPT")
-    prompt.add_argument("--intent", help="Optional intended system state text")
-    prompt.add_argument("--intent-file", help="Optional file containing intended system state text")
-    prompt.add_argument(
-        "--format",
-        choices=["text", "markdown"],
-        default="markdown",
-        help="Prompt output format",
-    )
-    prompt.add_argument("--full", action="store_true", help="Expand the evidence appendix")
-    prompt.add_argument("--output", help="Optional output file path")
-    add_prompt_variable_arguments(prompt)
-    prompt.set_defaults(func=cmd_prompt)
-
     report = subparsers.add_parser(
         "report",
         help="Render a human-readable evidence report or compact inspection JSON from a saved snapshot",
@@ -410,28 +387,6 @@ def add_input_arguments(
         default=".",
         help="Workspace root used to resolve default file paths",
     )
-
-
-def add_prompt_variable_arguments(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument(
-        "--var-scope",
-        choices=["local", "watchpoint", "unknown", "all"],
-        default="all",
-        help="Variable evidence scope to include in the prompt appendix",
-    )
-    parser.add_argument(
-        "--var-name",
-        action="append",
-        default=[],
-        help="Optional variable/watchpoint name filter for the prompt appendix; repeat to request multiple names",
-    )
-    parser.add_argument(
-        "--var-detail",
-        choices=["compact", "full"],
-        default="compact",
-        help="Variable evidence detail level for the prompt appendix",
-    )
-
 
 def _is_valid_register_selector(value: str) -> bool:
     if not value or value.count(":") > 1:
