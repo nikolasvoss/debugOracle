@@ -31,6 +31,7 @@ Own the CLI flows that resolve raw or saved evidence, build or load artifacts, a
 - `cmd_fetch` is raw-only and never loads a snapshot as its primary evidence source.
 - `cmd_fetch --svd-file <file>` is the only explicit CLI path that enables live peripheral capture; it passes an explicit opt-in through the builder instead of relying on `svd_file_path` alone.
 - When no explicit `--svd-file` is provided, `cmd_fetch` may resolve `debugoracle.svdFile` from `.vscode/settings.json` as the workspace default SVD.
+- Workspace-default `debugoracle.svdFile` values may be absolute paths, workspace-relative paths, or `${workspaceFolder}`-prefixed paths; `cmd_fetch` normalizes the workspace token before file resolution.
 - If neither an explicit nor workspace-default SVD is available, `cmd_fetch` may auto-resolve exactly one `.dbgoracle/*.svd` candidate for opportunistic live peripheral capture. If discovery is ambiguous or live capture fails, plain `fetch` falls back to non-SVD snapshot capture and emits a clear notice on `stderr`.
 - `cmd_fetch` accepts optional `--openocd-tcl-host` and `--openocd-tcl-port` overrides for live peripheral capture. If no explicit or auto-resolved SVD is available, plain `fetch` ignores these overrides and continues with non-SVD capture after emitting a notice.
 - `cmd_report` is snapshot-only and fails clearly when no snapshot can be resolved.

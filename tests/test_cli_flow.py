@@ -417,6 +417,44 @@ class DebugOracleCliTests(unittest.TestCase):
         self.assertIn("Workspace default SVD for fetch:", stderr)
         self.assertEqual(payload["sources"]["registers"]["device_name"], "STM32L432KCTest")
 
+    def test_fetch_expands_workspace_folder_token_for_workspace_default_svd(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            (workspace / "cortex-debug-shared-mi.log").write_text(
+                (FIXTURES / "sample.mi").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (workspace / "session.rtt").write_text(
+                (FIXTURES / "sample.rtt").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (workspace / ".vscode").mkdir()
+            (workspace / "STM32L432.svd").write_text(
+                (FIXTURES / "sample.svd").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (workspace / ".vscode" / "settings.json").write_text(
+                json.dumps({"debugoracle.svdFile": "${workspaceFolder}/STM32L432.svd"}) + "\n",
+                encoding="utf-8",
+            )
+
+            with _FakeOpenOcdServer(values=DEFAULT_OPENOCD_VALUES) as server:
+                stdout, stderr = self._run_cli_in_workspace(
+                    workspace,
+                    ["fetch"],
+                    env={
+                        "DEBUGORACLE_OPENOCD_HOST": server.host,
+                        "DEBUGORACLE_OPENOCD_PORT": str(server.port),
+                    },
+                    capture_stderr=True,
+                )
+
+            payload = json.loads((workspace / "latest_snapshot.json").read_text(encoding="utf-8"))
+
+        self.assertIn("Registers: present", stdout)
+        self.assertIn(str(workspace / "STM32L432.svd"), stderr)
+        self.assertEqual(payload["sources"]["registers"]["device_name"], "STM32L432KCTest")
+
     def test_fetch_with_svd_captures_register_values_and_prints_register_guidance(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)

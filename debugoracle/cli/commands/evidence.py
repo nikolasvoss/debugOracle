@@ -438,7 +438,11 @@ def resolve_workspace_default_svd_file(workspace_root: Path) -> str | None:
     raw_value = payload.get("debugoracle.svdFile")
     if not isinstance(raw_value, str) or not raw_value.strip():
         return None
-    return resolve_workspace_path(raw_value, workspace_root)
+    return resolve_workspace_path(expand_workspace_tokens(raw_value, workspace_root), workspace_root)
+
+
+def expand_workspace_tokens(value: str, workspace_root: Path) -> str:
+    return value.replace("${workspaceFolder}", str(workspace_root))
 
 
 def parse_vscode_json(raw_text: str) -> object | None:
