@@ -3,7 +3,7 @@
 - Module: `peripheral_registers`
 - Code Path: `debugoracle/sources/debuggers/gdb/peripheral_registers.py`
 - Public Entrypoints: `GDB_PERIPHERAL_REGISTERS_SOURCE`, `SvdDeviceDefinition`, `collect_peripheral_registers_from_svd`, `capture_peripheral_registers_from_svd`, `parse_svd_definition`
-- Last Updated: `2026-03-20`
+- Last Updated: `2026-03-23`
 
 # SPEC: SVD-Backed Peripheral Register Capture
 
@@ -28,6 +28,7 @@ Parse a CMSIS-SVD file, classify safe-readable peripheral registers, and shape l
 - `write-only`, missing access metadata, and unsupported access modes are recorded as `skipped` with a reason.
 - Safe-register live reads happen one register at a time through the OpenOCD Tcl control endpoint.
 - `capture_peripheral_registers_from_svd()` accepts optional explicit OpenOCD Tcl host/port overrides from `fetch`; when absent, the backend falls back to the existing environment/default resolution path.
+- Backend connection failures are raised as a typed recoverable reachability error so `fetch` can decide whether a one-shot Tcl recovery attempt is appropriate.
 - Live reads fail clearly if the backend never emits the Tcl terminator or returns an unexpectedly large unterminated payload; this protects `fetch` from hanging on misconfigured streaming ports such as RTT.
 - Successful values are normalized to hex strings before they are stored.
 - If zero safe-readable registers exist, or zero register reads succeed, live capture fails clearly.

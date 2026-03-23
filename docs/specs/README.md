@@ -30,6 +30,7 @@ during this refactor. It is intentionally curated rather than a flat dump of eve
 | `memory` | `debugoracle/sources/debuggers/gdb/memory.py` | [`memory.md`](memory.md) |
 | `peripheral_registers` | `debugoracle/sources/debuggers/gdb/peripheral_registers.py` | [`peripheral_registers.md`](peripheral_registers.md) |
 | `mi` | `debugoracle/mi.py` | [`mi.md`](mi.md) |
+| `openocd` | `debugoracle/openocd.py` | [`openocd.md`](openocd.md) |
 | `registers` | `debugoracle/sources/debuggers/gdb/registers.py` | [`registers.md`](registers.md) |
 | `rtt` | `debugoracle/rtt.py` | [`rtt.md`](rtt.md) |
 | `session` | `debugoracle/session.py` | [`session.md`](session.md) |

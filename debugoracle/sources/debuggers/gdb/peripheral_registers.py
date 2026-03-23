@@ -8,6 +8,7 @@ import socket
 import xml.etree.ElementTree as ET
 
 from ....artifacts.models import PeripheralRegisterSet, RegisterEntry, RegisterSource
+from ....openocd import OpenOcdReachabilityError
 from ...base import SourceDescriptor, validate_source_descriptor
 
 GDB_PERIPHERAL_REGISTERS_SOURCE = validate_source_descriptor(
@@ -135,7 +136,7 @@ def capture_peripheral_registers_from_svd(
                     register.failure_reason = str(error)
                     register.skip_reason = None
     except OSError as error:
-        raise ValueError(f"Could not reach the OpenOCD live-read backend at {host}:{port}: {error}") from error
+        raise OpenOcdReachabilityError(host=host, port=port, detail=str(error)) from error
 
     _update_counts(source)
     if source.success_count == 0:

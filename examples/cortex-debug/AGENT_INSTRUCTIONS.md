@@ -37,6 +37,7 @@ Use only the public CLI surface shown in help:
 - `capture-rtt`
 - `run`
 - `stop`
+- `find-tcl-port`
 - `fetch`
 - `report`
 
@@ -49,7 +50,7 @@ Use this default decision loop unless the user asks for something narrower.
 1. If the workspace is not set up yet, bootstrap it:
 
 ```bash
-dbgoracle init-workspace --workspace-root . --executable path/to/firmware.elf
+dbgoracle init-workspace --workspace-root . --executable path/to/firmware.elf --openocd-config interface/stlink.cfg --openocd-config target/stm32l4x.cfg
 ```
 
 2. Check current artifact health first:
@@ -101,6 +102,7 @@ Prefer the smallest successful path that produces the requested artifact.
    - `dbgoracle capture-rtt`
    - `dbgoracle run`
    - `dbgoracle stop`
+   - `dbgoracle find-tcl-port`
 3. Evidence capture and stabilization
    - `dbgoracle fetch`
 4. Evidence rendering and inspection
@@ -113,6 +115,8 @@ Prefer the smallest successful path that produces the requested artifact.
 Use when the workspace is missing supported `.dbgoracle` or `.vscode` setup.
 
 - It is a setup helper, not an evidence command.
+- It requires one or more `--openocd-config` values for the generated Cortex-Debug launch.
+- If that flag is missing, the CLI now explains what `interface/*.cfg` and `target/*.cfg` mean and shows a corrected example command.
 - It refuses to overwrite user-owned VS Code config by default.
 - It can store a workspace-default SVD path for later `fetch` use.
 
@@ -256,10 +260,34 @@ SVD and the resulting snapshot contains register data.
 
 ## Fastest way to find the Tcl port
 
-1. Start the current Cortex-Debug session with raw server output enabled.
-2. Open the Debug Console or the shared GDB/MI log.
-3. Search for `tcl_port`.
-4. Use the printed value if it differs from `6666`.
+Preferred path for agents and terminal workflows:
+
+1. Start the current Cortex-Debug session.
+2. Run the subcommand from the workspace root:
+
+```bash
+dbgoracle find-tcl-port --workspace-root . --print-fetch
+```
+
+The subcommand inspects the live `openocd` process, prints the active Tcl port,
+and prints a ready-to-run `dbgoracle fetch ... --openocd-tcl-port <port>`
+command when it can also resolve an SVD file.
+
+If you only need the number, omit `--print-fetch`:
+
+```bash
+dbgoracle find-tcl-port --workspace-root .
+```
+
+The subcommand prefers the `openocd` process whose working directory matches
+the workspace root. It avoids depending on the shared GDB/MI log because that log
+may begin after startup traffic and may not include the OpenOCD launch line.
+
+Manual fallback if the subcommand cannot find a single active session:
+
+1. Open the Debug Console with `showDevDebugOutput: "raw"` enabled.
+2. Search for `tcl_port` in the current session output.
+3. Use the printed value for `--openocd-tcl-port`.
 
 Example:
 
@@ -301,7 +329,7 @@ Call out these silent-failure risks explicitly:
 - If `report` says no snapshot is available, point the user to
   `dbgoracle fetch --workspace-root .`.
 - If `status` shows setup is missing, point the user to
-  `dbgoracle init-workspace --workspace-root . --executable path/to/firmware.elf`.
+  `dbgoracle init-workspace --workspace-root . --executable path/to/firmware.elf --openocd-config interface/stlink.cfg --openocd-config target/stm32l4x.cfg`.
 - If the stop summary is thin, suggest refreshing Call Stack, Registers, and
   Variables/Locals before ending the debug session and then recapturing.
 - If RTT is empty or missing, use `dbgoracle status --workspace-root .` to check

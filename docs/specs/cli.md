@@ -42,6 +42,7 @@ implementation lives in:
 - `debugoracle/cli/main.py` for parser construction and dispatch
 - `debugoracle/cli/commands/status_capture.py` for `status` and `capture-rtt`
 - `debugoracle/cli/commands/run_stop.py` for `run` and `stop`
+- `debugoracle/cli/commands/find_tcl_port.py` for `find-tcl-port`
 - `debugoracle/cli/commands/evidence.py` for `fetch` and `report`
 - `debugoracle/cli/commands/init_workspace.py` for `init-workspace`
 
@@ -50,7 +51,7 @@ The CLI has four behavioral layers:
 1. Workspace bootstrap
    Command: `init-workspace`
 2. Transport and workspace health
-   Commands: `status`, `capture-rtt`, `run`, `stop`
+   Commands: `status`, `capture-rtt`, `run`, `stop`, `find-tcl-port`
 3. Evidence capture and stabilization
    Command: `fetch`
 4. Evidence rendering and inspection
@@ -165,6 +166,24 @@ Outputs:
 
 Meaning:
 - Stops only managed DebugOracle run processes and cleans up stale runtime metadata.
+
+### `find-tcl-port`
+
+Purpose:
+- Find the active OpenOCD Tcl endpoint for the current workspace session without depending on startup-log capture.
+
+Inputs:
+- Workspace root
+- Optional OpenOCD PID override
+- Optional fetch-command rendering flag and JSON output flag
+
+Outputs:
+- Human-readable endpoint summary or JSON payload
+- Optional ready-to-run `dbgoracle fetch ... --openocd-tcl-port <port>` command when an SVD file resolves
+
+Meaning:
+- `find-tcl-port` is the supported agent-facing discovery surface for the current session's Tcl port.
+- It prefers the OpenOCD process whose working directory matches the workspace root.
 
 ### `init-workspace`
 

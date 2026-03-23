@@ -35,13 +35,13 @@ The most useful MI capture includes:
 For a fresh project with an installed CLI, start here:
 
 ```bash
-dbgoracle init-workspace --workspace-root . --executable build/app.elf
+dbgoracle init-workspace --workspace-root . --executable build/app.elf --openocd-config interface/stlink.cfg --openocd-config target/stm32l4x.cfg
 ```
 
 Optional workspace-default SVD path:
 
 ```bash
-dbgoracle init-workspace --workspace-root . --executable build/app.elf --svd-file boards/sample.svd
+dbgoracle init-workspace --workspace-root . --executable build/app.elf --openocd-config interface/stlink.cfg --openocd-config target/stm32l4x.cfg --svd-file boards/sample.svd
 ```
 
 `init-workspace` creates `.dbgoracle/` plus the supported `.vscode` scaffold when the workspace is fresh.
@@ -51,7 +51,7 @@ Software dependencies checked during `init-workspace`:
 
 - `openocd` on `PATH`
 - the configured executable path
-- the Cortex-Debug VS Code dependency as a reported requirement
+- the Cortex-Debug VS Code dependency as a reported requirement, including the minimum supported version
 
 ### File dependencies by input source
 

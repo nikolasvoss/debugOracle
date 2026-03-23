@@ -17,6 +17,14 @@ from debugoracle.sources.debuggers.gdb import peripheral_registers
 from debugoracle.sources.debuggers.gdb.peripheral_registers import parse_svd_definition
 from debugoracle.cli import main
 from debugoracle.cli.main import build_parser
+from debugoracle.openocd import (
+    DISCOVERY_MATCHED,
+    DISCOVERY_MULTIPLE,
+    DISCOVERY_NO_SESSION,
+    DISCOVERY_UNREACHABLE,
+    OpenOcdCandidate,
+    OpenOcdDiscoveryResult,
+)
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -125,6 +133,154 @@ class FetchRegisterCaptureTests(unittest.TestCase):
 
             self.assertNotEqual(code, 0)
             self.assertIn("did not read any register values successfully", stdout + stderr)
+
+    def test_fetch_with_svd_recovers_via_running_debug_session_tcl_port(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            (workspace / "cortex-debug-shared-mi.log").write_text(
+                (FIXTURES / "sample.mi").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (workspace / "test.svd").write_text(_minimal_svd_text(), encoding="utf-8")
+
+            with _FakeOpenOcdServer(values={0x40000000: "0x00000011", 0x40000004: "0x00000022"}) as server:
+                with patch(
+                    "debugoracle.cli.commands.evidence.discover_workspace_openocd_session",
+                    return_value=_discovery_result(DISCOVERY_MATCHED, candidate=_candidate(server.port, workspace=workspace)),
+                ):
+                    stdout, stderr = self._run_cli_in_workspace(
+                        workspace,
+                        ["fetch", "--svd-file", "test.svd", "--openocd-tcl-port", "1"],
+                        env={
+                            "DEBUGORACLE_OPENOCD_HOST": server.host,
+                            "DEBUGORACLE_OPENOCD_PORT": "",
+                        },
+                        capture_stderr=True,
+                    )
+
+        self.assertIn("Registers: present, 1 peripherals, 3 registers, 2 success, 0 failure, 1 skipped", stdout)
+        self.assertIn("Automatic Tcl recovery: retrying fetch", stderr)
+        self.assertIn(str(server.port), stderr)
+
+    def test_fetch_with_svd_reports_that_debug_session_must_be_running_for_recovery(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            (workspace / "cortex-debug-shared-mi.log").write_text(
+                (FIXTURES / "sample.mi").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (workspace / "test.svd").write_text(_minimal_svd_text(), encoding="utf-8")
+
+            with patch(
+                "debugoracle.cli.commands.evidence.discover_workspace_openocd_session",
+                return_value=OpenOcdDiscoveryResult(status=DISCOVERY_NO_SESSION),
+            ):
+                code, stdout, stderr = self._run_cli_expect_system_exit_in_workspace(
+                    workspace,
+                    ["fetch", "--svd-file", "test.svd", "--openocd-tcl-port", "1"],
+                )
+
+        self.assertNotEqual(code, 0)
+        message = stdout + stderr
+        self.assertIn("debug session must already be running", message)
+        self.assertIn("find-tcl-port --print-fetch", message)
+
+    def test_fetch_with_svd_reports_multiple_matching_debug_sessions(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            (workspace / "cortex-debug-shared-mi.log").write_text(
+                (FIXTURES / "sample.mi").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (workspace / "test.svd").write_text(_minimal_svd_text(), encoding="utf-8")
+            candidates = (
+                _candidate(4444, pid=101, workspace=workspace),
+                _candidate(5555, pid=202, workspace=workspace),
+            )
+
+            with patch(
+                "debugoracle.cli.commands.evidence.discover_workspace_openocd_session",
+                return_value=OpenOcdDiscoveryResult(status=DISCOVERY_MULTIPLE, candidates=candidates),
+            ):
+                code, stdout, stderr = self._run_cli_expect_system_exit_in_workspace(
+                    workspace,
+                    ["fetch", "--svd-file", "test.svd", "--openocd-tcl-port", "1"],
+                )
+
+        self.assertNotEqual(code, 0)
+        message = stdout + stderr
+        self.assertIn("multiple running debug sessions", message)
+        self.assertIn("101, 202", message)
+
+    def test_fetch_with_svd_skips_retry_when_discovery_returns_same_endpoint(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            (workspace / "cortex-debug-shared-mi.log").write_text(
+                (FIXTURES / "sample.mi").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (workspace / "test.svd").write_text(_minimal_svd_text(), encoding="utf-8")
+
+            with patch(
+                "debugoracle.cli.commands.evidence.discover_workspace_openocd_session",
+                return_value=_discovery_result(DISCOVERY_UNREACHABLE, candidate=_candidate(1, workspace=workspace)),
+            ):
+                code, stdout, stderr = self._run_cli_expect_system_exit_in_workspace(
+                    workspace,
+                    ["fetch", "--svd-file", "test.svd", "--openocd-tcl-port", "1"],
+                )
+
+        self.assertNotEqual(code, 0)
+        message = stdout + stderr
+        self.assertIn("same endpoint again", message)
+        self.assertNotIn("Automatic Tcl recovery: retrying fetch", message)
+
+    def test_fetch_with_svd_reports_retry_failure_after_recovered_endpoint_still_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            (workspace / "cortex-debug-shared-mi.log").write_text(
+                (FIXTURES / "sample.mi").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (workspace / "test.svd").write_text(_minimal_svd_text(), encoding="utf-8")
+
+            with _FakeOpenOcdServer(values={}) as server:
+                with patch(
+                    "debugoracle.cli.commands.evidence.discover_workspace_openocd_session",
+                    return_value=_discovery_result(DISCOVERY_MATCHED, candidate=_candidate(server.port, workspace=workspace)),
+                ):
+                    code, stdout, stderr = self._run_cli_expect_system_exit_in_workspace(
+                        workspace,
+                        ["fetch", "--svd-file", "test.svd", "--openocd-tcl-port", "1"],
+                        env={
+                            "DEBUGORACLE_OPENOCD_HOST": server.host,
+                            "DEBUGORACLE_OPENOCD_PORT": "",
+                        },
+                    )
+
+        self.assertNotEqual(code, 0)
+        message = stdout + stderr
+        self.assertIn("Automatic Tcl recovery retried with", message)
+        self.assertIn("did not read any register values successfully", message)
+
+    def test_fetch_with_svd_nonrecoverable_failure_does_not_attempt_recovery(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            (workspace / "cortex-debug-shared-mi.log").write_text(
+                '*stopped,reason="breakpoint-hit"\n*running,thread-id="all"\n',
+                encoding="utf-8",
+            )
+            (workspace / "test.svd").write_text(_minimal_svd_text(), encoding="utf-8")
+
+            with patch("debugoracle.cli.commands.evidence.discover_workspace_openocd_session") as discovery_mock:
+                code, stdout, stderr = self._run_cli_expect_system_exit_in_workspace(
+                    workspace,
+                    ["fetch", "--svd-file", "test.svd", "--openocd-tcl-port", "1"],
+                )
+
+        self.assertNotEqual(code, 0)
+        discovery_mock.assert_not_called()
+        self.assertIn("requires a recent halted target in the GDB/MI log", stdout + stderr)
 
     def test_openocd_default_tcl_port_matches_documented_openocd_default(self) -> None:
         self.assertEqual(peripheral_registers.OPENOCD_DEFAULT_PORT, 6666)
@@ -271,14 +427,18 @@ class FetchRegisterCaptureTests(unittest.TestCase):
             )
             (workspace / "test.svd").write_text(_minimal_svd_text(), encoding="utf-8")
 
-            stdout, stderr = self._run_cli_in_workspace(
-                workspace,
-                ["fetch"],
-                env={
-                    "DEBUGORACLE_OPENOCD_PORT": "",
-                },
-                capture_stderr=True,
-            )
+            with patch(
+                "debugoracle.cli.commands.evidence.discover_workspace_openocd_session",
+                return_value=OpenOcdDiscoveryResult(status=DISCOVERY_NO_SESSION),
+            ):
+                stdout, stderr = self._run_cli_in_workspace(
+                    workspace,
+                    ["fetch"],
+                    env={
+                        "DEBUGORACLE_OPENOCD_PORT": "",
+                    },
+                    capture_stderr=True,
+                )
 
             payload = json.loads((workspace / "latest_snapshot.json").read_text(encoding="utf-8"))
 
@@ -380,15 +540,19 @@ class FetchRegisterCaptureTests(unittest.TestCase):
             )
             (session_dir / "STM32L432.svd").write_text(_minimal_svd_text(), encoding="utf-8")
 
-            stdout, stderr = self._run_cli_in_workspace(
-                workspace,
-                ["fetch"],
-                env={
-                    "DEBUGORACLE_OPENOCD_HOST": "127.0.0.1",
-                    "DEBUGORACLE_OPENOCD_PORT": "1",
-                },
-                capture_stderr=True,
-            )
+            with patch(
+                "debugoracle.cli.commands.evidence.discover_workspace_openocd_session",
+                return_value=OpenOcdDiscoveryResult(status=DISCOVERY_NO_SESSION),
+            ):
+                stdout, stderr = self._run_cli_in_workspace(
+                    workspace,
+                    ["fetch"],
+                    env={
+                        "DEBUGORACLE_OPENOCD_HOST": "127.0.0.1",
+                        "DEBUGORACLE_OPENOCD_PORT": "1",
+                    },
+                    capture_stderr=True,
+                )
 
             self.assertNotIn("Registers: present", stdout)
             self.assertIn("Auto-discovered SVD", stderr)
@@ -609,6 +773,23 @@ class FetchRegisterCaptureTests(unittest.TestCase):
                 return self._run_cli_expect_system_exit(argv)
         finally:
             os.chdir(previous)
+
+
+def _candidate(port: int, *, pid: int = 1234, workspace: Path | None = None) -> OpenOcdCandidate:
+    return OpenOcdCandidate(
+        pid=pid,
+        argv=("openocd", "-c", f"tcl_port {port}"),
+        cwd=str(workspace) if workspace is not None else None,
+        host="127.0.0.1",
+        tcl_port=port,
+        gdb_port=None,
+        telnet_port=None,
+    )
+
+
+def _discovery_result(status: str, *, candidate: OpenOcdCandidate | None = None) -> OpenOcdDiscoveryResult:
+    candidates = (candidate,) if candidate is not None else ()
+    return OpenOcdDiscoveryResult(status=status, candidate=candidate, candidates=candidates)
 
 
 def _minimal_svd_text() -> str:

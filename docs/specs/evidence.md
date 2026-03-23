@@ -3,7 +3,7 @@
 - Module: `evidence`
 - Code Path: `debugoracle/cli/commands/evidence.py`
 - Public Entrypoints: `cmd_fetch`, `cmd_report`
-- Last Updated: `2026-03-22`
+- Last Updated: `2026-03-23`
 
 # SPEC: DebugOracle Evidence Commands
 
@@ -35,7 +35,9 @@ Own the CLI flows that resolve raw or saved evidence, build or load artifacts, a
 - If neither an explicit nor workspace-default SVD is available, `cmd_fetch` may auto-resolve exactly one `.dbgoracle/*.svd` candidate for opportunistic live peripheral capture. If discovery is ambiguous or live capture fails, plain `fetch` falls back to non-SVD snapshot capture and emits a clear notice on `stderr`.
 - `cmd_fetch` accepts optional `--openocd-tcl-host` and `--openocd-tcl-port` overrides for live peripheral capture. If no explicit or auto-resolved SVD is available, plain `fetch` ignores these overrides and continues with non-SVD capture after emitting a notice.
 - When live peripheral capture is in play and no explicit Tcl override is provided, `cmd_fetch` may discover the active OpenOCD Tcl port from the current GDB/MI log and use it for SVD-backed reads.
-- If an auto-discovered Tcl endpoint cannot be used, `cmd_fetch` degrades cleanly to non-SVD snapshot capture and emits a clear notice on `stderr`.
+- If the chosen Tcl endpoint is unreachable, `cmd_fetch` may perform one automatic recovery attempt by discovering the matching live OpenOCD session for the workspace and retrying with its Tcl endpoint.
+- Automatic recovery requires a debug session to already be running; `cmd_fetch` must say this explicitly when no live session can be found.
+- If an opportunistic auto-discovered SVD still cannot be used after recovery, `cmd_fetch` degrades cleanly to non-SVD snapshot capture and emits a clear notice on `stderr`.
 - `cmd_report` is snapshot-only and fails clearly when no snapshot can be resolved.
 - `cmd_report` points users to `fetch` when no snapshot is available.
 

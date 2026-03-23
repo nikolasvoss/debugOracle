@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
+import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -11,6 +12,7 @@ DEFAULT_RTT_LOG_PATH = "${workspaceFolder}/.dbgoracle/session.rtt"
 DEFAULT_RTT_STATE_PATH = "${workspaceFolder}/.dbgoracle/session.rtt.state.json"
 DEFAULT_RTT_LAUNCH_LOG_PATH = "${workspaceFolder}/.dbgoracle/session.rtt.launch.log"
 DEFAULT_RTT_PORT = "60001"
+MIN_CORTEX_DEBUG_VERSION = "1.12.1"
 MANAGED_BY_VALUE = "dbgoracle init-workspace"
 
 
@@ -39,6 +41,10 @@ class InitWorkspaceResult:
 
 
 def cmd_init_workspace(args: argparse.Namespace) -> int:
+    if not args.openocd_config:
+        _emit_missing_openocd_config(args, fmt=args.format)
+        return 1
+
     workspace_root = Path(args.workspace_root).resolve()
     try:
         result = initialize_workspace(args, workspace_root)
@@ -50,6 +56,64 @@ def cmd_init_workspace(args: argparse.Namespace) -> int:
     return {"complete": 0, "partial": 2, "failed": 1}[result.status]
 
 
+def _emit_missing_openocd_config(args: argparse.Namespace, *, fmt: str) -> None:
+    workspace_root = str(Path(args.workspace_root).resolve())
+    guidance = _missing_openocd_config_guidance(args)
+    if fmt == "json":
+        payload = {
+            "status": "failed",
+            "workspace_root": workspace_root,
+            "created_files": [],
+            "blocked_files": [],
+            "required_actions": [
+                {
+                    "path": "--openocd-config",
+                    "reason": "missing required OpenOCD launch config",
+                    "fragment": guidance,
+                }
+            ],
+            "dependency_checks": [],
+        }
+        print(json.dumps(payload, indent=2))
+        return
+    print(guidance, file=sys.stderr)
+
+
+def _missing_openocd_config_guidance(args: argparse.Namespace) -> str:
+    command_parts = [
+        "dbgoracle init-workspace",
+        f"--workspace-root {args.workspace_root}",
+        f"--executable {args.executable or 'path/to/firmware.elf'}",
+    ]
+    if args.svd_file:
+        command_parts.append(f"--svd-file {args.svd_file}")
+    if args.with_rtt:
+        command_parts.append("--with-rtt")
+    command_parts.extend(
+        [
+            "--openocd-config interface/stlink.cfg",
+            "--openocd-config target/stm32l4x.cfg",
+        ]
+    )
+    example_command = " ".join(command_parts)
+    parts = [
+        "dbgoracle init-workspace: missing required OpenOCD launch config",
+        "",
+        "`--openocd-config` is required because DebugOracle is generating a runnable Cortex-Debug/OpenOCD launch scaffold and cannot guess your OpenOCD setup.",
+        "",
+        "What to provide:",
+        "- `interface/*.cfg` = the debug probe, for example `interface/stlink.cfg`.",
+        "- `target/*.cfg` = the MCU family, for example `target/stm32l4x.cfg`.",
+        "",
+        "Try this:",
+        example_command,
+        "",
+        "If Cortex-Debug already works in this workspace, copy the same `configFiles` entries from `.vscode/launch.json`.",
+        "More help: `dbgoracle init-workspace --help` and `examples/cortex-debug/README.md`.",
+    ]
+    return "\n".join(parts)
+
+
 def initialize_workspace(args: argparse.Namespace, workspace_root: Path) -> InitWorkspaceResult:
     session_dir = workspace_root / ".dbgoracle"
     vscode_dir = workspace_root / ".vscode"
@@ -59,7 +123,10 @@ def initialize_workspace(args: argparse.Namespace, workspace_root: Path) -> Init
     desired_settings = _settings_payload(args)
     desired_files = [
         (vscode_dir / "settings.json", json.dumps(desired_settings, indent=2) + "\n"),
-        (vscode_dir / "launch.json", _render_launch(with_rtt=bool(args.with_rtt))),
+        (
+            vscode_dir / "launch.json",
+            _render_launch(openocd_config_files=list(args.openocd_config), with_rtt=bool(args.with_rtt)),
+        ),
         (vscode_dir / "tasks.json", _render_tasks(with_rtt=bool(args.with_rtt))),
     ]
 
@@ -70,7 +137,14 @@ def initialize_workspace(args: argparse.Namespace, workspace_root: Path) -> Init
     for path, content in desired_files:
         if path.exists() and not _can_overwrite(path, force=args.force):
             blocked_files.append(str(path))
-            required_actions.append(_required_action(path, desired_settings, with_rtt=bool(args.with_rtt)))
+            required_actions.append(
+                _required_action(
+                    path,
+                    desired_settings,
+                    openocd_config_files=list(args.openocd_config),
+                    with_rtt=bool(args.with_rtt),
+                )
+            )
             continue
         path.write_text(content, encoding="utf-8")
         created_files.append(str(path))
@@ -87,8 +161,8 @@ def initialize_workspace(args: argparse.Namespace, workspace_root: Path) -> Init
     )
 
 
-def _settings_payload(args: argparse.Namespace) -> dict[str, str]:
-    payload = {
+def _settings_payload(args: argparse.Namespace) -> dict[str, object]:
+    payload: dict[str, object] = {
         "debugoracle.managedBy": MANAGED_BY_VALUE,
         "debugoracle.executable": args.executable,
         "debugoracle.miLogPath": args.mi_log_path,
@@ -96,13 +170,14 @@ def _settings_payload(args: argparse.Namespace) -> dict[str, str]:
         "debugoracle.rttStatePath": args.rtt_state_path,
         "debugoracle.rttLaunchLogPath": args.rtt_launch_log_path,
         "debugoracle.rttPort": str(args.rtt_port),
+        "debugoracle.openocdConfigFiles": list(args.openocd_config),
     }
     if args.svd_file:
         payload["debugoracle.svdFile"] = args.svd_file
     return payload
 
 
-def _render_launch(*, with_rtt: bool) -> str:
+def _render_launch(*, openocd_config_files: list[str], with_rtt: bool) -> str:
     prelaunch_label = "DebugOracle: Prelaunch" if with_rtt else "Prepare debug logs"
     post_debug_line = '      "postDebugTask": "DebugOracle: Stop RTT run",\n' if with_rtt else ""
     rtt_block = ""
@@ -114,6 +189,10 @@ def _render_launch(*, with_rtt: bool) -> str:
             "        // \"monitor rtt start\",\n"
             "        // \"monitor rtt server start 60001 0\"\n"
         )
+    config_files_block = "\n".join(
+        f'        "{value}",' if index < len(openocd_config_files) - 1 else f'        "{value}"'
+        for index, value in enumerate(openocd_config_files)
+    )
     return (
         "{\n"
         "  // Created by dbgoracle init-workspace.\n"
@@ -125,6 +204,9 @@ def _render_launch(*, with_rtt: bool) -> str:
         "      \"request\": \"launch\",\n"
         "      \"showDevDebugOutput\": \"raw\",\n"
         "      \"servertype\": \"openocd\",\n"
+        "      \"configFiles\": [\n"
+        + config_files_block
+        + "\n      ],\n"
         "      \"cwd\": \"${workspaceFolder}\",\n"
         "      \"executable\": \"${config:debugoracle.executable}\",\n"
         f"      \"preLaunchTask\": \"{prelaunch_label}\",\n"
@@ -203,7 +285,13 @@ def _render_tasks(*, with_rtt: bool) -> str:
     return json.dumps(payload, indent=2) + "\n"
 
 
-def _required_action(path: Path, settings_payload: dict[str, str], *, with_rtt: bool) -> RequiredAction:
+def _required_action(
+    path: Path,
+    settings_payload: dict[str, object],
+    *,
+    openocd_config_files: list[str],
+    with_rtt: bool,
+) -> RequiredAction:
     if path.name == "settings.json":
         fragment = json.dumps(settings_payload, indent=2)
         return RequiredAction(
@@ -215,7 +303,7 @@ def _required_action(path: Path, settings_payload: dict[str, str], *, with_rtt: 
         return RequiredAction(
             path=str(path),
             reason="existing file blocked automatic launch configuration update",
-            fragment=_render_launch(with_rtt=with_rtt),
+            fragment=_render_launch(openocd_config_files=openocd_config_files, with_rtt=with_rtt),
         )
     return RequiredAction(
         path=str(path),
@@ -256,7 +344,10 @@ def _dependency_checks(executable_path: Path) -> list[DependencyCheck]:
         DependencyCheck(
             name="cortex-debug",
             status="unknown",
-            detail="required VS Code extension for the generated launch configuration",
+            detail=(
+                "required VS Code extension for the generated launch configuration; "
+                f"minimum supported version {MIN_CORTEX_DEBUG_VERSION}"
+            ),
         ),
     ]
 

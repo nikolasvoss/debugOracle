@@ -10,6 +10,7 @@ from ..sources.streams.rtt import (
     DEFAULT_RTT_POLL_INTERVAL,
 )
 from .commands.evidence import cmd_fetch, cmd_report
+from .commands.find_tcl_port import cmd_find_tcl_port
 from .commands.init_workspace import (
     DEFAULT_MI_LOG_PATH,
     DEFAULT_RTT_LAUNCH_LOG_PATH,
@@ -205,6 +206,42 @@ def build_parser() -> argparse.ArgumentParser:
     )
     stop.set_defaults(func=cmd_stop)
 
+    find_tcl_port = subparsers.add_parser(
+        "find-tcl-port",
+        help="Find the active OpenOCD Tcl port for the current workspace session",
+        description=(
+            "Inspect the live OpenOCD process, prefer the session that matches the "
+            "workspace root, and optionally print a ready-to-run fetch command."
+        ),
+    )
+    find_tcl_port.add_argument(
+        "--workspace-root",
+        default=".",
+        help="Workspace root used to prefer the matching OpenOCD process and resolve the SVD file",
+    )
+    find_tcl_port.add_argument(
+        "--pid",
+        type=int,
+        help="Optional specific OpenOCD PID to use when multiple sessions are active",
+    )
+    find_tcl_port.add_argument(
+        "--print-fetch",
+        action="store_true",
+        help="Also print a dbgoracle fetch command when an SVD file can be resolved",
+    )
+    find_tcl_port.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit the discovered endpoint as JSON",
+    )
+    find_tcl_port.add_argument(
+        "--connect-timeout",
+        type=float,
+        default=0.35,
+        help="Seconds to wait when checking whether the Tcl endpoint is reachable",
+    )
+    find_tcl_port.set_defaults(func=cmd_find_tcl_port)
+
     fetch = subparsers.add_parser(
         "fetch",
         help="Resolve raw evidence inputs and build the latest reusable snapshot",
@@ -324,6 +361,11 @@ def build_parser() -> argparse.ArgumentParser:
     init_workspace.add_argument(
         "--svd-file",
         help="Optional default SVD file path stored in workspace settings",
+    )
+    init_workspace.add_argument(
+        "--openocd-config",
+        action="append",
+        help="Required OpenOCD config file stored in workspace settings; repeat for multiple files",
     )
     init_workspace.add_argument(
         "--mi-log-path",

@@ -10,6 +10,17 @@ from pathlib import Path
 from ...artifacts.models import InvestigationArtifact
 from ...artifacts.repository import ArtifactLoadError, load_artifact, save_artifact
 from ...builder import DEFAULT_RTT_WINDOW, FULL_RTT_WINDOW, build_bundle_from_files
+from ...openocd import (
+    DISCOVERY_MATCHED,
+    DISCOVERY_MULTIPLE,
+    DISCOVERY_NO_SESSION,
+    DISCOVERY_PID_NOT_FOUND,
+    DISCOVERY_UNREACHABLE,
+    OpenOcdCandidate,
+    OpenOcdDiscoveryResult,
+    OpenOcdReachabilityError,
+    discover_workspace_openocd_session,
+)
 from ...policy.halted_analysis import evaluate_artifact_live_state
 from ...policy.trust import evaluate_artifact_trust
 from ...renderers.report import ReportRenderOptions, render_report
@@ -62,6 +73,99 @@ def cmd_fetch(args: argparse.Namespace) -> int:
             resolved_openocd_tcl_host=resolved_openocd_tcl_host,
             resolved_openocd_tcl_port=resolved_openocd_tcl_port,
         )
+    except OpenOcdReachabilityError as error:
+        if resolved_svd_file and tcl_discovered:
+            endpoint = f"{resolved_openocd_tcl_host or '127.0.0.1'}:{resolved_openocd_tcl_port}"
+            try:
+                bundle = resolve_bundle(
+                    args,
+                    gdb_mi=gdb_mi,
+                    rtt=rtt,
+                    allow_snapshot_fallback=False,
+                    command_name="fetch",
+                    explicit_gdb=discovery["gdb_mi_explicit"],
+                    explicit_rtt=discovery["rtt_explicit"],
+                    export_dir=Path(state_out).parent,
+                    resolved_svd_file=resolved_svd_file,
+                    svd_discovered=svd_discovered,
+                    resolved_openocd_tcl_host=None,
+                    resolved_openocd_tcl_port=None,
+                )
+            except OpenOcdReachabilityError as fallback_error:
+                error = fallback_error
+            except SystemExit as fallback_error:
+                reason = str(fallback_error) or "register enrichment failed"
+                print(
+                    f"Auto-discovered OpenOCD Tcl endpoint '{endpoint}' could not be used ({reason}). Continuing without register capture.",
+                    file=sys.stderr,
+                )
+                bundle = resolve_bundle(
+                    args,
+                    gdb_mi=gdb_mi,
+                    rtt=rtt,
+                    allow_snapshot_fallback=False,
+                    command_name="fetch",
+                    explicit_gdb=discovery["gdb_mi_explicit"],
+                    explicit_rtt=discovery["rtt_explicit"],
+                    export_dir=Path(state_out).parent,
+                    resolved_svd_file=None,
+                    svd_discovered=False,
+                )
+            else:
+                save_artifact(bundle, state_out)
+                emit_fetch_summary(bundle, state_out, workspace_root=str(workspace_root))
+                return 0
+        try:
+            bundle = attempt_fetch_openocd_recovery(
+                args,
+                workspace_root=workspace_root,
+                gdb_mi=gdb_mi,
+                rtt=rtt,
+                state_out=state_out,
+                discovery=discovery,
+                resolved_svd_file=resolved_svd_file,
+                svd_discovered=svd_discovered,
+                initial_error=error,
+            )
+        except SystemExit as recovery_error:
+            reason = str(recovery_error) or "register enrichment failed"
+            if resolved_svd_file and tcl_discovered:
+                endpoint = f"{resolved_openocd_tcl_host or '127.0.0.1'}:{resolved_openocd_tcl_port}"
+                print(
+                    f"Auto-discovered OpenOCD Tcl endpoint '{endpoint}' could not be used ({reason}). Continuing without register capture.",
+                    file=sys.stderr,
+                )
+                bundle = resolve_bundle(
+                    args,
+                    gdb_mi=gdb_mi,
+                    rtt=rtt,
+                    allow_snapshot_fallback=False,
+                    command_name="fetch",
+                    explicit_gdb=discovery["gdb_mi_explicit"],
+                    explicit_rtt=discovery["rtt_explicit"],
+                    export_dir=Path(state_out).parent,
+                    resolved_svd_file=None,
+                    svd_discovered=False,
+                )
+            elif resolved_svd_file and svd_discovered:
+                print(
+                    f"Auto-discovered SVD '{resolved_svd_file}' could not be used ({reason}). Continuing without register capture.",
+                    file=sys.stderr,
+                )
+                bundle = resolve_bundle(
+                    args,
+                    gdb_mi=gdb_mi,
+                    rtt=rtt,
+                    allow_snapshot_fallback=False,
+                    command_name="fetch",
+                    explicit_gdb=discovery["gdb_mi_explicit"],
+                    explicit_rtt=discovery["rtt_explicit"],
+                    export_dir=Path(state_out).parent,
+                    resolved_svd_file=None,
+                    svd_discovered=False,
+                )
+            else:
+                raise
     except SystemExit as error:
         reason = str(error) or "register enrichment failed"
         if resolved_svd_file and svd_discovered:
@@ -143,6 +247,115 @@ def cmd_report(args: argparse.Namespace) -> int:
     except RuntimeError as error:
         raise SystemExit(str(error)) from error
     return emit(output, args.output)
+
+
+def attempt_fetch_openocd_recovery(
+    args: argparse.Namespace,
+    *,
+    workspace_root: Path,
+    gdb_mi: str | None,
+    rtt: str | None,
+    state_out: str,
+    discovery: dict[str, str | None | bool],
+    resolved_svd_file: str | None,
+    svd_discovered: bool,
+    initial_error: OpenOcdReachabilityError,
+) -> InvestigationArtifact:
+    if resolved_svd_file is None:
+        raise SystemExit(str(initial_error))
+    discovery_result = discover_workspace_openocd_session(
+        workspace_root,
+        connect_timeout=0.35,
+    )
+    candidate = discovery_result.candidate
+    if candidate is None:
+        raise SystemExit(_format_fetch_recovery_unavailable(initial_error, discovery_result))
+    if _endpoint_matches_failure(candidate, initial_error):
+        raise SystemExit(_format_fetch_same_endpoint(initial_error, candidate))
+    if discovery_result.status != DISCOVERY_MATCHED:
+        raise SystemExit(_format_fetch_recovery_unavailable(initial_error, discovery_result))
+    print(
+        f"Automatic Tcl recovery: retrying fetch with the live debug session at {candidate.host}:{candidate.tcl_port}.",
+        file=sys.stderr,
+    )
+    try:
+        return resolve_bundle(
+            args,
+            gdb_mi=gdb_mi,
+            rtt=rtt,
+            allow_snapshot_fallback=False,
+            command_name="fetch",
+            explicit_gdb=bool(discovery["gdb_mi_explicit"]),
+            explicit_rtt=bool(discovery["rtt_explicit"]),
+            export_dir=Path(state_out).parent,
+            resolved_svd_file=resolved_svd_file,
+            svd_discovered=svd_discovered,
+            resolved_openocd_tcl_host=candidate.host,
+            resolved_openocd_tcl_port=candidate.tcl_port,
+        )
+    except OpenOcdReachabilityError as retry_error:
+        raise SystemExit(_format_fetch_retry_failure(initial_error, candidate, str(retry_error))) from retry_error
+    except SystemExit as retry_error:
+        reason = str(retry_error) or "register enrichment failed"
+        raise SystemExit(_format_fetch_retry_failure(initial_error, candidate, reason)) from retry_error
+
+
+def _endpoint_matches_failure(candidate: OpenOcdCandidate, error: OpenOcdReachabilityError) -> bool:
+    return candidate.host == error.host and candidate.tcl_port == error.port
+
+
+def _format_fetch_recovery_unavailable(
+    initial_error: OpenOcdReachabilityError,
+    discovery_result: OpenOcdDiscoveryResult,
+) -> str:
+    base = f"{initial_error}. "
+    if discovery_result.status == DISCOVERY_NO_SESSION:
+        return (
+            base
+            + "Automatic Tcl recovery could not find a running debug session. "
+            + "A debug session must already be running before `dbgoracle fetch` or `dbgoracle find-tcl-port` can discover the live Tcl port. "
+            + "Start the debug session first, then retry `dbgoracle fetch` or run `dbgoracle find-tcl-port --print-fetch`."
+        )
+    if discovery_result.status == DISCOVERY_MULTIPLE:
+        pids = ", ".join(str(candidate.pid) for candidate in sorted(discovery_result.candidates, key=lambda item: item.pid))
+        return (
+            base
+            + "Automatic Tcl recovery found multiple running debug sessions that match this workspace. "
+            + f"Re-run `dbgoracle find-tcl-port --pid <PID>` with one of: {pids}."
+        )
+    if discovery_result.status == DISCOVERY_UNREACHABLE and discovery_result.candidate is not None:
+        candidate = discovery_result.candidate
+        return (
+            base
+            + "Automatic Tcl recovery found the matching debug session, but its discovered Tcl endpoint "
+            + f"{candidate.host}:{candidate.tcl_port} is not reachable yet. "
+            + "Keep the debug session running, then retry `dbgoracle fetch` or use `dbgoracle find-tcl-port --print-fetch`."
+        )
+    if discovery_result.status == DISCOVERY_PID_NOT_FOUND and discovery_result.requested_pid is not None:
+        return base + f"Automatic Tcl recovery could not find the requested OpenOCD pid {discovery_result.requested_pid}."
+    return base + "Automatic Tcl recovery could not determine a usable OpenOCD Tcl endpoint."
+
+
+def _format_fetch_same_endpoint(initial_error: OpenOcdReachabilityError, candidate: OpenOcdCandidate) -> str:
+    return (
+        f"{initial_error}. "
+        + "Automatic Tcl recovery found the same endpoint again "
+        + f"({candidate.host}:{candidate.tcl_port}), so no retry was attempted. "
+        + "A debug session must already be running for discovery to help. "
+        + "Verify the session's live Tcl port with `dbgoracle find-tcl-port --print-fetch` and retry."
+    )
+
+
+def _format_fetch_retry_failure(
+    initial_error: OpenOcdReachabilityError,
+    candidate: OpenOcdCandidate,
+    retry_reason: str,
+) -> str:
+    return (
+        f"{initial_error}. "
+        + f"Automatic Tcl recovery retried with {candidate.host}:{candidate.tcl_port}, but register capture still failed ({retry_reason}). "
+        + "Keep the debug session running and confirm the live Tcl port with `dbgoracle find-tcl-port --print-fetch`."
+    )
 
 
 def _validate_fetch_live_capture_arguments(
@@ -337,6 +550,8 @@ def resolve_bundle(
             openocd_tcl_host=resolved_openocd_tcl_host,
             openocd_tcl_port=resolved_openocd_tcl_port,
         )
+    except OpenOcdReachabilityError:
+        raise
     except OSError as error:
         raise SystemExit(f"Unable to read one of the required input files: {error}") from error
     except ValueError as error:

@@ -14,6 +14,7 @@ from unittest.mock import patch
 
 from debugoracle.builder import build_bundle_from_files, save_bundle
 from debugoracle.cli import main
+from debugoracle.cli.commands.find_tcl_port import OpenOcdCandidate
 from debugoracle.cli.main import build_parser
 
 
@@ -31,12 +32,159 @@ class DebugOracleCliTests(unittest.TestCase):
 
         self.assertEqual(parsed.command, "fetch")
 
+    def test_find_tcl_port_command_parses(self) -> None:
+        parser = build_parser()
+        parsed = parser.parse_args(["find-tcl-port", "--workspace-root", ".", "--print-fetch"])
+
+        self.assertEqual(parsed.command, "find-tcl-port")
+        self.assertTrue(parsed.print_fetch)
+
+    def test_find_tcl_port_prints_fetch_command_for_workspace_default_svd(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            (workspace / ".vscode").mkdir()
+            (workspace / ".vscode" / "settings.json").write_text(
+                json.dumps({"debugoracle.svdFile": "${workspaceFolder}/device.svd"}) + "\n",
+                encoding="utf-8",
+            )
+            (workspace / "device.svd").write_text("<device />\n", encoding="utf-8")
+            candidate = OpenOcdCandidate(
+                pid=1234,
+                argv=("openocd", "-c", "gdb_port 50000", "-c", "tcl_port 50001"),
+                cwd=str(workspace),
+                host="127.0.0.1",
+                tcl_port=50001,
+                gdb_port=50000,
+                telnet_port=None,
+            )
+
+            with patch("debugoracle.cli.commands.find_tcl_port.discover_openocd_candidates", return_value=[candidate]), patch(
+                "debugoracle.cli.commands.find_tcl_port.is_tcp_endpoint_reachable", return_value=True
+            ):
+                stdout, stderr = self._run_cli_in_workspace(
+                    workspace,
+                    ["find-tcl-port", "--workspace-root", ".", "--print-fetch"],
+                    capture_stderr=True,
+                )
+
+        self.assertIn("OpenOCD Tcl port: 50001", stdout)
+        self.assertIn("Run this:", stdout)
+        self.assertIn("dbgoracle fetch --workspace-root", stdout)
+        self.assertIn("--openocd-tcl-port 50001", stdout)
+        self.assertIn("Workspace default SVD for fetch:", stderr)
+
+    def test_find_tcl_port_succeeds_without_svd_and_prints_guidance(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            candidate = OpenOcdCandidate(
+                pid=1234,
+                argv=("openocd", "-c", "tcl_port 50001"),
+                cwd=str(workspace),
+                host="127.0.0.1",
+                tcl_port=50001,
+                gdb_port=None,
+                telnet_port=None,
+            )
+
+            with patch("debugoracle.cli.commands.find_tcl_port.discover_openocd_candidates", return_value=[candidate]), patch(
+                "debugoracle.cli.commands.find_tcl_port.is_tcp_endpoint_reachable", return_value=True
+            ):
+                stdout, stderr, exit_code = self._run_cli_capture_in_workspace(
+                    workspace,
+                    ["find-tcl-port", "--workspace-root", ".", "--print-fetch"],
+                )
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("OpenOCD Tcl port: 50001", stdout)
+        self.assertIn("Resolved SVD: none", stdout)
+        self.assertIn("Fetch command: not available", stderr)
+
+    def test_find_tcl_port_fails_clearly_when_multiple_sessions_match(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            candidates = [
+                OpenOcdCandidate(
+                    pid=100,
+                    argv=("openocd", "-c", "tcl_port 40001"),
+                    cwd=None,
+                    host="127.0.0.1",
+                    tcl_port=40001,
+                    gdb_port=None,
+                    telnet_port=None,
+                ),
+                OpenOcdCandidate(
+                    pid=200,
+                    argv=("openocd", "-c", "tcl_port 50001"),
+                    cwd=None,
+                    host="127.0.0.1",
+                    tcl_port=50001,
+                    gdb_port=None,
+                    telnet_port=None,
+                ),
+            ]
+
+            with patch("debugoracle.cli.commands.find_tcl_port.discover_openocd_candidates", return_value=candidates):
+                stdout, stderr, exit_code = self._run_cli_capture_in_workspace(
+                    workspace,
+                    ["find-tcl-port", "--workspace-root", "."],
+                )
+
+        self.assertEqual(exit_code, 2)
+        self.assertEqual(stdout, "")
+        self.assertIn("Multiple active OpenOCD sessions match", stderr)
+        self.assertIn("--pid", stderr)
+
+    def test_init_workspace_requires_openocd_config(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            stdout, stderr, exit_code = self._run_cli_capture(
+                [
+                    "init-workspace",
+                    "--workspace-root",
+                    str(workspace),
+                    "--executable",
+                    "build/app.elf",
+                    "--svd-file",
+                    "STM32L432.svd",
+                    "--with-rtt",
+                ]
+            )
+
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(stdout, "")
+        self.assertIn("--openocd-config", stderr)
+        self.assertIn("cannot guess your OpenOCD setup", stderr)
+        self.assertIn("interface/*.cfg", stderr)
+        self.assertIn("target/*.cfg", stderr)
+        self.assertIn("dbgoracle init-workspace", stderr)
+        self.assertIn("configFiles", stderr)
+        self.assertFalse((workspace / ".vscode").exists())
+        self.assertFalse((workspace / ".dbgoracle").exists())
+
     def test_init_workspace_command_parses(self) -> None:
         parser = build_parser()
         parsed = parser.parse_args(
-            ["init-workspace", "--workspace-root", ".", "--executable", "build/app.elf"]
+            [
+                "init-workspace",
+                "--workspace-root",
+                ".",
+                "--executable",
+                "build/app.elf",
+                "--openocd-config",
+                "interface/stlink.cfg",
+            ]
         )
         self.assertEqual(parsed.command, "init_workspace")
+
+    def test_init_workspace_help_marks_openocd_config_as_required(self) -> None:
+        parser = build_parser()
+        stdout = io.StringIO()
+        with self.assertRaises(SystemExit) as error:
+            with redirect_stdout(stdout):
+                parser.parse_args(["init-workspace", "--help"])
+
+        self.assertEqual(error.exception.code, 0)
+        self.assertIn("Required OpenOCD config file", stdout.getvalue())
 
     def test_removed_legacy_commands_are_rejected(self) -> None:
         parser = build_parser()
@@ -58,6 +206,10 @@ class DebugOracleCliTests(unittest.TestCase):
                         str(workspace),
                         "--executable",
                         "build/app.elf",
+                        "--openocd-config",
+                        "interface/stlink.cfg",
+                        "--openocd-config",
+                        "target/stm32l4x.cfg",
                     ]
                 )
 
@@ -74,11 +226,15 @@ class DebugOracleCliTests(unittest.TestCase):
 
             settings = json.loads(settings_path.read_text(encoding="utf-8"))
             self.assertEqual(settings["debugoracle.executable"], "build/app.elf")
+            self.assertEqual(settings["debugoracle.openocdConfigFiles"], ["interface/stlink.cfg", "target/stm32l4x.cfg"])
             self.assertEqual(
                 settings["debugoracle.miLogPath"],
                 "${workspaceFolder}/.dbgoracle/cortex-debug-shared-mi.log",
             )
             launch_text = launch_path.read_text(encoding="utf-8")
+            self.assertIn('"configFiles": [', launch_text)
+            self.assertIn('"interface/stlink.cfg"', launch_text)
+            self.assertIn('"target/stm32l4x.cfg"', launch_text)
             self.assertIn('"preLaunchTask": "Prepare debug logs"', launch_text)
             self.assertNotIn('"postDebugTask": "DebugOracle: Stop RTT run"', launch_text)
             self.assertIn("init-workspace", stdout)
@@ -100,6 +256,8 @@ class DebugOracleCliTests(unittest.TestCase):
                             str(workspace),
                             "--executable",
                             "build/app.elf",
+                            "--openocd-config",
+                            "interface/stlink.cfg",
                             "--format",
                             "json",
                         ]
@@ -112,6 +270,35 @@ class DebugOracleCliTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         executable = next(item for item in payload["dependency_checks"] if item["name"] == "executable")
         self.assertEqual(executable["status"], "available")
+        cortex_debug = next(item for item in payload["dependency_checks"] if item["name"] == "cortex-debug")
+        self.assertIn("minimum supported version 1.12.1", cortex_debug["detail"])
+        self.assertEqual(stderr, "")
+
+    def test_init_workspace_returns_failed_json_when_openocd_config_is_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            stdout, stderr, exit_code = self._run_cli_capture(
+                [
+                    "init-workspace",
+                    "--workspace-root",
+                    str(workspace),
+                    "--executable",
+                    "build/app.elf",
+                    "--format",
+                    "json",
+                ]
+            )
+
+            payload = json.loads(stdout)
+
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(payload["status"], "failed")
+        self.assertEqual(payload["workspace_root"], str(workspace.resolve()))
+        self.assertEqual(payload["created_files"], [])
+        self.assertEqual(payload["blocked_files"], [])
+        self.assertEqual(payload["required_actions"][0]["path"], "--openocd-config")
+        self.assertIn("cannot guess your OpenOCD setup", payload["required_actions"][0]["fragment"])
+        self.assertEqual(payload["dependency_checks"], [])
         self.assertEqual(stderr, "")
 
     def test_init_workspace_returns_partial_json_when_existing_settings_block_automation(self) -> None:
@@ -128,6 +315,8 @@ class DebugOracleCliTests(unittest.TestCase):
                     str(workspace),
                     "--executable",
                     "build/app.elf",
+                    "--openocd-config",
+                    "interface/stlink.cfg",
                     "--format",
                     "json",
                 ]
@@ -158,6 +347,8 @@ class DebugOracleCliTests(unittest.TestCase):
                     str(workspace),
                     "--executable",
                     "build/app.elf",
+                    "--openocd-config",
+                    "interface/stlink.cfg",
                 ]
             )
 
@@ -177,6 +368,8 @@ class DebugOracleCliTests(unittest.TestCase):
                         str(workspace),
                         "--executable",
                         "build/app.elf",
+                        "--openocd-config",
+                        "interface/stlink.cfg",
                         "--svd-file",
                         "boards/sample.svd",
                     ]
@@ -200,6 +393,8 @@ class DebugOracleCliTests(unittest.TestCase):
                         str(workspace),
                         "--executable",
                         "build/app.elf",
+                        "--openocd-config",
+                        "interface/stlink.cfg",
                         "--format",
                         "json",
                     ]
@@ -669,6 +864,21 @@ class DebugOracleCliTests(unittest.TestCase):
         with redirect_stdout(stdout), redirect_stderr(stderr):
             exit_code = main(argv)
         return stdout.getvalue(), stderr.getvalue(), exit_code
+
+    def _run_cli_capture_in_workspace(
+        self,
+        workspace: Path,
+        argv: list[str],
+        *,
+        env: dict[str, str] | None = None,
+    ) -> tuple[str, str, int]:
+        previous = os.getcwd()
+        try:
+            os.chdir(workspace)
+            with patch.dict(os.environ, env or {}, clear=False):
+                return self._run_cli_capture(argv)
+        finally:
+            os.chdir(previous)
 
 
 class _FakeOpenOcdHandler(socketserver.BaseRequestHandler):

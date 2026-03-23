@@ -34,6 +34,23 @@ Expect to edit the target-specific fields before using it on another project:
 - If you are not using this exact STM32/OpenOCD setup, also update
   `configFiles`, `executable`, `gdbPath`, and `runToEntryPoint`
 
+## If `init-workspace` says `--openocd-config` is required
+
+That error means DebugOracle has enough information to remember your ELF and optional SVD, but not enough to generate a runnable Cortex-Debug/OpenOCD launch.
+
+What the two usual values mean:
+
+- `interface/*.cfg`: how OpenOCD talks to your debug probe, for example `interface/stlink.cfg`
+- `target/*.cfg`: which MCU family OpenOCD should load, for example `target/stm32l4x.cfg`
+
+Example:
+
+```bash
+dbgoracle init-workspace --workspace-root . --executable build/app.elf --svd-file STM32L432.svd --with-rtt --openocd-config interface/stlink.cfg --openocd-config target/stm32l4x.cfg
+```
+
+If Cortex-Debug already works in this workspace, open `.vscode/launch.json` and copy the same `configFiles` entries. Those are the values DebugOracle needs.
+
 ## Single place for project values
 
 Copy [`settings.json.example`](settings.json.example) to `.vscode/settings.json` and keep your project-specific values there.
@@ -41,6 +58,7 @@ Copy [`settings.json.example`](settings.json.example) to `.vscode/settings.json`
 The example launch and task files read these settings so the important values live in one place:
 
 - `debugoracle.executable`: path to your ELF
+- `debugoracle.openocdConfigFiles`: OpenOCD config file list for the supported launch profile
 - `debugoracle.miLogPath`: shared GDB/MI log path
 - `debugoracle.rttLogPath`: RTT capture path
 - `debugoracle.rttStatePath`: RTT state sidecar path
@@ -49,7 +67,9 @@ The example launch and task files read these settings so the important values li
 
 These are the stable project values. The OpenOCD Tcl port is intentionally not
 stored here because Cortex-Debug may remap it per session. Discover it from the
-active debug log when you use `fetch --svd-file`.
+active `openocd` process when you use `fetch --svd-file`, or fall back to the
+current raw debug output if needed. `configFiles` are different: they are stable
+launch inputs and belong in workspace settings.
 
 ## Port map
 
@@ -64,10 +84,37 @@ that does not tell you anything about the Tcl port.
 
 ## Fastest way to find the Tcl port
 
+Preferred path:
+
 1. Set your stable project values in `.vscode/settings.json`.
-2. Start your Cortex-Debug session with `showDevDebugOutput: "raw"` enabled.
-3. Open the Debug Console or the shared GDB/MI log.
-4. Search for `tcl_port`.
+2. Start your Cortex-Debug session.
+3. Run the subcommand:
+
+```bash
+dbgoracle find-tcl-port --workspace-root . --print-fetch
+```
+
+The subcommand inspects the live `openocd` process, prints the active Tcl port,
+and prints a ready-to-run `dbgoracle fetch ... --openocd-tcl-port <port>`
+command when it can also resolve an SVD file.
+
+If you only want the port number, use:
+
+```bash
+dbgoracle find-tcl-port --workspace-root .
+```
+
+Why this is the preferred path:
+
+- it does not depend on the shared GDB/MI log containing startup lines
+- it avoids reusing stale `tcl_port` output from an old session
+- it works even when the MI log begins at records like `15^done`
+
+Manual fallback:
+
+1. Keep `showDevDebugOutput: "raw"` enabled.
+2. Open the Debug Console for the current session.
+3. Search for `tcl_port`.
 
 A real example looks like this:
 
@@ -77,16 +124,18 @@ Launching gdb-server: openocd -c "gdb_port 50000" -c "tcl_port 50001" -c "telnet
 
 In that session, the Tcl port is `50001`.
 
-If you do not see any `tcl_port` entry, your current session is not giving you
-a usable Tcl port yet. In that case, stop and fix the debug launch first.
+If the helper cannot find an active `openocd` process with an explicit Tcl port
+and the current raw debug output does not show `tcl_port`, stop and fix the
+launch first instead of assuming `6666`.
 
 ## What to do with the number
 
 Once you have the port number, use this happy path:
 
-1. Verify the port is reachable.
-2. Run `fetch --svd-file` with that port.
-3. Optionally export it for repeated use in the same shell.
+1. Prefer the helper's printed fetch command.
+2. If you only captured the number, verify the port is reachable.
+3. Run `fetch --svd-file` with that port.
+4. Optionally export it for repeated use in the same shell.
 
 Verify reachability:
 
@@ -166,8 +215,10 @@ test -f session.rtt.state.json && echo "RTT capture state present" || test -f .d
   control port.
 - Tcl port is wrong or missing: `fetch --svd-file` fails with connection refused
   or a clear backend reachability error.
+- `dbgoracle find-tcl-port` shows no match or the wrong session: close stale
+  sessions or rerun the subcommand with the active session only.
 - The log shows an old port from a previous session: you are probably reading a
-  stale MI or Debug Console log. Restart the debug session and search again.
+  stale Debug Console log. Restart the debug session and search again.
 
 ## Build and inspect evidence
 
@@ -188,7 +239,7 @@ dbgoracle report --workspace-root . --regs RCC
 ## Minimal validation checklist
 
 - Your `.vscode/settings.json` contains the normal project values in one place.
-- You can point to the exact `tcl_port` line in the current debug session log.
+- You can run `dbgoracle find-tcl-port --workspace-root . --print-fetch` during an active session.
 - You can explain the difference between `gdb_port`, `tcl_port`, and the RTT port.
 - You can verify the discovered Tcl port on `127.0.0.1:<port>`.
 - You can run `dbgoracle fetch --workspace-root . --svd-file ... --openocd-tcl-port <port>`.

@@ -1,5 +1,9 @@
 {
   "debugoracle.executable": "${workspaceFolder}/build/app.elf",
+  "debugoracle.openocdConfigFiles": [
+    "interface/stlink.cfg",
+    "target/stm32l4x.cfg"
+  ],
   "debugoracle.miLogPath": "${workspaceFolder}/.dbgoracle/cortex-debug-shared-mi.log",
   "debugoracle.rttLogPath": "${workspaceFolder}/.dbgoracle/session.rtt",
   "debugoracle.rttStatePath": "${workspaceFolder}/.dbgoracle/session.rtt.state.json",
