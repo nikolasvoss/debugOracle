@@ -10,3 +10,4 @@ these notes are just for the developer. not for agent use.
 - add simpler setup script/instruction
 - clean system paths 
 - rework stream capture
+- add early fail when workspace setup is not finished.
