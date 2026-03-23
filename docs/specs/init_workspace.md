@@ -41,6 +41,7 @@ Own the installed-CLI workspace bootstrap flow for the supported Cortex-Debug/Op
 - When it is missing, `init-workspace` must fail before writing scaffold files and emit actionable remediation text instead of only a generic parser error.
 - The remediation text must explain why the config is needed, show at least one valid `interface/*.cfg` + `target/*.cfg` example, and point the user to existing `configFiles` values when a Cortex-Debug launch already works.
 - The generated `launch.json` must contain a runnable `configFiles` array when the scaffold is owned by DebugOracle.
+- `--with-rtt` must switch the generated `launch.json` from a plain MI-only launch to an RTT-managed launch, including active `monitor rtt ...` commands plus the matching DebugOracle prelaunch/post-debug tasks.
 - The OpenOCD config list is stored in `.vscode/settings.json` as stable workspace metadata.
 - `init-workspace` does not generate a fallback launch profile without OpenOCD config files.
 

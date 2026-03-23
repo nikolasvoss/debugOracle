@@ -240,6 +240,37 @@ class DebugOracleCliTests(unittest.TestCase):
             self.assertIn("init-workspace", stdout)
             self.assertEqual(stderr, "")
 
+    def test_init_workspace_with_rtt_enables_rtt_commands_in_launch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            with patch("debugoracle.cli.commands.init_workspace.shutil.which", return_value="/usr/bin/openocd"):
+                stdout, stderr, exit_code = self._run_cli_capture(
+                    [
+                        "init-workspace",
+                        "--workspace-root",
+                        str(workspace),
+                        "--executable",
+                        "build/app.elf",
+                        "--openocd-config",
+                        "interface/stlink.cfg",
+                        "--openocd-config",
+                        "target/stm32l4x.cfg",
+                        "--with-rtt",
+                    ]
+                )
+
+            launch_text = (workspace / ".vscode" / "launch.json").read_text(encoding="utf-8")
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stderr, "")
+        self.assertIn('"preLaunchTask": "DebugOracle: Prelaunch"', launch_text)
+        self.assertIn('"postDebugTask": "DebugOracle: Stop RTT run"', launch_text)
+        self.assertIn('"monitor rtt setup 0x20000000 0x1000 \\\"SEGGER RTT\\\""', launch_text)
+        self.assertIn('"monitor rtt start"', launch_text)
+        self.assertIn('"monitor rtt server start 60001 0"', launch_text)
+        self.assertNotIn('// "monitor rtt setup 0x20000000 0x1000 \\\"SEGGER RTT\\\""', launch_text)
+        self.assertIn("init-workspace", stdout)
+
     def test_init_workspace_resolves_executable_relative_to_workspace_root(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir, tempfile.TemporaryDirectory() as otherdir:
             workspace = Path(tmpdir)

@@ -185,9 +185,9 @@ def _render_launch(*, openocd_config_files: list[str], with_rtt: bool) -> str:
         rtt_block = (
             "        // Optional RTT block enabled by init-workspace.\n"
             "        // Update the address window for your target before use.\n"
-            "        // \"monitor rtt setup 0x20000000 0x1000 \\\"SEGGER RTT\\\"\",\n"
-            "        // \"monitor rtt start\",\n"
-            "        // \"monitor rtt server start 60001 0\"\n"
+            "        \"monitor rtt setup 0x20000000 0x1000 \\\"SEGGER RTT\\\"\",\n"
+            "        \"monitor rtt start\",\n"
+            "        \"monitor rtt server start 60001 0\"\n"
         )
     config_files_block = "\n".join(
         f'        "{value}",' if index < len(openocd_config_files) - 1 else f'        "{value}"'
