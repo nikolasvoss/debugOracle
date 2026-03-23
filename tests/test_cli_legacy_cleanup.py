@@ -7,8 +7,8 @@ from contextlib import redirect_stderr, redirect_stdout
 from debugoracle.cli.main import build_parser
 
 
-class Phase7CleanupTests(unittest.TestCase):
-    def test_report_rejects_removed_legacy_flags_and_prompt_command_is_gone(self) -> None:
+class CliLegacyCleanupTests(unittest.TestCase):
+    def test_report_rejects_removed_legacy_flags(self) -> None:
         parser = build_parser()
 
         for argv in (
@@ -19,6 +19,9 @@ class Phase7CleanupTests(unittest.TestCase):
         ):
             with self.assertRaises(SystemExit):
                 parser.parse_args(argv)
+
+    def test_prompt_command_is_rejected(self) -> None:
+        parser = build_parser()
 
         with self.assertRaises(SystemExit) as error:
             with redirect_stderr(io.StringIO()) as stderr:

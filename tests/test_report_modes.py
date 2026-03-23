@@ -16,7 +16,7 @@ from debugoracle.cli import main
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
-class Phase56ReportModesTests(unittest.TestCase):
+class ReportModesTests(unittest.TestCase):
     def test_default_report_surfaces_unsafe_trust_header_for_running_target_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             snapshot_path = self._write_snapshot(

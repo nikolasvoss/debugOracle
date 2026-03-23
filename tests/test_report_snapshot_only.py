@@ -11,7 +11,7 @@ from debugoracle.cli import main
 from debugoracle.cli.main import build_parser
 
 
-class Phase4SnapshotOnlyTests(unittest.TestCase):
+class ReportSnapshotOnlyTests(unittest.TestCase):
     def test_report_requires_snapshot_and_rejects_raw_inputs(self) -> None:
         parser = build_parser()
 

@@ -25,17 +25,21 @@ DEFAULT_OPENOCD_VALUES = {
 
 
 class DebugOracleCliTests(unittest.TestCase):
-    def test_fetch_exists_and_observe_snapshot_prompt_commands_are_gone(self) -> None:
+    def test_fetch_command_parses(self) -> None:
         parser = build_parser()
         parsed = parser.parse_args(["fetch"])
 
         self.assertEqual(parsed.command, "fetch")
 
+    def test_init_workspace_command_parses(self) -> None:
+        parser = build_parser()
         parsed = parser.parse_args(
             ["init-workspace", "--workspace-root", ".", "--executable", "build/app.elf"]
         )
         self.assertEqual(parsed.command, "init_workspace")
 
+    def test_removed_legacy_commands_are_rejected(self) -> None:
+        parser = build_parser()
         for argv in (["observe"], ["snapshot"], ["prompt"]):
             with self.assertRaises(SystemExit) as error:
                 with redirect_stderr(io.StringIO()) as stderr:

@@ -22,7 +22,7 @@ from debugoracle.cli.main import build_parser
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
-class FetchPhase3Tests(unittest.TestCase):
+class FetchRegisterCaptureTests(unittest.TestCase):
     def test_fetch_with_svd_captures_safe_peripheral_registers(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
@@ -185,6 +185,141 @@ class FetchPhase3Tests(unittest.TestCase):
                 )
 
             self.assertIn("Registers: present, 1 peripherals, 3 registers, 2 success, 0 failure, 1 skipped", stdout)
+
+    def test_fetch_uses_tcl_port_discovered_from_mi_log_for_workspace_default_svd(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            mi_text = (
+                'Launching gdb-server: openocd -c "gdb_port 50000" -c "tcl_port 0" -c "telnet_port 50002"\n'
+                + (FIXTURES / "sample.mi").read_text(encoding="utf-8")
+            )
+            (workspace / "cortex-debug-shared-mi.log").write_text(
+                mi_text,
+                encoding="utf-8",
+            )
+            (workspace / ".vscode").mkdir()
+            (workspace / ".vscode" / "settings.json").write_text(
+                json.dumps({"debugoracle.svdFile": "test.svd"}) + "\n",
+                encoding="utf-8",
+            )
+            (workspace / "test.svd").write_text(_minimal_svd_text(), encoding="utf-8")
+
+            with _FakeOpenOcdServer(values={0x40000000: "0x00000011", 0x40000004: "0x00000022"}) as server:
+                mi_text = mi_text.replace('tcl_port 0', f'tcl_port {server.port}')
+                (workspace / "cortex-debug-shared-mi.log").write_text(mi_text, encoding="utf-8")
+                stdout, stderr = self._run_cli_in_workspace(
+                    workspace,
+                    ["fetch"],
+                    env={
+                        "DEBUGORACLE_OPENOCD_HOST": server.host,
+                        "DEBUGORACLE_OPENOCD_PORT": "",
+                    },
+                    capture_stderr=True,
+                )
+
+            snapshot_path = workspace / "latest_snapshot.json"
+            payload = json.loads(snapshot_path.read_text(encoding="utf-8"))
+
+        self.assertIn("Registers: present, 1 peripherals, 3 registers, 2 success, 0 failure, 1 skipped", stdout)
+        self.assertIn(str(server.port), stderr)
+        self.assertEqual(payload["sources"]["registers"]["success_count"], 2)
+
+    def test_fetch_falls_back_to_environment_port_when_discovered_mi_tcl_port_is_unreachable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            mi_text = (
+                'Launching gdb-server: openocd -c "gdb_port 50000" -c "tcl_port 1" -c "telnet_port 50002"\n'
+                + (FIXTURES / "sample.mi").read_text(encoding="utf-8")
+            )
+            (workspace / "cortex-debug-shared-mi.log").write_text(mi_text, encoding="utf-8")
+            (workspace / ".vscode").mkdir()
+            (workspace / ".vscode" / "settings.json").write_text(
+                json.dumps({"debugoracle.svdFile": "test.svd"}) + "\n",
+                encoding="utf-8",
+            )
+            (workspace / "test.svd").write_text(_minimal_svd_text(), encoding="utf-8")
+
+            with _FakeOpenOcdServer(values={0x40000000: "0x00000011", 0x40000004: "0x00000022"}) as server:
+                stdout, stderr = self._run_cli_in_workspace(
+                    workspace,
+                    ["fetch"],
+                    env={
+                        "DEBUGORACLE_OPENOCD_HOST": server.host,
+                        "DEBUGORACLE_OPENOCD_PORT": str(server.port),
+                    },
+                    capture_stderr=True,
+                )
+
+            payload = json.loads((workspace / "latest_snapshot.json").read_text(encoding="utf-8"))
+
+        self.assertIn("Registers: present, 1 peripherals, 3 registers, 2 success, 0 failure, 1 skipped", stdout)
+        self.assertIn("Discovered OpenOCD Tcl port for fetch from GDB/MI log: 1", stderr)
+        self.assertEqual(payload["sources"]["registers"]["success_count"], 2)
+
+    def test_fetch_degrades_when_discovered_mi_tcl_port_is_unreachable_and_no_fallback_exists(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            mi_text = (
+                'Launching gdb-server: openocd -c "gdb_port 50000" -c "tcl_port 1" -c "telnet_port 50002"\n'
+                + (FIXTURES / "sample.mi").read_text(encoding="utf-8")
+            )
+            (workspace / "cortex-debug-shared-mi.log").write_text(mi_text, encoding="utf-8")
+            (workspace / ".vscode").mkdir()
+            (workspace / ".vscode" / "settings.json").write_text(
+                json.dumps({"debugoracle.svdFile": "test.svd"}) + "\n",
+                encoding="utf-8",
+            )
+            (workspace / "test.svd").write_text(_minimal_svd_text(), encoding="utf-8")
+
+            stdout, stderr = self._run_cli_in_workspace(
+                workspace,
+                ["fetch"],
+                env={
+                    "DEBUGORACLE_OPENOCD_PORT": "",
+                },
+                capture_stderr=True,
+            )
+
+            payload = json.loads((workspace / "latest_snapshot.json").read_text(encoding="utf-8"))
+
+        self.assertIn("Registers: absent", stdout)
+        self.assertIn("Discovered OpenOCD Tcl port for fetch from GDB/MI log: 1", stderr)
+        self.assertIn("Continuing without register capture", stderr)
+        self.assertEqual(payload["sources"]["registers"]["register_count"], 0)
+
+    def test_fetch_uses_latest_launch_section_when_mi_log_contains_multiple_tcl_ports(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            (workspace / ".vscode").mkdir()
+            (workspace / ".vscode" / "settings.json").write_text(
+                json.dumps({"debugoracle.svdFile": "test.svd"}) + "\n",
+                encoding="utf-8",
+            )
+            (workspace / "test.svd").write_text(_minimal_svd_text(), encoding="utf-8")
+
+            with _FakeOpenOcdServer(values={0x40000000: "0x00000011", 0x40000004: "0x00000022"}) as server:
+                mi_text = (
+                    'Launching gdb-server: openocd -c "gdb_port 40000" -c "tcl_port 1" -c "telnet_port 40002"\n'
+                    'old session noise\n'
+                    'Launching gdb-server: openocd -c "gdb_port 50000" -c "tcl_port ' + str(server.port) + '" -c "telnet_port 50002"\n'
+                    + (FIXTURES / "sample.mi").read_text(encoding="utf-8")
+                )
+                (workspace / "cortex-debug-shared-mi.log").write_text(mi_text, encoding="utf-8")
+                stdout, stderr = self._run_cli_in_workspace(
+                    workspace,
+                    ["fetch"],
+                    env={
+                        "DEBUGORACLE_OPENOCD_HOST": server.host,
+                        "DEBUGORACLE_OPENOCD_PORT": "",
+                    },
+                    capture_stderr=True,
+                )
+
+            payload = json.loads((workspace / "latest_snapshot.json").read_text(encoding="utf-8"))
+
+        self.assertIn("Registers: present, 1 peripherals, 3 registers, 2 success, 0 failure, 1 skipped", stdout)
+        self.assertIn(str(server.port), stderr)
+        self.assertEqual(payload["sources"]["registers"]["success_count"], 2)
 
     def test_fetch_auto_resolves_single_workspace_svd_candidate(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
