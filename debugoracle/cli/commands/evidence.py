@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -34,9 +35,16 @@ def cmd_fetch(args: argparse.Namespace) -> int:
         rtt=rtt,
     )
     resolved_svd_file, svd_discovered, svd_notice = resolve_fetch_svd_file(args, workspace_root)
+    resolved_openocd_tcl_host, resolved_openocd_tcl_port, tcl_discovered, tcl_notice = resolve_fetch_openocd_tcl_endpoint(
+        args,
+        gdb_mi=gdb_mi,
+        resolved_svd_file=resolved_svd_file,
+    )
     _validate_fetch_live_capture_arguments(args, resolved_svd_file=resolved_svd_file)
     if svd_notice:
         print(svd_notice, file=sys.stderr)
+    if tcl_notice:
+        print(tcl_notice, file=sys.stderr)
     if resolved_svd_file:
         require_readable_file(resolved_svd_file, "SVD")
     try:
@@ -51,10 +59,12 @@ def cmd_fetch(args: argparse.Namespace) -> int:
             export_dir=Path(state_out).parent,
             resolved_svd_file=resolved_svd_file,
             svd_discovered=svd_discovered,
+            resolved_openocd_tcl_host=resolved_openocd_tcl_host,
+            resolved_openocd_tcl_port=resolved_openocd_tcl_port,
         )
     except SystemExit as error:
+        reason = str(error) or "register enrichment failed"
         if resolved_svd_file and svd_discovered:
-            reason = str(error) or "register enrichment failed"
             print(
                 f"Auto-discovered SVD '{resolved_svd_file}' could not be used ({reason}). Continuing without register capture.",
                 file=sys.stderr,
@@ -71,6 +81,40 @@ def cmd_fetch(args: argparse.Namespace) -> int:
                 resolved_svd_file=None,
                 svd_discovered=False,
             )
+        elif resolved_svd_file and tcl_discovered:
+            endpoint = f"{resolved_openocd_tcl_host or '127.0.0.1'}:{resolved_openocd_tcl_port}"
+            try:
+                bundle = resolve_bundle(
+                    args,
+                    gdb_mi=gdb_mi,
+                    rtt=rtt,
+                    allow_snapshot_fallback=False,
+                    command_name="fetch",
+                    explicit_gdb=discovery["gdb_mi_explicit"],
+                    explicit_rtt=discovery["rtt_explicit"],
+                    export_dir=Path(state_out).parent,
+                    resolved_svd_file=resolved_svd_file,
+                    svd_discovered=svd_discovered,
+                    resolved_openocd_tcl_host=None,
+                    resolved_openocd_tcl_port=None,
+                )
+            except SystemExit:
+                print(
+                    f"Auto-discovered OpenOCD Tcl endpoint '{endpoint}' could not be used ({reason}). Continuing without register capture.",
+                    file=sys.stderr,
+                )
+                bundle = resolve_bundle(
+                    args,
+                    gdb_mi=gdb_mi,
+                    rtt=rtt,
+                    allow_snapshot_fallback=False,
+                    command_name="fetch",
+                    explicit_gdb=discovery["gdb_mi_explicit"],
+                    explicit_rtt=discovery["rtt_explicit"],
+                    export_dir=Path(state_out).parent,
+                    resolved_svd_file=None,
+                    svd_discovered=False,
+                )
         else:
             raise
     save_artifact(bundle, state_out)
@@ -183,6 +227,8 @@ def resolve_bundle(
     export_dir: Path | None = None,
     resolved_svd_file: str | None = None,
     svd_discovered: bool = False,
+    resolved_openocd_tcl_host: str | None = None,
+    resolved_openocd_tcl_port: int | None = None,
 ) -> InvestigationArtifact:
     workspace_root = Path(args.workspace_root).resolve()
     config = resolve_session_config(args, workspace_root)
@@ -288,8 +334,8 @@ def resolve_bundle(
             export_dir=export_dir or config.snapshot_file.parent,
             svd_file_path=resolved_svd_file,
             enable_live_peripheral_capture=bool(resolved_svd_file and command_name == "fetch"),
-            openocd_tcl_host=getattr(args, "openocd_tcl_host", None),
-            openocd_tcl_port=getattr(args, "openocd_tcl_port", None),
+            openocd_tcl_host=resolved_openocd_tcl_host,
+            openocd_tcl_port=resolved_openocd_tcl_port,
         )
     except OSError as error:
         raise SystemExit(f"Unable to read one of the required input files: {error}") from error
@@ -422,6 +468,41 @@ def resolve_fetch_svd_file(
             f"({joined}). Continuing without register capture.",
         )
     return None, False, "No SVD candidate was found in .dbgoracle. Continuing without register capture."
+
+
+def resolve_fetch_openocd_tcl_endpoint(
+    args: argparse.Namespace,
+    *,
+    gdb_mi: str | None,
+    resolved_svd_file: str | None,
+) -> tuple[str | None, int | None, bool, str | None]:
+    explicit_host = getattr(args, "openocd_tcl_host", None)
+    explicit_port = getattr(args, "openocd_tcl_port", None)
+    if explicit_host is not None or explicit_port is not None:
+        return explicit_host, explicit_port, False, None
+    if resolved_svd_file is None or gdb_mi is None:
+        return None, None, False, None
+    discovered_port = discover_openocd_tcl_port_from_mi_log(gdb_mi)
+    if discovered_port is None:
+        return None, None, False, None
+    return None, discovered_port, True, f"Discovered OpenOCD Tcl port for fetch from GDB/MI log: {discovered_port}"
+
+
+def discover_openocd_tcl_port_from_mi_log(gdb_mi_path: str) -> int | None:
+    try:
+        raw_text = Path(gdb_mi_path).read_text(encoding="utf-8")
+    except OSError:
+        return None
+    lines = raw_text.splitlines()
+    launch_indexes = [index for index, line in enumerate(lines) if "Launching gdb-server:" in line]
+    search_lines = lines[launch_indexes[-1]:] if launch_indexes else lines[-200:]
+    matches = [match.group(1) for line in search_lines for match in re.finditer(r'tcl_port\s+(\d+)', line)]
+    if not matches:
+        return None
+    try:
+        return int(matches[-1], 10)
+    except ValueError:
+        return None
 
 
 def resolve_workspace_default_svd_file(workspace_root: Path) -> str | None:
