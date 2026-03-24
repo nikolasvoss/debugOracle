@@ -19,6 +19,8 @@ during this refactor. It is intentionally curated rather than a flat dump of eve
 | --- | --- | --- |
 | `builder` | `debugoracle/builder.py` | [`builder.md`](builder.md) |
 | `cli` | `debugoracle/cli/__init__.py` | [`cli.md`](cli.md) |
+| `docs_cli` | `debugoracle/cli/commands/docs_cli.py` | [`docs_cli.md`](docs_cli.md) |
+| `docs_sidecar` | `debugoracle/docs_sidecar.py` | [`docs_sidecar.md`](docs_sidecar.md) |
 | `main` | `debugoracle/cli/main.py` | [`main.md`](main.md) |
 | `storage` | `debugoracle/pipeline/storage.py` | [`storage.md`](storage.md) |
 | `status_capture` | `debugoracle/cli/commands/status_capture.py` | [`status_capture.md`](status_capture.md) |

@@ -3,7 +3,7 @@
 - Module: `main`
 - Code Path: `debugoracle/cli/main.py`
 - Public Entrypoints: `main`, `build_parser`
-- Last Updated: `2026-03-23`
+- Last Updated: `2026-03-24`
 
 # SPEC: DebugOracle CLI Parser And Dispatch
 
@@ -22,6 +22,7 @@ Own the top-level CLI parser, shared argument groups, and command dispatch wirin
 - `status`, `capture-rtt` -> `debugoracle/cli/commands/status_capture.py`
 - `run`, `stop` -> `debugoracle/cli/commands/run_stop.py`
 - `find-tcl-port` -> `debugoracle/cli/commands/find_tcl_port.py`
+- `docs ingest`, `docs search`, `docs status` -> `debugoracle/cli/commands/docs_cli.py`
 - `fetch`, `report` -> `debugoracle/cli/commands/evidence.py`
 - `install-cli` -> `debugoracle/cli/commands/install_cli.py`
 - `init-workspace` -> `debugoracle/cli/commands/init_workspace.py`
@@ -75,6 +76,14 @@ Dispatch treats these as snapshot filters only.
 - It inspects the live OpenOCD process, prefers the session that matches `--workspace-root`, and can print a ready-to-run `fetch` command when an SVD file resolves.
 - It exists so agents do not need repo-local helper scripts or brittle MI-log parsing to discover the current session's Tcl port.
 - It must say explicitly that a debug session needs to already be running before Tcl-port discovery can help.
+
+## Docs Sidecar Contract
+
+- `docs` is the public CLI group for local manual ingestion and lookup.
+- `docs ingest` accepts explicit `--file` and `--folder` selections.
+- When `docs ingest` is invoked without explicit inputs, parser construction must still allow the command, but command execution must require explicit confirmation before discovered PDFs under `doc/` or `docs/` are ingested.
+- `docs search` is query-only and must not mutate sidecar artifacts.
+- `docs status` reports the persisted ingest state and parser warnings for local sidecars.
 
 ## Fetch SVD Contract
 

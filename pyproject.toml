@@ -7,6 +7,9 @@ name = "debugoracle"
 version = "0.1.0"
 description = "Passive embedded debug evidence packager for ChatGPT"
 requires-python = ">=3.10"
+dependencies = [
+    "pypdf>=5,<6",
+]
 
 [project.scripts]
 dbgoracle = "debugoracle:main"

@@ -12,6 +12,7 @@ from ..sources.streams.rtt import (
 from .commands.evidence import cmd_fetch, cmd_report
 from .commands.find_tcl_port import cmd_find_tcl_port
 from .commands.install_cli import cmd_install_cli
+from .commands.docs_cli import cmd_docs_ingest, cmd_docs_search, cmd_docs_status
 from .commands.init_workspace import (
     DEFAULT_MI_LOG_PATH,
     DEFAULT_RTT_LAUNCH_LOG_PATH,
@@ -242,6 +243,102 @@ def build_parser() -> argparse.ArgumentParser:
         help="Seconds to wait when checking whether the Tcl endpoint is reachable",
     )
     find_tcl_port.set_defaults(func=cmd_find_tcl_port)
+
+    docs = subparsers.add_parser(
+        "docs",
+        help="Manage locally ingested reference manuals and datasheets",
+        description=(
+            "Ingest local manuals or datasheets into nearby sidecar artifacts, then "
+            "search or inspect their local status with explicit quality signals."
+        ),
+    )
+    docs_subparsers = docs.add_subparsers(dest="docs_command", required=True)
+
+    docs_ingest = docs_subparsers.add_parser(
+        "ingest",
+        help="Ingest explicit manuals or discovered PDFs into local sidecar artifacts",
+    )
+    docs_ingest.add_argument(
+        "--workspace-root",
+        default=".",
+        help="Workspace root used for relative paths and discovery under doc/ or docs/",
+    )
+    docs_ingest.add_argument(
+        "--file",
+        action="append",
+        help="Explicit document file to ingest; repeat for multiple files",
+    )
+    docs_ingest.add_argument(
+        "--folder",
+        action="append",
+        help="Explicit folder of manuals to ingest; repeat for multiple folders",
+    )
+    docs_ingest.add_argument(
+        "--yes",
+        action="store_true",
+        help="Confirm ingestion of discovered PDFs when no explicit inputs are given",
+    )
+    docs_ingest.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="Output format",
+    )
+    docs_ingest.add_argument("--output", help="Optional output file path")
+    docs_ingest.set_defaults(command="docs", func=cmd_docs_ingest)
+
+    docs_search = docs_subparsers.add_parser(
+        "search",
+        help="Search the local docs sidecar index with exact-term-friendly ranking",
+    )
+    docs_search.add_argument("query", help="Search query")
+    docs_search.add_argument(
+        "--workspace-root",
+        default=".",
+        help="Workspace root used to discover sidecar artifacts",
+    )
+    docs_search.add_argument(
+        "--file",
+        action="append",
+        help="Optional explicit ingested source document to restrict search scope",
+    )
+    docs_search.add_argument(
+        "--limit",
+        type=positive_int,
+        default=5,
+        help="Maximum number of search results to return",
+    )
+    docs_search.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="Output format",
+    )
+    docs_search.add_argument("--output", help="Optional output file path")
+    docs_search.set_defaults(command="docs", func=cmd_docs_search)
+
+    docs_status = docs_subparsers.add_parser(
+        "status",
+        help="Inspect the ingest health of local docs sidecar artifacts",
+    )
+    docs_status.add_argument(
+        "--workspace-root",
+        default=".",
+        help="Workspace root used to discover sidecar artifacts",
+    )
+    docs_status.add_argument(
+        "--file",
+        action="append",
+        help="Optional explicit source document whose sidecar status should be inspected",
+    )
+    docs_status.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="Output format",
+    )
+    docs_status.add_argument("--output", help="Optional output file path")
+    docs_status.set_defaults(command="docs", func=cmd_docs_status)
 
     fetch = subparsers.add_parser(
         "fetch",
