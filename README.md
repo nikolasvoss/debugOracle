@@ -7,6 +7,34 @@ The intended system architecture lives in [`docs/architecture.md`](docs/architec
 
 Module specifications live under [`docs/specs/README.md`](docs/specs/README.md). The spec filename matches the module filename so agents have one predictable place to look for architecture notes.
 
+## Install the CLI
+
+Linux v1 ships a CLI-only installer path. It installs `dbgoracle`; it does not install `openocd`, VS Code, Cortex-Debug, or board-specific tooling.
+
+Prerequisites for the installer itself:
+
+- Linux
+- Python 3.10+
+- `pipx`
+
+Manifest-driven launcher path from a checkout:
+
+```bash
+./scripts/install/linux.sh
+```
+
+Secondary local-dev path from a checkout:
+
+```bash
+pipx install .
+```
+
+The launcher follows `release/install-manifest.json`, so the manifest decides which package spec is installed. `pipx install .` is the explicit local checkout path.
+
+If the installer succeeds but `dbgoracle` is not immediately on `PATH`, it offers one managed shell-profile update and also prints the exact line to add manually.
+
+Embedded toolchain checks happen later during workspace setup and capture flows, not during install success.
+
 ## Default workflow
 
 DebugOracle does not drive the probe or debugger. The primary near-term workflow is:

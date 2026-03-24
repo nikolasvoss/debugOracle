@@ -11,6 +11,7 @@ from ..sources.streams.rtt import (
 )
 from .commands.evidence import cmd_fetch, cmd_report
 from .commands.find_tcl_port import cmd_find_tcl_port
+from .commands.install_cli import cmd_install_cli
 from .commands.init_workspace import (
     DEFAULT_MI_LOG_PATH,
     DEFAULT_RTT_LAUNCH_LOG_PATH,
@@ -339,6 +340,42 @@ def build_parser() -> argparse.ArgumentParser:
         help="Render the full text report even when the trust verdict is unsafe",
     )
     report.set_defaults(func=cmd_report)
+
+    install_cli = subparsers.add_parser(
+        "install-cli",
+        help=argparse.SUPPRESS,
+        description="Internal installer entrypoint used by the Linux launcher.",
+    )
+    install_cli.add_argument(
+        "--manifest-url",
+        help="Installer manifest URL",
+    )
+    install_cli.add_argument(
+        "--channel",
+        default="stable",
+        help="Release channel to request from the installer manifest",
+    )
+    install_cli.add_argument(
+        "--package-source",
+        help="Optional package source override passed to pipx",
+    )
+    install_cli.add_argument(
+        "--yes",
+        action="store_true",
+        help="Accept optional PATH profile updates without prompting",
+    )
+    install_cli.add_argument(
+        "--no-doctor",
+        action="store_true",
+        help="Skip optional post-install environment guidance",
+    )
+    install_cli.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="Output format",
+    )
+    install_cli.set_defaults(command="install_cli", func=cmd_install_cli)
 
     init_workspace = subparsers.add_parser(
         "init-workspace",

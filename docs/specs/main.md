@@ -23,6 +23,7 @@ Own the top-level CLI parser, shared argument groups, and command dispatch wirin
 - `run`, `stop` -> `debugoracle/cli/commands/run_stop.py`
 - `find-tcl-port` -> `debugoracle/cli/commands/find_tcl_port.py`
 - `fetch`, `report` -> `debugoracle/cli/commands/evidence.py`
+- `install-cli` -> `debugoracle/cli/commands/install_cli.py`
 - `init-workspace` -> `debugoracle/cli/commands/init_workspace.py`
 - `observe`, `snapshot`, and `prompt` are not exposed on the public CLI surface.
 
@@ -37,6 +38,7 @@ Own the top-level CLI parser, shared argument groups, and command dispatch wirin
 
 - Preserve the compatibility entrypoint exported by `debugoracle/cli/__init__.py`.
 - Keep parser-only concerns here; avoid moving evidence shaping or policy logic back into dispatch.
+- `install-cli` is an internal launcher hook. It may exist on the parser surface while staying out of normal help text and user-facing runbooks.
 
 ## Report Inspect Flags
 

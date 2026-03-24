@@ -161,6 +161,13 @@ class DebugOracleCliTests(unittest.TestCase):
         self.assertFalse((workspace / ".vscode").exists())
         self.assertFalse((workspace / ".dbgoracle").exists())
 
+    def test_install_cli_command_parses(self) -> None:
+        parser = build_parser()
+        parsed = parser.parse_args(["install-cli", "--manifest-url", "https://example.com/manifest.json"])
+
+        self.assertEqual(parsed.command, "install_cli")
+        self.assertEqual(parsed.manifest_url, "https://example.com/manifest.json")
+
     def test_init_workspace_command_parses(self) -> None:
         parser = build_parser()
         parsed = parser.parse_args(

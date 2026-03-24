@@ -1,8 +1,9 @@
-model = "gpt-5.3-codex-spark"
+model = "gpt-5.4"
 model_reasoning_effort = "medium"
-approval_policy = "never"
-sandbox_mode = "workspace-write"
 
+[features]
+multi_agent = true
+use_linux_sandbox_bwrap = false
 
 [mcp_servers.filesystem]
 command = "npx"

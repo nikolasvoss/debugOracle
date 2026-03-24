@@ -44,17 +44,20 @@ implementation lives in:
 - `debugoracle/cli/commands/run_stop.py` for `run` and `stop`
 - `debugoracle/cli/commands/find_tcl_port.py` for `find-tcl-port`
 - `debugoracle/cli/commands/evidence.py` for `fetch` and `report`
+- `debugoracle/cli/commands/install_cli.py` for the internal Linux installer hook
 - `debugoracle/cli/commands/init_workspace.py` for `init-workspace`
 
-The CLI has four behavioral layers:
+The CLI has five behavioral layers:
 
-1. Workspace bootstrap
+1. CLI installation
+   Command: internal `install-cli` entrypoint used by the Linux launcher
+2. Workspace bootstrap
    Command: `init-workspace`
-2. Transport and workspace health
+3. Transport and workspace health
    Commands: `status`, `capture-rtt`, `run`, `stop`, `find-tcl-port`
-3. Evidence capture and stabilization
+4. Evidence capture and stabilization
    Command: `fetch`
-4. Evidence rendering and inspection
+5. Evidence rendering and inspection
    Command: `report`
 
 ## Shared Inputs
@@ -184,6 +187,23 @@ Outputs:
 Meaning:
 - `find-tcl-port` is the supported agent-facing discovery surface for the current session's Tcl port.
 - It prefers the OpenOCD process whose working directory matches the workspace root.
+
+### `install-cli`
+
+Purpose:
+- Drive the Linux-first installer as a thin launcher hook over the Python installer core.
+
+Inputs:
+- Installer manifest URL
+- Optional package-source override for local or release-backed `pipx` installation
+- Optional auto-accept behavior for PATH profile updates
+
+Outputs:
+- Structured installer outcome with explicit success, blocked, failure, PATH, and doctor-note messaging
+
+Meaning:
+- `install-cli` is intentionally narrow and hidden from everyday CLI help.
+- It exists so the Linux launcher can reuse package-owned installer logic instead of embedding install policy in shell.
 
 ### `init-workspace`
 
