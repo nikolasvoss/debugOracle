@@ -2,11 +2,12 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Debug STM32",
+      "name": "DebugOracle: Attach STM32",
       "type": "cortex-debug",
       "request": "launch",
       "showDevDebugOutput": "raw",
       "servertype": "openocd",
+      "debugoracleRole": "golden-path-attach",
       "overrideGDBServerStartedRegex": "Info\\s*:\\s*Listening on port\\s+\\d+\\s+for\\s+gdb\\s+connections?",
       "configFiles": [
         "interface/stlink.cfg",

@@ -363,6 +363,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional default SVD file path stored in workspace settings",
     )
     init_workspace.add_argument(
+        "--attach",
+        action="store_true",
+        help="Emit DebugOracle attach fragments for an existing Cortex-Debug workspace instead of writing a fresh scaffold",
+    )
+    init_workspace.add_argument(
         "--openocd-config",
         action="append",
         help="Required OpenOCD config file stored in workspace settings; repeat for multiple files",

@@ -14,7 +14,7 @@ Hold the transport-health command handlers that do not manage detached runtime l
 ## Responsibilities
 
 - Render workspace/session health via the session model and status renderer.
-- Keep default `status` text action-first: current state, evidence availability, and the next useful command before deeper artifact details.
+- Keep default `status` text action-first: current state, golden-path readiness, evidence availability, and the next useful command before deeper artifact details.
 - Run one-shot RTT capture into a file and state sidecar.
 - Translate transport errors into CLI exit codes and user-facing messages.
 

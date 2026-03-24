@@ -14,6 +14,10 @@ DEFAULT_RTT_LAUNCH_LOG_PATH = "${workspaceFolder}/.dbgoracle/session.rtt.launch.
 DEFAULT_RTT_PORT = "60001"
 MIN_CORTEX_DEBUG_VERSION = "1.12.1"
 MANAGED_BY_VALUE = "dbgoracle init-workspace"
+DEFAULT_LAUNCH_NAME = "DebugOracle: Debug STM32"
+ATTACH_LAUNCH_NAME = "DebugOracle: Attach STM32"
+DEFAULT_LAUNCH_ROLE = "workspace-scaffold"
+ATTACH_LAUNCH_ROLE = "golden-path-attach"
 
 
 @dataclass(frozen=True)
@@ -34,6 +38,11 @@ class RequiredAction:
 class InitWorkspaceResult:
     status: str
     workspace_root: str
+    mode: str
+    launch_config_name: str
+    launch_config_role: str
+    merge_strategy: str
+    next_human_action: str
     created_files: list[str]
     blocked_files: list[str]
     required_actions: list[RequiredAction]
@@ -63,6 +72,7 @@ def _emit_missing_openocd_config(args: argparse.Namespace, *, fmt: str) -> None:
         payload = {
             "status": "failed",
             "workspace_root": workspace_root,
+            "mode": "attach" if getattr(args, "attach", False) else "fresh",
             "created_files": [],
             "blocked_files": [],
             "required_actions": [
@@ -85,6 +95,8 @@ def _missing_openocd_config_guidance(args: argparse.Namespace) -> str:
         f"--workspace-root {args.workspace_root}",
         f"--executable {args.executable or 'path/to/firmware.elf'}",
     ]
+    if getattr(args, "attach", False):
+        command_parts.append("--attach")
     if args.svd_file:
         command_parts.append(f"--svd-file {args.svd_file}")
     if args.with_rtt:
@@ -99,7 +111,7 @@ def _missing_openocd_config_guidance(args: argparse.Namespace) -> str:
     parts = [
         "dbgoracle init-workspace: missing required OpenOCD launch config",
         "",
-        "`--openocd-config` is required because DebugOracle is generating a runnable Cortex-Debug/OpenOCD launch scaffold and cannot guess your OpenOCD setup.",
+        "`--openocd-config` is required because DebugOracle is generating Cortex-Debug attach fragments and cannot guess your OpenOCD setup.",
         "",
         "What to provide:",
         "- `interface/*.cfg` = the debug probe, for example `interface/stlink.cfg`.",
@@ -115,45 +127,79 @@ def _missing_openocd_config_guidance(args: argparse.Namespace) -> str:
 
 
 def initialize_workspace(args: argparse.Namespace, workspace_root: Path) -> InitWorkspaceResult:
+    attach_mode = bool(getattr(args, "attach", False))
+    mode = "attach" if attach_mode else "fresh"
+    launch_config_name = ATTACH_LAUNCH_NAME if attach_mode else DEFAULT_LAUNCH_NAME
+    launch_config_role = ATTACH_LAUNCH_ROLE if attach_mode else DEFAULT_LAUNCH_ROLE
+
     session_dir = workspace_root / ".dbgoracle"
     vscode_dir = workspace_root / ".vscode"
     session_dir.mkdir(parents=True, exist_ok=True)
-    vscode_dir.mkdir(parents=True, exist_ok=True)
+    if not attach_mode:
+        vscode_dir.mkdir(parents=True, exist_ok=True)
 
-    desired_settings = _settings_payload(args)
-    desired_files = [
-        (vscode_dir / "settings.json", json.dumps(desired_settings, indent=2) + "\n"),
-        (
-            vscode_dir / "launch.json",
-            _render_launch(openocd_config_files=list(args.openocd_config), with_rtt=bool(args.with_rtt)),
-        ),
-        (vscode_dir / "tasks.json", _render_tasks(with_rtt=bool(args.with_rtt))),
-    ]
+    desired_settings = _settings_payload(args, attach_mode=attach_mode, launch_config_name=launch_config_name, launch_config_role=launch_config_role)
+    desired_launch_config = _launch_configuration(
+        openocd_config_files=list(args.openocd_config),
+        with_rtt=bool(args.with_rtt),
+        launch_name=launch_config_name,
+        launch_role=launch_config_role,
+        include_managed_marker=not attach_mode,
+    )
+    desired_tasks = _tasks_payload(with_rtt=bool(args.with_rtt), include_managed_marker=not attach_mode)
 
     created_files: list[str] = []
     blocked_files: list[str] = []
     required_actions: list[RequiredAction] = []
 
-    for path, content in desired_files:
-        if path.exists() and not _can_overwrite(path, force=args.force):
+    if attach_mode:
+        for path in (vscode_dir / "settings.json", vscode_dir / "launch.json", vscode_dir / "tasks.json"):
             blocked_files.append(str(path))
             required_actions.append(
                 _required_action(
                     path,
                     desired_settings,
-                    openocd_config_files=list(args.openocd_config),
-                    with_rtt=bool(args.with_rtt),
+                    desired_launch_config,
+                    desired_tasks,
+                    attach_mode=True,
                 )
             )
-            continue
-        path.write_text(content, encoding="utf-8")
-        created_files.append(str(path))
+    else:
+        desired_files = [
+            (vscode_dir / "settings.json", json.dumps(desired_settings, indent=2) + "\n"),
+            (vscode_dir / "launch.json", _render_launch_file(desired_launch_config)),
+            (vscode_dir / "tasks.json", json.dumps(desired_tasks, indent=2) + "\n"),
+        ]
+        for path, content in desired_files:
+            if path.exists() and not _can_overwrite(path, force=args.force):
+                blocked_files.append(str(path))
+                required_actions.append(
+                    _required_action(
+                        path,
+                        desired_settings,
+                        desired_launch_config,
+                        desired_tasks,
+                        attach_mode=False,
+                    )
+                )
+                continue
+            path.write_text(content, encoding="utf-8")
+            created_files.append(str(path))
 
     dependency_checks = _dependency_checks(_resolve_workspace_dependency_path(args.executable, workspace_root))
     status = _overall_status(blocked_files, dependency_checks)
     return InitWorkspaceResult(
         status=status,
         workspace_root=str(workspace_root),
+        mode=mode,
+        launch_config_name=launch_config_name,
+        launch_config_role=launch_config_role,
+        merge_strategy="agent" if attach_mode else "direct",
+        next_human_action=_next_human_action(
+            attach_mode=attach_mode,
+            blocked_files=blocked_files,
+            launch_config_name=launch_config_name,
+        ),
         created_files=created_files,
         blocked_files=blocked_files,
         required_actions=required_actions,
@@ -161,9 +207,14 @@ def initialize_workspace(args: argparse.Namespace, workspace_root: Path) -> Init
     )
 
 
-def _settings_payload(args: argparse.Namespace) -> dict[str, object]:
+def _settings_payload(
+    args: argparse.Namespace,
+    *,
+    attach_mode: bool,
+    launch_config_name: str,
+    launch_config_role: str,
+) -> dict[str, object]:
     payload: dict[str, object] = {
-        "debugoracle.managedBy": MANAGED_BY_VALUE,
         "debugoracle.executable": args.executable,
         "debugoracle.miLogPath": args.mi_log_path,
         "debugoracle.rttLogPath": args.rtt_log_path,
@@ -171,65 +222,72 @@ def _settings_payload(args: argparse.Namespace) -> dict[str, object]:
         "debugoracle.rttLaunchLogPath": args.rtt_launch_log_path,
         "debugoracle.rttPort": str(args.rtt_port),
         "debugoracle.openocdConfigFiles": list(args.openocd_config),
+        "debugoracle.workspaceSetupMode": "attach" if attach_mode else "fresh",
+        "debugoracle.launchConfigName": launch_config_name,
+        "debugoracle.launchConfigRole": launch_config_role,
     }
+    if not attach_mode:
+        payload["debugoracle.managedBy"] = MANAGED_BY_VALUE
     if args.svd_file:
         payload["debugoracle.svdFile"] = args.svd_file
     return payload
 
 
-def _render_launch(*, openocd_config_files: list[str], with_rtt: bool) -> str:
-    prelaunch_label = "DebugOracle: Prelaunch" if with_rtt else "Prepare debug logs"
-    post_debug_line = '      "postDebugTask": "DebugOracle: Stop RTT run",\n' if with_rtt else ""
-    rtt_block = ""
+def _launch_configuration(
+    *,
+    openocd_config_files: list[str],
+    with_rtt: bool,
+    launch_name: str,
+    launch_role: str,
+    include_managed_marker: bool,
+) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "name": launch_name,
+        "type": "cortex-debug",
+        "request": "launch",
+        "showDevDebugOutput": "raw",
+        "servertype": "openocd",
+        "configFiles": openocd_config_files,
+        "cwd": "${workspaceFolder}",
+        "executable": "${config:debugoracle.executable}",
+        "preLaunchTask": "DebugOracle: Prelaunch" if with_rtt else "Prepare debug logs",
+        "preLaunchCommands": [
+            "set pagination off",
+            "set logging overwrite on",
+            "set logging file ${config:debugoracle.miLogPath}",
+            "set logging on",
+        ],
+        "postLaunchCommands": [
+            "set remotetimeout 20",
+            "monitor reset halt",
+            "set pagination off",
+        ],
+        "debugoracleRole": launch_role,
+    }
+    if include_managed_marker:
+        payload["debugoracleManagedBy"] = MANAGED_BY_VALUE
     if with_rtt:
-        rtt_block = (
-            "        // Optional RTT block enabled by init-workspace.\n"
-            "        // Update the address window for your target before use.\n"
-            "        \"monitor rtt setup 0x20000000 0x1000 \\\"SEGGER RTT\\\"\",\n"
-            "        \"monitor rtt start\",\n"
-            "        \"monitor rtt server start 60001 0\"\n"
+        payload["postDebugTask"] = "DebugOracle: Stop RTT run"
+        payload["postLaunchCommands"].extend(
+            [
+                "monitor rtt setup 0x20000000 0x1000 \"SEGGER RTT\"",
+                "monitor rtt start",
+                "monitor rtt server start 60001 0",
+            ]
         )
-    config_files_block = "\n".join(
-        f'        "{value}",' if index < len(openocd_config_files) - 1 else f'        "{value}"'
-        for index, value in enumerate(openocd_config_files)
-    )
-    return (
-        "{\n"
-        "  // Created by dbgoracle init-workspace.\n"
-        "  \"version\": \"0.2.0\",\n"
-        "  \"configurations\": [\n"
-        "    {\n"
-        "      \"name\": \"Debug STM32\",\n"
-        "      \"type\": \"cortex-debug\",\n"
-        "      \"request\": \"launch\",\n"
-        "      \"showDevDebugOutput\": \"raw\",\n"
-        "      \"servertype\": \"openocd\",\n"
-        "      \"configFiles\": [\n"
-        + config_files_block
-        + "\n      ],\n"
-        "      \"cwd\": \"${workspaceFolder}\",\n"
-        "      \"executable\": \"${config:debugoracle.executable}\",\n"
-        f"      \"preLaunchTask\": \"{prelaunch_label}\",\n"
-        f"{post_debug_line}"
-        "      \"preLaunchCommands\": [\n"
-        "        \"set pagination off\",\n"
-        "        \"set logging overwrite on\",\n"
-        "        \"set logging file ${config:debugoracle.miLogPath}\",\n"
-        "        \"set logging on\"\n"
-        "      ],\n"
-        "      \"postLaunchCommands\": [\n"
-        "        \"set remotetimeout 20\",\n"
-        "        \"monitor reset halt\",\n"
-        "        \"set pagination off\""
-        + ("\n" + rtt_block.rstrip("\n") if rtt_block else "")
-        + "\n      ]\n"
-        "    }\n"
-        "  ]\n"
-        "}\n"
-    )
+    return payload
 
 
-def _render_tasks(*, with_rtt: bool) -> str:
+def _render_launch_file(configuration: dict[str, object]) -> str:
+    payload = {
+        "version": "0.2.0",
+        "debugoracleManagedBy": MANAGED_BY_VALUE,
+        "configurations": [configuration],
+    }
+    return json.dumps(payload, indent=2) + "\n"
+
+
+def _tasks_payload(*, with_rtt: bool, include_managed_marker: bool) -> dict[str, object]:
     tasks = [
         {
             "label": "Prepare debug logs",
@@ -279,37 +337,44 @@ def _render_tasks(*, with_rtt: bool) -> str:
         ]
     payload = {
         "version": "2.0.0",
-        "debugoracleManagedBy": MANAGED_BY_VALUE,
         "tasks": tasks,
     }
-    return json.dumps(payload, indent=2) + "\n"
+    if include_managed_marker:
+        payload["debugoracleManagedBy"] = MANAGED_BY_VALUE
+    return payload
 
 
 def _required_action(
     path: Path,
     settings_payload: dict[str, object],
+    launch_payload: dict[str, object],
+    tasks_payload: dict[str, object],
     *,
-    openocd_config_files: list[str],
-    with_rtt: bool,
+    attach_mode: bool,
 ) -> RequiredAction:
     if path.name == "settings.json":
         fragment = json.dumps(settings_payload, indent=2)
-        return RequiredAction(
-            path=str(path),
-            reason="existing file blocked automatic settings update",
-            fragment=fragment,
+        reason = (
+            "merge the DebugOracle attach settings into the existing workspace settings"
+            if attach_mode
+            else "existing file blocked automatic settings update"
         )
+        return RequiredAction(path=str(path), reason=reason, fragment=fragment)
     if path.name == "launch.json":
-        return RequiredAction(
-            path=str(path),
-            reason="existing file blocked automatic launch configuration update",
-            fragment=_render_launch(openocd_config_files=openocd_config_files, with_rtt=with_rtt),
+        fragment = json.dumps(launch_payload, indent=2)
+        reason = (
+            "merge the DebugOracle attach launch into the existing launch configurations"
+            if attach_mode
+            else "existing file blocked automatic launch configuration update"
         )
-    return RequiredAction(
-        path=str(path),
-        reason="existing file blocked automatic task configuration update",
-        fragment=_render_tasks(with_rtt=with_rtt),
+        return RequiredAction(path=str(path), reason=reason, fragment=fragment)
+    fragment = json.dumps({"tasks": tasks_payload["tasks"]}, indent=2)
+    reason = (
+        "merge the DebugOracle attach tasks into the existing task list"
+        if attach_mode
+        else "existing file blocked automatic task configuration update"
     )
+    return RequiredAction(path=str(path), reason=reason, fragment=fragment)
 
 
 def _can_overwrite(path: Path, *, force: bool) -> bool:
@@ -319,7 +384,68 @@ def _can_overwrite(path: Path, *, force: bool) -> bool:
         content = path.read_text(encoding="utf-8")
     except OSError:
         return False
-    return MANAGED_BY_VALUE in content
+    payload = _parse_vscode_json(content)
+    if not isinstance(payload, dict):
+        return False
+    if path.name == "settings.json":
+        return payload.get("debugoracle.managedBy") == MANAGED_BY_VALUE
+    if path.name == "tasks.json":
+        return payload.get("debugoracleManagedBy") == MANAGED_BY_VALUE
+    if path.name == "launch.json":
+        if payload.get("debugoracleManagedBy") == MANAGED_BY_VALUE:
+            return True
+        configurations = payload.get("configurations")
+        if not isinstance(configurations, list) or len(configurations) != 1:
+            return False
+        configuration = configurations[0]
+        return isinstance(configuration, dict) and configuration.get("debugoracleManagedBy") == MANAGED_BY_VALUE
+    return False
+
+
+def _parse_vscode_json(raw_text: str) -> object | None:
+    result: list[str] = []
+    in_string = False
+    escape = False
+    index = 0
+    length = len(raw_text)
+    while index < length:
+        char = raw_text[index]
+        next_char = raw_text[index + 1] if index + 1 < length else ""
+        if in_string:
+            result.append(char)
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+            index += 1
+            continue
+        if char == '"':
+            in_string = True
+            result.append(char)
+            index += 1
+            continue
+        if char == "/" and next_char == "/":
+            index += 2
+            while index < length and raw_text[index] not in "\r\n":
+                index += 1
+            continue
+        if char == "/" and next_char == "*":
+            index += 2
+            while index + 1 < length and not (raw_text[index] == "*" and raw_text[index + 1] == "/"):
+                index += 1
+            index = min(length, index + 2)
+            continue
+        result.append(char)
+        index += 1
+    normalized = "".join(result)
+    normalized = normalized.replace(",\n]", "\n]").replace(",\n}", "\n}")
+    normalized = normalized.replace(",]", "]").replace(",}", "}")
+    try:
+        return json.loads(normalized)
+    except json.JSONDecodeError:
+        return None
 
 
 def _resolve_workspace_dependency_path(value: str, workspace_root: Path) -> Path:
@@ -360,11 +486,30 @@ def _overall_status(blocked_files: list[str], dependency_checks: list[Dependency
     return "complete"
 
 
+def _next_human_action(*, attach_mode: bool, blocked_files: list[str], launch_config_name: str) -> str:
+    if attach_mode:
+        return (
+            f"Merge the DebugOracle attach fragments into the workspace, then start `{launch_config_name}` in VS Code and rerun `dbgoracle status --workspace-root .`."
+        )
+    if blocked_files:
+        return (
+            f"Update the blocked workspace files, then start `{launch_config_name}` in VS Code and rerun `dbgoracle status --workspace-root .`."
+        )
+    return (
+        f"Start `{launch_config_name}` in VS Code, keep the debug session running, then rerun `dbgoracle status --workspace-root .`."
+    )
+
+
 def _emit_result(result: InitWorkspaceResult, *, fmt: str) -> None:
     if fmt == "json":
         payload = {
             "status": result.status,
             "workspace_root": result.workspace_root,
+            "mode": result.mode,
+            "launch_config_name": result.launch_config_name,
+            "launch_config_role": result.launch_config_role,
+            "merge_strategy": result.merge_strategy,
+            "next_human_action": result.next_human_action,
             "created_files": result.created_files,
             "blocked_files": result.blocked_files,
             "required_actions": [asdict(action) for action in result.required_actions],
@@ -375,6 +520,8 @@ def _emit_result(result: InitWorkspaceResult, *, fmt: str) -> None:
 
     print(f"dbgoracle init-workspace: {result.status}")
     print(f"Workspace: {result.workspace_root}")
+    print(f"Mode: {result.mode}")
+    print(f"Launch Configuration: {result.launch_config_name} ({result.launch_config_role})")
     if result.created_files:
         print("Created:")
         for path in result.created_files:
@@ -391,4 +538,4 @@ def _emit_result(result: InitWorkspaceResult, *, fmt: str) -> None:
         for action in result.required_actions:
             print(f"- Update {action.path}: {action.reason}")
             print(action.fragment)
-    print("Next: start one debug session, then run `dbgoracle fetch` and `dbgoracle report`.")
+    print(f"Next human action: {result.next_human_action}")

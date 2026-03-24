@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .artifacts.repository import load_artifact
+from .openocd import DISCOVERY_MATCHED, DISCOVERY_UNREACHABLE, discover_workspace_openocd_session
 from .policy.halted_analysis import HaltPolicyDecision, evaluate_artifact_live_state
 from .policy.trust import evaluate_artifact_trust
 from .renderers.status import render_session_status
@@ -18,6 +19,7 @@ DEFAULT_SNAPSHOT_FILENAME = "latest_snapshot.json"
 DEFAULT_GDB_MI_FILENAME = "cortex-debug-shared-mi.log"
 DEFAULT_RTT_FILENAME = "session.rtt"
 DEFAULT_STALE_AFTER_SECONDS = 900
+LIVE_DISCOVERY_TIMEOUT_SECONDS = 0.2
 
 
 @dataclass(frozen=True)
@@ -108,6 +110,17 @@ class RttCaptureStatus:
     parse_error: str | None = None
 
 
+@dataclass(frozen=True)
+class WorkspaceReadiness:
+    state: str
+    reason: str
+    next_human_action: str
+    signals: list[str] = field(default_factory=list)
+    setup_mode: str | None = None
+    launch_config_name: str | None = None
+    launch_config_role: str | None = None
+
+
 @dataclass
 class SessionStatus:
     checked_at: str
@@ -122,6 +135,13 @@ class SessionStatus:
     gdb_mi: ArtifactStatus | None = None
     rtt: ArtifactStatus | None = None
     rtt_capture: RttCaptureStatus | None = None
+    readiness: WorkspaceReadiness = field(
+        default_factory=lambda: WorkspaceReadiness(
+            state="setup_missing",
+            reason="No DebugOracle launch metadata was found in this workspace.",
+            next_human_action="Run `dbgoracle init-workspace --attach ...` to generate attach fragments for this workspace.",
+        )
+    )
     action_state: str = "evidence_missing"
     action_reason: str = "No DebugOracle artifacts were found in the session directory."
     recommended_next_command: str = "dbgoracle fetch --workspace-root ."
@@ -182,6 +202,13 @@ def collect_session_status(
     if not any((snapshot.exists, gdb_mi.exists, rtt.exists, rtt_capture.exists)):
         health_issues.append("No DebugOracle artifacts were found in the session directory.")
 
+    readiness = _derive_workspace_readiness(
+        config=config,
+        gdb_mi=gdb_mi,
+        rtt=rtt,
+        rtt_capture=rtt_capture,
+    )
+
     health = "healthy" if not health_issues else "degraded"
     action_state, action_reason, recommended_next_command = _derive_action_guidance(
         snapshot=snapshot,
@@ -216,6 +243,7 @@ def collect_session_status(
         gdb_mi=gdb_mi,
         rtt=rtt,
         rtt_capture=rtt_capture,
+        readiness=readiness,
         action_state=action_state,
         action_reason=action_reason,
         recommended_next_command=recommended_next_command,
@@ -472,8 +500,8 @@ def _derive_action_guidance(
     if raw_artifacts:
         reason = (
             "Raw evidence is newer than the snapshot, but the existing snapshot is not usable for inspection."
-            if snapshot.exists else
-            "Raw evidence is available, but no usable snapshot has been built yet."
+            if snapshot.exists
+            else "Raw evidence is available, but no usable snapshot has been built yet."
         )
         return (
             "capture_needed",
@@ -485,3 +513,262 @@ def _derive_action_guidance(
         "No snapshot or usable raw evidence is available in this workspace.",
         "dbgoracle fetch --workspace-root .",
     )
+
+
+def _derive_workspace_readiness(
+    *,
+    config: SessionConfig,
+    gdb_mi: ArtifactStatus,
+    rtt: ArtifactStatus,
+    rtt_capture: RttCaptureStatus,
+) -> WorkspaceReadiness:
+    vscode_dir = config.workspace_root / ".vscode"
+    settings_path = vscode_dir / "settings.json"
+    launch_path = vscode_dir / "launch.json"
+    tasks_path = vscode_dir / "tasks.json"
+
+    settings_payload = _load_vscode_json(settings_path)
+    if settings_path.exists() and settings_payload is None:
+        return WorkspaceReadiness(
+            state="degraded",
+            reason="`.vscode/settings.json` exists but could not be parsed as VS Code JSON.",
+            next_human_action="Fix `.vscode/settings.json`, then rerun `dbgoracle status --workspace-root .`.",
+            signals=["Workspace settings file exists but is invalid."],
+        )
+    if not isinstance(settings_payload, dict):
+        return WorkspaceReadiness(
+            state="setup_missing",
+            reason="No DebugOracle setup metadata was found in `.vscode/settings.json`.",
+            next_human_action="Run `dbgoracle init-workspace --attach ...` to generate attach fragments for this workspace.",
+            signals=["No DebugOracle workspace settings were found."],
+        )
+
+    setup_mode = _string_value(settings_payload.get("debugoracle.workspaceSetupMode"))
+    launch_config_name = _string_value(settings_payload.get("debugoracle.launchConfigName"))
+    launch_config_role = _string_value(settings_payload.get("debugoracle.launchConfigRole"))
+    if not launch_config_name or not launch_config_role:
+        return WorkspaceReadiness(
+            state="setup_missing",
+            reason="DebugOracle launch metadata is incomplete in `.vscode/settings.json`.",
+            next_human_action="Merge the DebugOracle settings fragment into `.vscode/settings.json`, then rerun `dbgoracle status --workspace-root .`.",
+            signals=["Workspace settings exist, but the DebugOracle launch metadata is incomplete."],
+            setup_mode=setup_mode,
+        )
+
+    signals = ["DebugOracle workspace metadata found in `.vscode/settings.json`." ]
+
+    launch_payload = _load_vscode_json(launch_path)
+    if launch_path.exists() and launch_payload is None:
+        return WorkspaceReadiness(
+            state="degraded",
+            reason="`.vscode/launch.json` exists but could not be parsed as VS Code JSON.",
+            next_human_action="Fix `.vscode/launch.json`, then rerun `dbgoracle status --workspace-root .`.",
+            signals=signals + ["Launch file exists but is invalid."],
+            setup_mode=setup_mode,
+            launch_config_name=launch_config_name,
+            launch_config_role=launch_config_role,
+        )
+    launch_config = _find_launch_configuration(launch_payload, launch_config_name, launch_config_role)
+    if launch_config is None:
+        return WorkspaceReadiness(
+            state="degraded",
+            reason=f"The DebugOracle launch `{launch_config_name}` was not found in `.vscode/launch.json`.",
+            next_human_action=f"Merge the DebugOracle launch fragment into `.vscode/launch.json`, then start `{launch_config_name}` in VS Code.",
+            signals=signals,
+            setup_mode=setup_mode,
+            launch_config_name=launch_config_name,
+            launch_config_role=launch_config_role,
+        )
+    signals.append(f"Launch `{launch_config_name}` is present in `.vscode/launch.json`.")
+
+    tasks_payload = _load_vscode_json(tasks_path) if tasks_path.exists() else {}
+    if tasks_path.exists() and tasks_payload is None:
+        return WorkspaceReadiness(
+            state="degraded",
+            reason="`.vscode/tasks.json` exists but could not be parsed as VS Code JSON.",
+            next_human_action="Fix `.vscode/tasks.json`, then rerun `dbgoracle status --workspace-root .`.",
+            signals=signals + ["Tasks file exists but is invalid."],
+            setup_mode=setup_mode,
+            launch_config_name=launch_config_name,
+            launch_config_role=launch_config_role,
+        )
+
+    task_lookup = _tasks_by_label(tasks_payload)
+    prelaunch_label = _string_value(launch_config.get("preLaunchTask"))
+    if prelaunch_label:
+        if prelaunch_label not in task_lookup:
+            return WorkspaceReadiness(
+                state="degraded",
+                reason=f"The DebugOracle launch references `{prelaunch_label}`, but that task is missing from `.vscode/tasks.json`.",
+                next_human_action=f"Merge the DebugOracle tasks fragment into `.vscode/tasks.json`, then start `{launch_config_name}` in VS Code.",
+                signals=signals,
+                setup_mode=setup_mode,
+                launch_config_name=launch_config_name,
+                launch_config_role=launch_config_role,
+            )
+        signals.append(f"Task `{prelaunch_label}` is present in `.vscode/tasks.json`.")
+    post_debug_label = _string_value(launch_config.get("postDebugTask"))
+    if post_debug_label:
+        if post_debug_label not in task_lookup:
+            return WorkspaceReadiness(
+                state="degraded",
+                reason=f"The DebugOracle launch references `{post_debug_label}`, but that task is missing from `.vscode/tasks.json`.",
+                next_human_action=f"Merge the DebugOracle tasks fragment into `.vscode/tasks.json`, then start `{launch_config_name}` in VS Code.",
+                signals=signals,
+                setup_mode=setup_mode,
+                launch_config_name=launch_config_name,
+                launch_config_role=launch_config_role,
+            )
+        signals.append(f"Task `{post_debug_label}` is present in `.vscode/tasks.json`.")
+
+    openocd_result = discover_workspace_openocd_session(
+        config.workspace_root,
+        connect_timeout=LIVE_DISCOVERY_TIMEOUT_SECONDS,
+    )
+    openocd_matched = openocd_result.status == DISCOVERY_MATCHED
+    openocd_unreachable = openocd_result.status == DISCOVERY_UNREACHABLE
+    if openocd_matched:
+        signals.append("A matching OpenOCD session is reachable right now.")
+    elif openocd_unreachable:
+        signals.append("A matching OpenOCD session was found, but its Tcl endpoint is not reachable yet.")
+
+    fresh_mi = bool(gdb_mi.exists and not gdb_mi.stale and (gdb_mi.size_bytes or 0) > 0)
+    fresh_rtt_capture = bool(rtt_capture.exists and not rtt_capture.stale and rtt_capture.parse_error is None and (rtt_capture.bytes_captured or 0) >= 0)
+    fresh_rtt_log = bool(rtt.exists and not rtt.stale and (rtt.size_bytes or 0) > 0)
+    if fresh_mi:
+        signals.append("The DebugOracle GDB/MI log is fresh.")
+    if fresh_rtt_capture:
+        signals.append("The DebugOracle RTT capture state is fresh.")
+    elif fresh_rtt_log:
+        signals.append("The DebugOracle RTT log is fresh.")
+
+    if openocd_matched and (fresh_mi or fresh_rtt_capture or fresh_rtt_log):
+        return WorkspaceReadiness(
+            state="live",
+            reason="The DebugOracle launch is configured and multiple live runtime signals agree that the session is active.",
+            next_human_action=f"Keep `{launch_config_name}` running while you ask the agent about the current debug status or device behavior.",
+            signals=signals,
+            setup_mode=setup_mode,
+            launch_config_name=launch_config_name,
+            launch_config_role=launch_config_role,
+        )
+
+    if openocd_matched or openocd_unreachable or fresh_mi or fresh_rtt_capture or fresh_rtt_log:
+        return WorkspaceReadiness(
+            state="degraded",
+            reason="The DebugOracle launch is configured, but the live signals are incomplete or ambiguous, so the session is not trusted as live yet.",
+            next_human_action=f"Restart `{launch_config_name}` in VS Code, keep the session running, then rerun `dbgoracle status --workspace-root .`.",
+            signals=signals,
+            setup_mode=setup_mode,
+            launch_config_name=launch_config_name,
+            launch_config_role=launch_config_role,
+        )
+
+    return WorkspaceReadiness(
+        state="prepared",
+        reason="The DebugOracle launch is configured, but no live runtime proof has been observed yet.",
+        next_human_action=f"Start `{launch_config_name}` in VS Code, keep the debug session running, then rerun `dbgoracle status --workspace-root .`.",
+        signals=signals,
+        setup_mode=setup_mode,
+        launch_config_name=launch_config_name,
+        launch_config_role=launch_config_role,
+    )
+
+
+def _load_vscode_json(path: Path) -> object | None:
+    if not path.is_file():
+        return None
+    try:
+        raw_text = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    return _parse_vscode_json(raw_text)
+
+
+def _parse_vscode_json(raw_text: str) -> object | None:
+    result: list[str] = []
+    in_string = False
+    escape = False
+    index = 0
+    length = len(raw_text)
+    while index < length:
+        char = raw_text[index]
+        next_char = raw_text[index + 1] if index + 1 < length else ""
+        if in_string:
+            result.append(char)
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+            index += 1
+            continue
+        if char == '"':
+            in_string = True
+            result.append(char)
+            index += 1
+            continue
+        if char == "/" and next_char == "/":
+            index += 2
+            while index < length and raw_text[index] not in "\r\n":
+                index += 1
+            continue
+        if char == "/" and next_char == "*":
+            index += 2
+            while index + 1 < length and not (raw_text[index] == "*" and raw_text[index + 1] == "/"):
+                index += 1
+            index = min(length, index + 2)
+            continue
+        result.append(char)
+        index += 1
+    normalized = "".join(result)
+    normalized = normalized.replace(",\n]", "\n]").replace(",\n}", "\n}")
+    normalized = normalized.replace(",]", "]").replace(",}", "}")
+    try:
+        return json.loads(normalized)
+    except json.JSONDecodeError:
+        return None
+
+
+def _string_value(value: object) -> str | None:
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
+def _find_launch_configuration(
+    payload: object,
+    launch_config_name: str,
+    launch_config_role: str,
+) -> dict[str, object] | None:
+    if not isinstance(payload, dict):
+        return None
+    configurations = payload.get("configurations")
+    if not isinstance(configurations, list):
+        return None
+    for item in configurations:
+        if not isinstance(item, dict):
+            continue
+        if item.get("name") != launch_config_name:
+            continue
+        if item.get("debugoracleRole") != launch_config_role:
+            continue
+        return item
+    return None
+
+
+def _tasks_by_label(payload: object) -> dict[str, dict[str, object]]:
+    if not isinstance(payload, dict):
+        return {}
+    tasks = payload.get("tasks")
+    if not isinstance(tasks, list):
+        return {}
+    result: dict[str, dict[str, object]] = {}
+    for item in tasks:
+        if not isinstance(item, dict):
+            continue
+        label = item.get("label")
+        if isinstance(label, str) and label.strip():
+            result[label] = item
+    return result

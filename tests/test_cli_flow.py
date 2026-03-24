@@ -176,6 +176,24 @@ class DebugOracleCliTests(unittest.TestCase):
         )
         self.assertEqual(parsed.command, "init_workspace")
 
+    def test_init_workspace_attach_mode_parses(self) -> None:
+        parser = build_parser()
+        parsed = parser.parse_args(
+            [
+                "init-workspace",
+                "--workspace-root",
+                ".",
+                "--executable",
+                "build/app.elf",
+                "--attach",
+                "--openocd-config",
+                "interface/stlink.cfg",
+            ]
+        )
+
+        self.assertTrue(parsed.attach)
+        self.assertEqual(parsed.command, "init_workspace")
+
     def test_init_workspace_help_marks_openocd_config_as_required(self) -> None:
         parser = build_parser()
         stdout = io.StringIO()
@@ -362,6 +380,82 @@ class DebugOracleCliTests(unittest.TestCase):
             self.assertTrue((workspace / ".vscode" / "launch.json").is_file())
             self.assertTrue((workspace / ".vscode" / "tasks.json").is_file())
             self.assertTrue((workspace / ".dbgoracle").is_dir())
+            self.assertEqual(stderr, "")
+
+    def test_init_workspace_attach_mode_returns_agent_merge_payloads(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            stdout, stderr, exit_code = self._run_cli_capture(
+                [
+                    "init-workspace",
+                    "--workspace-root",
+                    str(workspace),
+                    "--executable",
+                    "build/app.elf",
+                    "--attach",
+                    "--openocd-config",
+                    "interface/stlink.cfg",
+                    "--openocd-config",
+                    "target/stm32l4x.cfg",
+                    "--with-rtt",
+                    "--format",
+                    "json",
+                ]
+            )
+
+            payload = json.loads(stdout)
+
+        self.assertEqual(exit_code, 2)
+        self.assertEqual(payload["status"], "partial")
+        self.assertEqual(payload["mode"], "attach")
+        self.assertEqual(payload["merge_strategy"], "agent")
+        self.assertEqual(payload["launch_config_name"], "DebugOracle: Attach STM32")
+        self.assertIn("Merge the DebugOracle attach fragments", payload["next_human_action"])
+        self.assertEqual(
+            payload["blocked_files"],
+            [
+                str(workspace / ".vscode" / "settings.json"),
+                str(workspace / ".vscode" / "launch.json"),
+                str(workspace / ".vscode" / "tasks.json"),
+            ],
+        )
+        self.assertEqual(payload["created_files"], [])
+        self.assertEqual(stderr, "")
+        self.assertIn('"debugoracle.workspaceSetupMode": "attach"', payload["required_actions"][0]["fragment"])
+        self.assertIn('"name": "DebugOracle: Attach STM32"', payload["required_actions"][1]["fragment"])
+        self.assertIn('"debugoracleRole": "golden-path-attach"', payload["required_actions"][1]["fragment"])
+        self.assertIn('"label": "DebugOracle: Prelaunch"', payload["required_actions"][2]["fragment"])
+        self.assertFalse((workspace / ".vscode").exists())
+
+    def test_init_workspace_attach_mode_keeps_existing_launch_file_untouched(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            vscode_dir = workspace / ".vscode"
+            vscode_dir.mkdir(parents=True)
+            launch_path = vscode_dir / "launch.json"
+            original = '{"version":"0.2.0","configurations":[{"name":"User Debug"}]}\n'
+            launch_path.write_text(original, encoding="utf-8")
+
+            stdout, stderr, exit_code = self._run_cli_capture(
+                [
+                    "init-workspace",
+                    "--workspace-root",
+                    str(workspace),
+                    "--executable",
+                    "build/app.elf",
+                    "--attach",
+                    "--openocd-config",
+                    "interface/stlink.cfg",
+                    "--format",
+                    "json",
+                ]
+            )
+            payload = json.loads(stdout)
+
+            self.assertEqual(exit_code, 2)
+            self.assertEqual(payload["mode"], "attach")
+            self.assertEqual(launch_path.read_text(encoding="utf-8"), original)
+            self.assertIn(str(launch_path), payload["blocked_files"])
             self.assertEqual(stderr, "")
 
     def test_init_workspace_text_output_includes_required_fragment_for_blocked_file(self) -> None:

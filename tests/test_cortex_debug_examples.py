@@ -34,6 +34,8 @@ class CortexDebugExampleTests(unittest.TestCase):
 
     def test_launch_example_wires_prelaunch_and_postdebug_tasks(self) -> None:
         launch = LAUNCH_EXAMPLE.read_text(encoding="utf-8")
+        self.assertIn('"name": "DebugOracle: Attach STM32"', launch)
+        self.assertIn('"debugoracleRole": "golden-path-attach"', launch)
         self.assertIn('"preLaunchTask": "DebugOracle: Prelaunch"', launch)
         self.assertIn('"postDebugTask": "DebugOracle: Stop RTT run"', launch)
         self.assertIn('// "monitor rtt setup', launch)
@@ -42,6 +44,9 @@ class CortexDebugExampleTests(unittest.TestCase):
     def test_readme_documents_run_stop_workflow(self) -> None:
         readme = README_EXAMPLE.read_text(encoding="utf-8")
         self.assertIn("## Which command when?", readme)
+        self.assertIn("dbgoracle init-workspace --workspace-root . --executable build/app.elf --attach", readme)
+        self.assertIn("DebugOracle: Attach STM32", readme)
+        self.assertIn("Golden Path: prepared", readme)
         self.assertIn("dbgoracle run --detach", readme)
         self.assertIn("dbgoracle stop --workspace-root .", readme)
 

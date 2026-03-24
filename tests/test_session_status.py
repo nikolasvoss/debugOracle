@@ -6,9 +6,11 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 from debugoracle.builder import build_bundle_from_files, save_bundle
 from debugoracle.rtt import RttCaptureState, default_state_path
+from debugoracle.openocd import DISCOVERY_MATCHED, DISCOVERY_NO_SESSION, OpenOcdCandidate, OpenOcdDiscoveryResult
 from debugoracle.session import SessionConfig, collect_session_status
 
 
@@ -265,6 +267,56 @@ class SessionStatusTests(unittest.TestCase):
         self.assertIn("halted analysis is required", "\n".join(status.warnings).lower())
         self.assertIn("target state 'running'", "\n".join(status.warnings).lower())
 
+    def test_collect_session_status_marks_attach_workspace_as_prepared_without_live_proof(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            self._write_attach_workspace(workspace)
+            with patch(
+                "debugoracle.session.discover_workspace_openocd_session",
+                return_value=OpenOcdDiscoveryResult(status=DISCOVERY_NO_SESSION),
+            ):
+                status = collect_session_status(SessionConfig.from_workspace(workspace))
+
+        self.assertEqual(status.readiness.state, "prepared")
+        self.assertEqual(status.readiness.launch_config_name, "DebugOracle: Attach STM32")
+        self.assertIn("Start `DebugOracle: Attach STM32`", status.readiness.next_human_action)
+
+    def test_collect_session_status_promotes_attach_workspace_to_live_on_multi_signal_proof(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(self._prepare_workspace(tmpdir))
+            self._write_attach_workspace(workspace)
+            candidate = OpenOcdCandidate(
+                pid=1234,
+                argv=("openocd", "-c", "tcl_port 50001"),
+                cwd=str(workspace),
+                host="127.0.0.1",
+                tcl_port=50001,
+                gdb_port=None,
+                telnet_port=None,
+            )
+            with patch(
+                "debugoracle.session.discover_workspace_openocd_session",
+                return_value=OpenOcdDiscoveryResult(status=DISCOVERY_MATCHED, candidate=candidate),
+            ):
+                status = collect_session_status(SessionConfig.from_workspace(workspace))
+
+        self.assertEqual(status.readiness.state, "live")
+        self.assertIn("multiple live runtime signals agree", status.readiness.reason)
+
+    def test_collect_session_status_marks_attach_workspace_degraded_when_signals_are_ambiguous(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(self._prepare_workspace(tmpdir))
+            self._write_attach_workspace(workspace)
+            with patch(
+                "debugoracle.session.discover_workspace_openocd_session",
+                return_value=OpenOcdDiscoveryResult(status=DISCOVERY_NO_SESSION),
+            ):
+                status = collect_session_status(SessionConfig.from_workspace(workspace))
+
+        self.assertEqual(status.readiness.state, "degraded")
+        self.assertIn("not trusted as live yet", status.readiness.reason)
+        self.assertIn("Restart `DebugOracle: Attach STM32`", status.readiness.next_human_action)
+
     def _prepare_workspace(self, tmpdir: str) -> str:
         workspace = Path(tmpdir)
         session_dir = workspace / ".dbgoracle"
@@ -283,6 +335,56 @@ class SessionStatusTests(unittest.TestCase):
             encoding="utf-8",
         )
         return str(workspace)
+
+    def _write_attach_workspace(self, workspace: Path) -> None:
+        vscode_dir = workspace / ".vscode"
+        vscode_dir.mkdir(parents=True, exist_ok=True)
+        (vscode_dir / "settings.json").write_text(
+            json.dumps(
+                {
+                    "debugoracle.workspaceSetupMode": "attach",
+                    "debugoracle.launchConfigName": "DebugOracle: Attach STM32",
+                    "debugoracle.launchConfigRole": "golden-path-attach",
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        (vscode_dir / "launch.json").write_text(
+            json.dumps(
+                {
+                    "version": "0.2.0",
+                    "configurations": [
+                        {
+                            "name": "DebugOracle: Attach STM32",
+                            "type": "cortex-debug",
+                            "request": "launch",
+                            "debugoracleRole": "golden-path-attach",
+                            "preLaunchTask": "DebugOracle: Prelaunch",
+                            "postDebugTask": "DebugOracle: Stop RTT run",
+                        }
+                    ],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        (vscode_dir / "tasks.json").write_text(
+            json.dumps(
+                {
+                    "version": "2.0.0",
+                    "tasks": [
+                        {"label": "DebugOracle: Prelaunch"},
+                        {"label": "DebugOracle: Stop RTT run"},
+                    ],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
 
     def _write_rtt_state(
         self,

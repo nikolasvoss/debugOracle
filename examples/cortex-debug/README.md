@@ -46,8 +46,10 @@ What the two usual values mean:
 Example:
 
 ```bash
-dbgoracle init-workspace --workspace-root . --executable build/app.elf --svd-file STM32L432.svd --with-rtt --openocd-config interface/stlink.cfg --openocd-config target/stm32l4x.cfg
+dbgoracle init-workspace --workspace-root . --executable build/app.elf --attach --svd-file STM32L432.svd --with-rtt --openocd-config interface/stlink.cfg --openocd-config target/stm32l4x.cfg
 ```
+
+In attach mode, DebugOracle returns merge-ready fragments for `.vscode/settings.json`, `.vscode/launch.json`, and `.vscode/tasks.json` instead of silently editing an existing workspace for you.
 
 If Cortex-Debug already works in this workspace, open `.vscode/launch.json` and copy the same `configFiles` entries. Those are the values DebugOracle needs.
 
@@ -192,7 +194,7 @@ dbgoracle run --detach --workspace-root . --port 60001 --output .dbgoracle/sessi
 dbgoracle stop --workspace-root .
 ```
 
-- Start your Cortex-Debug session.
+- Start your `DebugOracle: Attach STM32` Cortex-Debug session.
 - Use the TCP port that Cortex-Debug or OpenOCD prints for the active RTT channel. Channel `0` is often exposed on `60001`.
 - Keep `tasks.json.example` aligned with the actual RTT TCP port for your session.
 - Use only one RTT consumer at a time. Do not run `uScope` or a second RTT terminal while `dbgoracle run` is attached.
@@ -207,6 +209,15 @@ test -s cortex-debug-shared-mi.log && echo "MI log ready" || test -s .dbgoracle/
 test -s session.rtt && echo "RTT log has data" || test -s .dbgoracle/session.rtt && echo "RTT log has data" || echo "RTT log empty or not enabled"
 test -f session.rtt.state.json && echo "RTT capture state present" || test -f .dbgoracle/session.rtt.state.json && echo "RTT capture state present" || echo "RTT capture helper not attached"
 ```
+
+## Prepared vs live
+
+After you merge the attach fragments:
+
+- `dbgoracle status --workspace-root .` should report `Golden Path: prepared` before the debug session starts.
+- Start `DebugOracle: Attach STM32` in VS Code.
+- Rerun `dbgoracle status --workspace-root .` while the session is still running.
+- The status should promote to `Golden Path: live` only when multiple runtime signals agree that the DebugOracle session is active.
 
 ## Wrong port symptoms
 

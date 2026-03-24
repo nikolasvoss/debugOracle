@@ -8,6 +8,7 @@ def render_session_status(status, fmt: str = "text") -> str:
         return json.dumps(status.to_dict(), indent=2) + "\n"
 
     trust = getattr(status, "trust", {}) or {}
+    readiness = getattr(status, "readiness", None)
     lines = [
         "DebugOracle Session Status",
         "",
@@ -15,38 +16,57 @@ def render_session_status(status, fmt: str = "text") -> str:
         f"- Health: {status.health}",
         f"- Trust: {str(trust.get('verdict', 'unknown')).upper()}",
         f"- Trust Summary: {trust.get('summary', 'unavailable')}",
-        f"- Action: {status.action_state}",
-        f"- Reason: {status.action_reason}",
-        f"- Snapshot: {_snapshot_summary(status)}",
-        f"- Snapshot ID: {status.snapshot_id or 'unavailable'}",
-        f"- Snapshot Parse Warnings: {status.parse_warning_count}",
-        "",
-        "Evidence Availability:",
-        _artifact_summary_line("Snapshot", status.snapshot),
-        _artifact_summary_line("GDB/MI", status.gdb_mi),
-        _artifact_summary_line("RTT", status.rtt),
-        _rtt_capture_summary_line(status.rtt_capture),
-        "",
-        "Trust Reasons:",
-        *_bullet_lines(list(trust.get("reasons", [])) or ["None"]),
-        "",
-        "Next Useful Command:",
-        f"- {status.recommended_next_command}",
-        "",
-        "Snapshot:",
-        *_artifact_lines(status.snapshot),
-        "",
-        "GDB/MI:",
-        *_artifact_lines(status.gdb_mi),
-        "",
-        "RTT:",
-        *_artifact_lines(status.rtt),
-        "",
-        "RTT Capture:",
-        *_rtt_capture_lines(status.rtt_capture),
-        "",
-        "Warnings:",
     ]
+    if readiness is not None:
+        lines.extend(
+            [
+                f"- Golden Path: {readiness.state}",
+                f"- Golden Path Reason: {readiness.reason}",
+                f"- Next Human Action: {readiness.next_human_action}",
+            ]
+        )
+    lines.extend(
+        [
+            f"- Action: {status.action_state}",
+            f"- Reason: {status.action_reason}",
+            f"- Snapshot: {_snapshot_summary(status)}",
+            f"- Snapshot ID: {status.snapshot_id or 'unavailable'}",
+            f"- Snapshot Parse Warnings: {status.parse_warning_count}",
+            "",
+            "Evidence Availability:",
+            _artifact_summary_line("Snapshot", status.snapshot),
+            _artifact_summary_line("GDB/MI", status.gdb_mi),
+            _artifact_summary_line("RTT", status.rtt),
+            _rtt_capture_summary_line(status.rtt_capture),
+        ]
+    )
+    if readiness is not None:
+        lines.extend(["", "Golden Path Signals:"])
+        lines.extend(_bullet_lines(readiness.signals or ["None"]))
+    lines.extend(
+        [
+            "",
+            "Trust Reasons:",
+            *_bullet_lines(list(trust.get("reasons", [])) or ["None"]),
+            "",
+            "Next Useful Command:",
+            f"- {status.recommended_next_command}",
+            "",
+            "Snapshot:",
+            *_artifact_lines(status.snapshot),
+            "",
+            "GDB/MI:",
+            *_artifact_lines(status.gdb_mi),
+            "",
+            "RTT:",
+            *_artifact_lines(status.rtt),
+            "",
+            "RTT Capture:",
+            *_rtt_capture_lines(status.rtt_capture),
+            "",
+            "Warnings:",
+        ]
+    )
     lines.extend(_bullet_lines(status.warnings or ["None"]))
     if status.parse_warnings:
         lines.extend(["", "Snapshot Parse Warnings Detail:"])

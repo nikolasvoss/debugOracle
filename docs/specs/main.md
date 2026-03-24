@@ -29,7 +29,8 @@ Own the top-level CLI parser, shared argument groups, and command dispatch wirin
 ## Init-Workspace Parser Contract
 
 - `init-workspace` requires at least one `--openocd-config <path>` argument.
-- `--openocd-config` is repeatable so the generated launch can carry the full OpenOCD `configFiles` list.
+- `--attach` is the explicit parser flag for existing Cortex-Debug workspaces and must route to command-owned attach behavior instead of changing default scaffold semantics.
+- `--openocd-config` is repeatable so the generated launch or launch fragment can carry the full OpenOCD `configFiles` list.
 - Dispatch must preserve the requirement before any scaffold files are written, even though the remediation text now comes from command-owned validation instead of a bare parser failure.
 
 ## Constraints

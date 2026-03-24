@@ -50,7 +50,7 @@ Use this default decision loop unless the user asks for something narrower.
 1. If the workspace is not set up yet, bootstrap it:
 
 ```bash
-dbgoracle init-workspace --workspace-root . --executable path/to/firmware.elf --openocd-config interface/stlink.cfg --openocd-config target/stm32l4x.cfg
+dbgoracle init-workspace --workspace-root . --executable path/to/firmware.elf --attach --openocd-config interface/stlink.cfg --openocd-config target/stm32l4x.cfg
 ```
 
 2. Check current artifact health first:
@@ -116,6 +116,7 @@ Use when the workspace is missing supported `.dbgoracle` or `.vscode` setup.
 
 - It is a setup helper, not an evidence command.
 - It requires one or more `--openocd-config` values for the generated Cortex-Debug launch.
+- `--attach` is the explicit mode for existing workspaces. In that mode, DebugOracle emits merge-ready fragments for the coding agent instead of silently editing user-owned VS Code files.
 - If that flag is missing, the CLI now explains what `interface/*.cfg` and `target/*.cfg` mean and shows a corrected example command.
 - It refuses to overwrite user-owned VS Code config by default.
 - It can store a workspace-default SVD path for later `fetch` use.
@@ -126,6 +127,7 @@ Use first when you need to know what evidence exists and what to do next.
 
 - It is read-only.
 - It reports current artifact health and transport state.
+- It also derives golden-path readiness from current workspace/runtime truth: `setup_missing`, `prepared`, `live`, or `degraded`.
 - It should be the first command before assuming capture is required.
 
 ### `capture-rtt`
@@ -191,6 +193,8 @@ dbgoracle report --workspace-root . --regs GPIOA:MODER RCC:AHB2ENR
 ```
 
 ## Preferred workflow by situation
+
+When `status` reports `prepared`, the next human step is to start `DebugOracle: Attach STM32` in VS Code and keep it running. `live` requires multiple runtime signals; one weak clue is not enough.
 
 For "get the debug report":
 

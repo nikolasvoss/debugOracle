@@ -10,10 +10,10 @@ class FindTclPortHelperTests(unittest.TestCase):
     def test_discover_openocd_candidates_falls_back_to_ps_when_proc_has_no_matches(self) -> None:
         ps_text = " 1234 openocd -c \"gdb_port 50000\" -c \"tcl_port 50001\" -c \"telnet_port 50002\"\n"
         with patch(
-            "debugoracle.cli.commands.find_tcl_port._discover_openocd_candidates_from_proc",
+            "debugoracle.openocd._discover_openocd_candidates_from_proc",
             return_value=[],
         ), patch(
-            "debugoracle.cli.commands.find_tcl_port._discover_openocd_candidates_from_ps",
+            "debugoracle.openocd._discover_openocd_candidates_from_ps",
             return_value=list(helper.parse_ps_output(ps_text)),
         ):
             candidates = list(helper.discover_openocd_candidates())

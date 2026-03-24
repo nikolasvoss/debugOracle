@@ -6,9 +6,11 @@ import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
+from unittest.mock import patch
 
 from debugoracle.builder import build_bundle_from_files, save_bundle
 from debugoracle.cli import main
+from debugoracle.openocd import DISCOVERY_MATCHED, DISCOVERY_NO_SESSION, OpenOcdCandidate, OpenOcdDiscoveryResult
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
@@ -93,6 +95,54 @@ class DebugOracleLiveCliTests(unittest.TestCase):
         self.assertIn("Bytes Captured: 0", output)
         self.assertIn("RTT capture connected but no bytes were captured yet.", output)
 
+    def test_status_command_reports_prepared_attach_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._write_attach_workspace(Path(tmpdir))
+            with patch(
+                "debugoracle.session.discover_workspace_openocd_session",
+                return_value=OpenOcdDiscoveryResult(status=DISCOVERY_NO_SESSION),
+            ):
+                output = self._run_cli(["status", "--workspace-root", tmpdir])
+
+        self.assertIn("Golden Path: prepared", output)
+        self.assertIn("Next Human Action: Start `DebugOracle: Attach STM32`", output)
+
+    def test_status_command_reports_live_attach_workspace_in_json(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._prepare_workspace(tmpdir)
+            self._write_attach_workspace(Path(tmpdir))
+            candidate = OpenOcdCandidate(
+                pid=1234,
+                argv=("openocd", "-c", "tcl_port 50001"),
+                cwd=tmpdir,
+                host="127.0.0.1",
+                tcl_port=50001,
+                gdb_port=None,
+                telnet_port=None,
+            )
+            with patch(
+                "debugoracle.session.discover_workspace_openocd_session",
+                return_value=OpenOcdDiscoveryResult(status=DISCOVERY_MATCHED, candidate=candidate),
+            ):
+                output = self._run_cli(["status", "--workspace-root", tmpdir, "--format", "json"])
+
+        payload = __import__("json").loads(output)
+        self.assertEqual(payload["readiness"]["state"], "live")
+        self.assertEqual(payload["readiness"]["launch_config_name"], "DebugOracle: Attach STM32")
+
+    def test_status_command_keeps_attach_workspace_degraded_when_live_proof_is_weak(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self._prepare_workspace(tmpdir)
+            self._write_attach_workspace(Path(tmpdir))
+            with patch(
+                "debugoracle.session.discover_workspace_openocd_session",
+                return_value=OpenOcdDiscoveryResult(status=DISCOVERY_NO_SESSION),
+            ):
+                output = self._run_cli(["status", "--workspace-root", tmpdir])
+
+        self.assertIn("Golden Path: degraded", output)
+        self.assertIn("not trusted as live yet", output)
+
     def _run_cli(self, argv: list[str]) -> str:
         return self._run_cli_with(main, argv)
 
@@ -147,6 +197,44 @@ class DebugOracleLiveCliTests(unittest.TestCase):
             )
             if include_rtt and rtt_bytes == 0:
                 (session_dir / "session.rtt").write_text("", encoding="utf-8")
+
+    def _write_attach_workspace(self, workspace: Path) -> None:
+        vscode_dir = workspace / ".vscode"
+        vscode_dir.mkdir(parents=True, exist_ok=True)
+        (vscode_dir / "settings.json").write_text(
+            "{\n"
+            '  "debugoracle.workspaceSetupMode": "attach",\n'
+            '  "debugoracle.launchConfigName": "DebugOracle: Attach STM32",\n'
+            '  "debugoracle.launchConfigRole": "golden-path-attach"\n'
+            "}\n",
+            encoding="utf-8",
+        )
+        (vscode_dir / "launch.json").write_text(
+            "{\n"
+            '  "version": "0.2.0",\n'
+            '  "configurations": [\n'
+            '    {\n'
+            '      "name": "DebugOracle: Attach STM32",\n'
+            '      "type": "cortex-debug",\n'
+            '      "request": "launch",\n'
+            '      "debugoracleRole": "golden-path-attach",\n'
+            '      "preLaunchTask": "DebugOracle: Prelaunch",\n'
+            '      "postDebugTask": "DebugOracle: Stop RTT run"\n'
+            '    }\n'
+            '  ]\n'
+            "}\n",
+            encoding="utf-8",
+        )
+        (vscode_dir / "tasks.json").write_text(
+            "{\n"
+            '  "version": "2.0.0",\n'
+            '  "tasks": [\n'
+            '    {"label": "DebugOracle: Prelaunch"},\n'
+            '    {"label": "DebugOracle: Stop RTT run"}\n'
+            '  ]\n'
+            "}\n",
+            encoding="utf-8",
+        )
 
 
 if __name__ == "__main__":
