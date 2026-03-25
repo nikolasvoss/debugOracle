@@ -1,0 +1,6 @@
+[submodule "tests/debugoracle-hil-tests"]
+	path = tests/debugoracle-hil-tests
+	url = https://github.com/nikolasvoss/debugoracle-hil-tests
+[submodule "examples/debugoracle-reference-workspaces"]
+	path = examples/debugoracle-reference-workspaces
+	url = https://github.com/nikolasvoss/debugoracle-reference-workspaces
