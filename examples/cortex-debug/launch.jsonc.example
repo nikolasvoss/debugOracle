@@ -54,17 +54,17 @@
         // 2. In the Debug Console, try:
         //    - `monitor rtt setup 0x20000000 0x1000 "SEGGER RTT"`
         //    - `monitor rtt start`
-        //    - `monitor rtt server start 60001 0`
+        //    - `monitor rtt server start ${config:debugoracle.rttPort} 0`
         // 3. If OpenOCD reports it cannot find RTT, widen or move the RAM
         //    search window until it does.
-        // 4. If channel 0 or port 60001 is wrong for your setup, use the value
+        // 4. If channel 0 or the configured RTT port is wrong for your setup, use
         //    OpenOCD/Cortex-Debug reports and mirror it in tasks.json.
         // 5. If you plan to use `dbgoracle fetch --svd-file ...`, verify the
         //    discovered `tcl_port` from the debug log separately. Do not point
         //    live peripheral capture at the RTT port.
         // "monitor rtt setup 0x20000000 0x1000 \"SEGGER RTT\"",
         // "monitor rtt start",
-        // "monitor rtt server start 60001 0"
+        // "monitor rtt server start ${config:debugoracle.rttPort} 0"
       ]
     }
   ]

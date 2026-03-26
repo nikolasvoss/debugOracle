@@ -2,8 +2,6 @@
 
 Local Codex note:
 
-- In this workspace, prefer filesystem MCP edits by default over `apply_patch` because the sandboxed patch path is currently broken with the local `bwrap` setup (`bwrap: Unknown option --argv0`).
-
 For DebugOracle module work, look for specifications in [`docs/specs/README.md`](docs/specs/README.md) before reading module code.
 
 Spec conventions:

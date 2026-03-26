@@ -22,6 +22,7 @@ Own the top-level CLI parser, shared argument groups, and command dispatch wirin
 - `status`, `capture-rtt` -> `debugoracle/cli/commands/status_capture.py`
 - `run`, `stop` -> `debugoracle/cli/commands/run_stop.py`
 - `find-tcl-port` -> `debugoracle/cli/commands/find_tcl_port.py`
+- `guard-openocd-launch` -> `debugoracle/cli/commands/guard_openocd_launch.py`
 - `docs ingest`, `docs search`, `docs status` -> `debugoracle/cli/commands/docs_cli.py`
 - `fetch`, `report` -> `debugoracle/cli/commands/evidence.py`
 - `install-cli` -> `debugoracle/cli/commands/install_cli.py`
@@ -76,6 +77,12 @@ Dispatch treats these as snapshot filters only.
 - It inspects the live OpenOCD process, prefers the session that matches `--workspace-root`, and can print a ready-to-run `fetch` command when an SVD file resolves.
 - It exists so agents do not need repo-local helper scripts or brittle MI-log parsing to discover the current session's Tcl port.
 - It must say explicitly that a debug session needs to already be running before Tcl-port discovery can help.
+
+## Attach Launch Guard Contract
+
+- `guard-openocd-launch` is the CLI preflight surface for generated attach-mode launch tasks.
+- It must fail early when a workspace-matching OpenOCD process is already running so `DebugOracle: Attach STM32` does not compete with `make debug`.
+- It must not kill processes automatically.
 
 ## Docs Sidecar Contract
 

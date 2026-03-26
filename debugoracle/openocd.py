@@ -35,6 +35,17 @@ class OpenOcdCandidate:
 
 
 @dataclass(frozen=True)
+class OpenOcdProcess:
+    pid: int
+    argv: tuple[str, ...]
+    cwd: str | None
+
+    @property
+    def command(self) -> str:
+        return " ".join(self.argv)
+
+
+@dataclass(frozen=True)
 class OpenOcdDiscoveryResult:
     status: str
     candidate: OpenOcdCandidate | None = None
@@ -89,11 +100,26 @@ def discover_workspace_openocd_session(
     )
 
 
+def discover_openocd_processes() -> Iterable[OpenOcdProcess]:
+    linux_processes = list(_discover_openocd_processes_from_proc())
+    if linux_processes:
+        return linux_processes
+    return list(_discover_openocd_processes_from_ps())
+
+
 def discover_openocd_candidates() -> Iterable[OpenOcdCandidate]:
     linux_candidates = list(_discover_openocd_candidates_from_proc())
     if linux_candidates:
         return linux_candidates
     return list(_discover_openocd_candidates_from_ps())
+
+
+def find_workspace_openocd_process_matches(
+    processes: Iterable[OpenOcdProcess],
+    *,
+    workspace_root: Path,
+) -> tuple[OpenOcdProcess, ...]:
+    return tuple(_matching_openocd_items(list(processes), workspace_root=workspace_root))
 
 
 def select_openocd_candidate(
@@ -109,16 +135,10 @@ def select_openocd_candidate(
         return None
     if not candidates:
         return None
-    workspace_text = str(workspace_root)
-    cwd_matches = [candidate for candidate in candidates if candidate.cwd and Path(candidate.cwd).resolve() == workspace_root]
+    cwd_matches = _matching_openocd_items(candidates, workspace_root=workspace_root)
     if len(cwd_matches) == 1:
         return cwd_matches[0]
     if len(cwd_matches) > 1:
-        return None
-    path_matches = [candidate for candidate in candidates if workspace_text in candidate.command]
-    if len(path_matches) == 1:
-        return path_matches[0]
-    if len(path_matches) > 1:
         return None
     if len(candidates) == 1:
         return candidates[0]
@@ -158,31 +178,16 @@ def looks_like_openocd_argv(argv: tuple[str, ...]) -> bool:
 
 
 def _discover_openocd_candidates_from_proc() -> Iterable[OpenOcdCandidate]:
-    proc_root = Path("/proc")
-    if not proc_root.is_dir():
-        return []
     candidates: list[OpenOcdCandidate] = []
-    for entry in proc_root.iterdir():
-        if not entry.name.isdigit():
-            continue
-        try:
-            argv = _read_proc_cmdline(entry / "cmdline")
-        except OSError:
-            continue
-        if not argv or not looks_like_openocd_argv(argv):
-            continue
-        ports = parse_openocd_ports(argv)
+    for process in _discover_openocd_processes_from_proc():
+        ports = parse_openocd_ports(process.argv)
         if ports["tcl_port"] is None:
             continue
-        try:
-            cwd = os.readlink(entry / "cwd")
-        except OSError:
-            cwd = None
         candidates.append(
             OpenOcdCandidate(
-                pid=int(entry.name, 10),
-                argv=argv,
-                cwd=cwd,
+                pid=process.pid,
+                argv=process.argv,
+                cwd=process.cwd,
                 host=DEFAULT_OPENOCD_HOST,
                 tcl_port=ports["tcl_port"],
                 gdb_port=ports["gdb_port"],
@@ -192,7 +197,55 @@ def _discover_openocd_candidates_from_proc() -> Iterable[OpenOcdCandidate]:
     return candidates
 
 
+def _discover_openocd_processes_from_proc() -> Iterable[OpenOcdProcess]:
+    proc_root = Path("/proc")
+    if not proc_root.is_dir():
+        return []
+    processes: list[OpenOcdProcess] = []
+    for entry in proc_root.iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            argv = _read_proc_cmdline(entry / "cmdline")
+        except OSError:
+            continue
+        if not argv or not looks_like_openocd_argv(argv):
+            continue
+        try:
+            cwd = os.readlink(entry / "cwd")
+        except OSError:
+            cwd = None
+        processes.append(
+            OpenOcdProcess(
+                pid=int(entry.name, 10),
+                argv=argv,
+                cwd=cwd,
+            )
+        )
+    return processes
+
+
 def _discover_openocd_candidates_from_ps() -> Iterable[OpenOcdCandidate]:
+    candidates: list[OpenOcdCandidate] = []
+    for process in _discover_openocd_processes_from_ps():
+        ports = parse_openocd_ports(process.argv)
+        if ports["tcl_port"] is None:
+            continue
+        candidates.append(
+            OpenOcdCandidate(
+                pid=process.pid,
+                argv=process.argv,
+                cwd=process.cwd,
+                host=DEFAULT_OPENOCD_HOST,
+                tcl_port=ports["tcl_port"],
+                gdb_port=ports["gdb_port"],
+                telnet_port=ports["telnet_port"],
+            )
+        )
+    return candidates
+
+
+def _discover_openocd_processes_from_ps() -> Iterable[OpenOcdProcess]:
     commands = (
         ["ps", "-eo", "pid=,args="],
         ["ps", "-ax", "-o", "pid=", "-o", "command="],
@@ -202,14 +255,34 @@ def _discover_openocd_candidates_from_ps() -> Iterable[OpenOcdCandidate]:
             completed = subprocess.run(command, capture_output=True, text=True, check=True)
         except (FileNotFoundError, subprocess.CalledProcessError):
             continue
-        candidates = list(_parse_ps_output(completed.stdout))
-        if candidates:
-            return candidates
+        processes = list(_parse_ps_output_processes(completed.stdout))
+        if processes:
+            return processes
     return []
 
 
 def _parse_ps_output(raw_text: str) -> Iterable[OpenOcdCandidate]:
     candidates: list[OpenOcdCandidate] = []
+    for process in _parse_ps_output_processes(raw_text):
+        ports = parse_openocd_ports(process.argv)
+        if ports["tcl_port"] is None:
+            continue
+        candidates.append(
+            OpenOcdCandidate(
+                pid=process.pid,
+                argv=process.argv,
+                cwd=process.cwd,
+                host=DEFAULT_OPENOCD_HOST,
+                tcl_port=ports["tcl_port"],
+                gdb_port=ports["gdb_port"],
+                telnet_port=ports["telnet_port"],
+            )
+        )
+    return candidates
+
+
+def _parse_ps_output_processes(raw_text: str) -> Iterable[OpenOcdProcess]:
+    processes: list[OpenOcdProcess] = []
     for line in raw_text.splitlines():
         stripped = line.strip()
         if not stripped:
@@ -225,21 +298,28 @@ def _parse_ps_output(raw_text: str) -> Iterable[OpenOcdCandidate]:
             continue
         if not looks_like_openocd_argv(argv):
             continue
-        ports = parse_openocd_ports(argv)
-        if ports["tcl_port"] is None:
-            continue
-        candidates.append(
-            OpenOcdCandidate(
+        processes.append(
+            OpenOcdProcess(
                 pid=int(pid_text, 10),
                 argv=argv,
                 cwd=None,
-                host=DEFAULT_OPENOCD_HOST,
-                tcl_port=ports["tcl_port"],
-                gdb_port=ports["gdb_port"],
-                telnet_port=ports["telnet_port"],
             )
         )
-    return candidates
+    return processes
+
+
+def _matching_openocd_items(
+    items: list[OpenOcdProcess | OpenOcdCandidate],
+    *,
+    workspace_root: Path,
+) -> list[OpenOcdProcess | OpenOcdCandidate]:
+    cwd_matches = [
+        item for item in items if item.cwd and Path(item.cwd).resolve() == workspace_root
+    ]
+    if cwd_matches:
+        return cwd_matches
+    workspace_text = str(workspace_root)
+    return [item for item in items if workspace_text in item.command]
 
 
 def _read_proc_cmdline(path: Path) -> tuple[str, ...]:

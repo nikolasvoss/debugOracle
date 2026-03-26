@@ -184,7 +184,7 @@ test -f .dbgoracle/session.rtt && echo "RTT file path exists" || echo "RTT log n
 ## Run a bounded capture
 
 - Ensure `.dbgoracle` exists before starting by using the `DebugOracle: Prelaunch` task from `tasks.json.example`.
-- `DebugOracle: Prelaunch` runs `dbgoracle run --detach` so RTT capture can begin before the debug session reaches the first stop.
+- `DebugOracle: Prelaunch` first checks that a manual workspace-owned OpenOCD session, such as `make debug`, is not already running, then runs `dbgoracle run --detach` so RTT capture can begin before the debug session reaches the first stop.
 - `DebugOracle: Stop RTT run` runs automatically as `postDebugTask`, and you can also run it manually.
 - If you are not using tasks, use this lifecycle directly:
 
@@ -195,6 +195,7 @@ dbgoracle stop --workspace-root .
 ```
 
 - Start your `DebugOracle: Attach STM32` Cortex-Debug session.
+- Do not stack this on top of `make debug`; the generated preflight will block if a manual workspace-matching OpenOCD session is already active.
 - Use the TCP port that Cortex-Debug or OpenOCD prints for the active RTT channel. Channel `0` is often exposed on `60001`.
 - Keep `tasks.json.example` aligned with the actual RTT TCP port for your session.
 - Use only one RTT consumer at a time. Do not run `uScope` or a second RTT terminal while `dbgoracle run` is attached.

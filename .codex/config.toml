@@ -1,5 +1,8 @@
 model = "gpt-5.4"
 model_reasoning_effort = "medium"
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+apps.filesystem.default_tools_approval_mode = "approve"
 
 [features]
 multi_agent = true

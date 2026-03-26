@@ -20,6 +20,7 @@ during this refactor. It is intentionally curated rather than a flat dump of eve
 | `builder` | `debugoracle/builder.py` | [`builder.md`](builder.md) |
 | `cli` | `debugoracle/cli/__init__.py` | [`cli.md`](cli.md) |
 | `docs_cli` | `debugoracle/cli/commands/docs_cli.py` | [`docs_cli.md`](docs_cli.md) |
+| `guard_openocd_launch` | `debugoracle/cli/commands/guard_openocd_launch.py` | [`guard_openocd_launch.md`](guard_openocd_launch.md) |
 | `docs_sidecar` | `debugoracle/docs_sidecar.py` | [`docs_sidecar.md`](docs_sidecar.md) |
 | `main` | `debugoracle/cli/main.py` | [`main.md`](main.md) |
 | `storage` | `debugoracle/pipeline/storage.py` | [`storage.md`](storage.md) |

@@ -30,7 +30,10 @@ class CortexDebugExampleTests(unittest.TestCase):
     def test_prelaunch_depends_on_prepare_and_start(self) -> None:
         tasks = self._tasks_by_label()
         prelaunch = tasks["DebugOracle: Prelaunch"]
-        self.assertEqual(prelaunch["dependsOn"], ["Prepare debug logs", "DebugOracle: Start RTT run"])
+        self.assertEqual(
+            prelaunch["dependsOn"],
+            ["Prepare debug logs", "DebugOracle: Guard Attach Launch", "DebugOracle: Start RTT run"],
+        )
 
     def test_launch_example_wires_prelaunch_and_postdebug_tasks(self) -> None:
         launch = LAUNCH_EXAMPLE.read_text(encoding="utf-8")
@@ -39,7 +42,7 @@ class CortexDebugExampleTests(unittest.TestCase):
         self.assertIn('"preLaunchTask": "DebugOracle: Prelaunch"', launch)
         self.assertIn('"postDebugTask": "DebugOracle: Stop RTT run"', launch)
         self.assertIn('// "monitor rtt setup', launch)
-        self.assertIn('// "monitor rtt server start 60001 0"', launch)
+        self.assertIn('// "monitor rtt server start ${config:debugoracle.rttPort} 0"', launch)
 
     def test_readme_documents_run_stop_workflow(self) -> None:
         readme = README_EXAMPLE.read_text(encoding="utf-8")
@@ -49,6 +52,7 @@ class CortexDebugExampleTests(unittest.TestCase):
         self.assertIn("Golden Path: prepared", readme)
         self.assertIn("dbgoracle run --detach", readme)
         self.assertIn("dbgoracle stop --workspace-root .", readme)
+        self.assertIn("Do not stack this on top of `make debug`", readme)
 
     def test_find_tcl_port_subcommand_is_documented(self) -> None:
         readme = README_EXAMPLE.read_text(encoding="utf-8")

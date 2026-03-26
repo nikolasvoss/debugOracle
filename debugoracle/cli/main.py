@@ -11,6 +11,7 @@ from ..sources.streams.rtt import (
 )
 from .commands.evidence import cmd_fetch, cmd_report
 from .commands.find_tcl_port import cmd_find_tcl_port
+from .commands.guard_openocd_launch import cmd_guard_openocd_launch
 from .commands.install_cli import cmd_install_cli
 from .commands.docs_cli import cmd_docs_ingest, cmd_docs_search, cmd_docs_status
 from .commands.init_workspace import (
@@ -243,6 +244,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="Seconds to wait when checking whether the Tcl endpoint is reachable",
     )
     find_tcl_port.set_defaults(func=cmd_find_tcl_port)
+
+    guard_openocd_launch = subparsers.add_parser(
+        "guard-openocd-launch",
+        help="Fail early when a workspace-matching OpenOCD session is already active",
+        description=(
+            "Check whether an OpenOCD process already owns this workspace so generated "
+            "attach launches can fail early instead of competing with `make debug`."
+        ),
+    )
+    guard_openocd_launch.add_argument(
+        "--workspace-root",
+        default=".",
+        help="Workspace root used to detect matching OpenOCD processes",
+    )
+    guard_openocd_launch.set_defaults(func=cmd_guard_openocd_launch)
 
     docs = subparsers.add_parser(
         "docs",

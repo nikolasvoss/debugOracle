@@ -43,6 +43,7 @@ implementation lives in:
 - `debugoracle/cli/commands/status_capture.py` for `status` and `capture-rtt`
 - `debugoracle/cli/commands/run_stop.py` for `run` and `stop`
 - `debugoracle/cli/commands/find_tcl_port.py` for `find-tcl-port`
+- `debugoracle/cli/commands/guard_openocd_launch.py` for `guard-openocd-launch`
 - `debugoracle/cli/commands/docs_cli.py` for `docs ingest`, `docs search`, and `docs status`
 - `debugoracle/cli/commands/evidence.py` for `fetch` and `report`
 - `debugoracle/cli/commands/install_cli.py` for the internal Linux installer hook
@@ -57,7 +58,7 @@ The CLI has six behavioral layers:
 3. Local reference-manual sidecar
    Commands: `docs ingest`, `docs search`, `docs status`
 4. Transport and workspace health
-   Commands: `status`, `capture-rtt`, `run`, `stop`, `find-tcl-port`
+   Commands: `status`, `capture-rtt`, `run`, `stop`, `find-tcl-port`, `guard-openocd-launch`
 5. Evidence capture and stabilization
    Command: `fetch`
 6. Evidence rendering and inspection
@@ -190,6 +191,21 @@ Outputs:
 Meaning:
 - `find-tcl-port` is the supported agent-facing discovery surface for the current session's Tcl port.
 - It prefers the OpenOCD process whose working directory matches the workspace root.
+
+### `guard-openocd-launch`
+
+Purpose:
+- Fail early when a generated attach launch would compete with an already-running workspace-matching OpenOCD session.
+
+Inputs:
+- Workspace root
+
+Outputs:
+- Human-readable preflight pass/fail message
+
+Meaning:
+- `guard-openocd-launch` is the launch-preflight guard used by generated attach-mode tasks.
+- It reuses shared OpenOCD workspace matching without starting, stopping, or killing sessions.
 
 ### `install-cli`
 

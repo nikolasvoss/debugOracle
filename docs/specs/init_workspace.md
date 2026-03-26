@@ -46,8 +46,10 @@ Own the installed-CLI workspace bootstrap flow for the supported Cortex-Debug/Op
 - Fresh-mode scaffold generation writes a runnable `launch.json` with a stable DebugOracle launch identity.
 - `--attach` emits a dedicated DebugOracle launch fragment with a stable launch name and role marker so agents can merge it into existing `launch.json` content deterministically.
 - `--with-rtt` must switch the generated launch or launch fragment from a plain MI-only launch to an RTT-managed launch, including active `monitor rtt ...` commands plus the matching DebugOracle prelaunch/post-debug tasks.
+- The generated RTT launch and generated RTT helper task must both reference the same workspace setting, `debugoracle.rttPort`, instead of embedding separate port literals.
 - The OpenOCD config list is stored in `.vscode/settings.json` or the attach settings fragment as stable workspace metadata.
 - `init-workspace` does not generate a fallback launch profile without OpenOCD config files.
+- Attach-mode generated prelaunch tasks must fail early when a workspace-matching OpenOCD process is already running so `DebugOracle: Attach STM32` does not compete with a manual `make debug` session.
 
 ## Version Reporting Contract
 

@@ -23,22 +23,22 @@ Near-term, DebugOracle is:
 
 ## Now
 
-1. Stable capture and reporting
+1. [x] Stable capture and reporting
    Make the `fetch -> report` workflow reliable, deterministic, and easy for an agent or engineer to repeat in the same workspace.
-2. Freshness and provenance model
+2. [x] Freshness and provenance model
    Keep captured snapshot data, optional live reads, and older artifacts clearly separated so stale evidence never looks current.
-3. Session health and observability
+3. [x] Session health and observability
    Surface probe connectivity, artifact freshness, parse warnings, and transport health early enough to prevent silent failure.
-4. Safe halted live reads
+4. [x] Safe halted live reads
    Support bounded, read-only live enrichment only when the target state is trustworthy and the read path is clearly safe.
-5. Clear agent-facing guidance
+5. [x] Clear agent-facing guidance
    Keep command behavior, evidence expectations, and fallback paths obvious so an agent can use the CLI without guessing.
 
 ## Next
 
 6. Serial as optional evidence
    Add serial capture as another evidence source for setups where RTT is unavailable, while preserving the same provenance rules.
-7. Streamline project setup to maximize setup success rate.
+7. [x] Streamline project setup to maximize setup success rate.
 8. Session history and multi-stop timeline
    Preserve more than the latest stop so an agent can reason about sequence, transitions, and change over time.
 9. Interface selection and evidence shaping

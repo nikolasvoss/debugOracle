@@ -142,11 +142,16 @@ def initialize_workspace(args: argparse.Namespace, workspace_root: Path) -> Init
     desired_launch_config = _launch_configuration(
         openocd_config_files=list(args.openocd_config),
         with_rtt=bool(args.with_rtt),
+        attach_mode=attach_mode,
         launch_name=launch_config_name,
         launch_role=launch_config_role,
         include_managed_marker=not attach_mode,
     )
-    desired_tasks = _tasks_payload(with_rtt=bool(args.with_rtt), include_managed_marker=not attach_mode)
+    desired_tasks = _tasks_payload(
+        with_rtt=bool(args.with_rtt),
+        attach_mode=attach_mode,
+        include_managed_marker=not attach_mode,
+    )
 
     created_files: list[str] = []
     blocked_files: list[str] = []
@@ -237,6 +242,7 @@ def _launch_configuration(
     *,
     openocd_config_files: list[str],
     with_rtt: bool,
+    attach_mode: bool,
     launch_name: str,
     launch_role: str,
     include_managed_marker: bool,
@@ -250,7 +256,7 @@ def _launch_configuration(
         "configFiles": openocd_config_files,
         "cwd": "${workspaceFolder}",
         "executable": "${config:debugoracle.executable}",
-        "preLaunchTask": "DebugOracle: Prelaunch" if with_rtt else "Prepare debug logs",
+        "preLaunchTask": "DebugOracle: Prelaunch" if (with_rtt or attach_mode) else "Prepare debug logs",
         "preLaunchCommands": [
             "set pagination off",
             "set logging overwrite on",
@@ -272,7 +278,7 @@ def _launch_configuration(
             [
                 "monitor rtt setup 0x20000000 0x1000 \"SEGGER RTT\"",
                 "monitor rtt start",
-                "monitor rtt server start 60001 0",
+                "monitor rtt server start ${config:debugoracle.rttPort} 0",
             ]
         )
     return payload
@@ -287,54 +293,76 @@ def _render_launch_file(configuration: dict[str, object]) -> str:
     return json.dumps(payload, indent=2) + "\n"
 
 
-def _tasks_payload(*, with_rtt: bool, include_managed_marker: bool) -> dict[str, object]:
-    tasks = [
-        {
+def _tasks_payload(*, with_rtt: bool, attach_mode: bool, include_managed_marker: bool) -> dict[str, object]:
+    prepare_debug_logs = {
+        "label": "Prepare debug logs",
+        "type": "shell",
+        "command": "mkdir -p \"${workspaceFolder}/.dbgoracle\" && : > \"${config:debugoracle.miLogPath}\"",
+        "windows": {
+            "command": "New-Item -ItemType Directory -Force -Path \"${workspaceFolder}\\.dbgoracle\" | Out-Null; New-Item -ItemType File -Force -Path \"${config:debugoracle.miLogPath}\" | Out-Null"
+        },
+        "problemMatcher": [],
+    }
+    if with_rtt:
+        prepare_debug_logs = {
             "label": "Prepare debug logs",
             "type": "shell",
-            "command": "mkdir -p \"${workspaceFolder}/.dbgoracle\" && : > \"${config:debugoracle.miLogPath}\"",
+            "command": "mkdir -p \"${workspaceFolder}/.dbgoracle\" && : > \"${config:debugoracle.miLogPath}\" && : > \"${config:debugoracle.rttLogPath}\" && : > \"${config:debugoracle.rttLaunchLogPath}\" && rm -f \"${config:debugoracle.rttStatePath}\"",
             "windows": {
-                "command": "New-Item -ItemType Directory -Force -Path \"${workspaceFolder}\\.dbgoracle\" | Out-Null; New-Item -ItemType File -Force -Path \"${config:debugoracle.miLogPath}\" | Out-Null"
+                "command": "New-Item -ItemType Directory -Force -Path \"${workspaceFolder}\\.dbgoracle\" | Out-Null; New-Item -ItemType File -Force -Path \"${config:debugoracle.miLogPath}\" | Out-Null; New-Item -ItemType File -Force -Path \"${config:debugoracle.rttLogPath}\" | Out-Null; New-Item -ItemType File -Force -Path \"${config:debugoracle.rttLaunchLogPath}\" | Out-Null; Remove-Item -ErrorAction SilentlyContinue \"${config:debugoracle.rttStatePath}\""
             },
             "problemMatcher": [],
         }
-    ]
-    if with_rtt:
-        tasks = [
+
+    tasks = [prepare_debug_logs]
+    if with_rtt or attach_mode:
+        prelaunch_dependencies = ["Prepare debug logs"]
+        if attach_mode:
+            prelaunch_dependencies.append("DebugOracle: Guard Attach Launch")
+            tasks.append(
+                {
+                    "label": "DebugOracle: Guard Attach Launch",
+                    "type": "shell",
+                    "command": "dbgoracle guard-openocd-launch --workspace-root \"${workspaceFolder}\"",
+                    "windows": {
+                        "command": "dbgoracle guard-openocd-launch --workspace-root \"${workspaceFolder}\""
+                    },
+                    "problemMatcher": [],
+                }
+            )
+        if with_rtt:
+            prelaunch_dependencies.append("DebugOracle: Start RTT run")
+            tasks.append(
+                {
+                    "label": "DebugOracle: Start RTT run",
+                    "type": "shell",
+                    "command": "dbgoracle run --detach --workspace-root \"${workspaceFolder}\" --port ${config:debugoracle.rttPort} --connect-timeout 30 --output \"${config:debugoracle.rttLogPath}\" --state-out \"${config:debugoracle.rttStatePath}\"",
+                    "windows": {
+                        "command": "dbgoracle run --detach --workspace-root \"${workspaceFolder}\" --port ${config:debugoracle.rttPort} --connect-timeout 30 --output \"${config:debugoracle.rttLogPath}\" --state-out \"${config:debugoracle.rttStatePath}\""
+                    },
+                    "problemMatcher": [],
+                }
+            )
+            tasks.append(
+                {
+                    "label": "DebugOracle: Stop RTT run",
+                    "type": "shell",
+                    "command": "dbgoracle stop --workspace-root \"${workspaceFolder}\"",
+                    "windows": {
+                        "command": "dbgoracle stop --workspace-root \"${workspaceFolder}\""
+                    },
+                    "problemMatcher": [],
+                }
+            )
+        tasks.insert(
+            0,
             {
                 "label": "DebugOracle: Prelaunch",
-                "dependsOn": ["Prepare debug logs", "DebugOracle: Start RTT run"],
+                "dependsOn": prelaunch_dependencies,
                 "dependsOrder": "sequence",
                 "problemMatcher": [],
             },
-            {
-                "label": "Prepare debug logs",
-                "type": "shell",
-                "command": "mkdir -p \"${workspaceFolder}/.dbgoracle\" && : > \"${config:debugoracle.miLogPath}\" && : > \"${config:debugoracle.rttLogPath}\" && : > \"${config:debugoracle.rttLaunchLogPath}\" && rm -f \"${config:debugoracle.rttStatePath}\"",
-                "windows": {
-                    "command": "New-Item -ItemType Directory -Force -Path \"${workspaceFolder}\\.dbgoracle\" | Out-Null; New-Item -ItemType File -Force -Path \"${config:debugoracle.miLogPath}\" | Out-Null; New-Item -ItemType File -Force -Path \"${config:debugoracle.rttLogPath}\" | Out-Null; New-Item -ItemType File -Force -Path \"${config:debugoracle.rttLaunchLogPath}\" | Out-Null; Remove-Item -ErrorAction SilentlyContinue \"${config:debugoracle.rttStatePath}\""
-                },
-                "problemMatcher": [],
-            },
-            {
-                "label": "DebugOracle: Start RTT run",
-                "type": "shell",
-                "command": "dbgoracle run --detach --workspace-root \"${workspaceFolder}\" --port ${config:debugoracle.rttPort} --connect-timeout 30 --output \"${config:debugoracle.rttLogPath}\" --state-out \"${config:debugoracle.rttStatePath}\"",
-                "windows": {
-                    "command": "dbgoracle run --detach --workspace-root \"${workspaceFolder}\" --port ${config:debugoracle.rttPort} --connect-timeout 30 --output \"${config:debugoracle.rttLogPath}\" --state-out \"${config:debugoracle.rttStatePath}\""
-                },
-                "problemMatcher": [],
-            },
-            {
-                "label": "DebugOracle: Stop RTT run",
-                "type": "shell",
-                "command": "dbgoracle stop --workspace-root \"${workspaceFolder}\"",
-                "windows": {
-                    "command": "dbgoracle stop --workspace-root \"${workspaceFolder}\""
-                },
-                "problemMatcher": [],
-            },
-        ]
+        )
     payload = {
         "version": "2.0.0",
         "tasks": tasks,

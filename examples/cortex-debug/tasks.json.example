@@ -5,6 +5,7 @@
       "label": "DebugOracle: Prelaunch",
       "dependsOn": [
         "Prepare debug logs",
+        "DebugOracle: Guard Attach Launch",
         "DebugOracle: Start RTT run"
       ],
       "dependsOrder": "sequence",
@@ -16,6 +17,16 @@
       "command": "mkdir -p \"${workspaceFolder}/.dbgoracle\" && : > \"${config:debugoracle.miLogPath}\" && : > \"${config:debugoracle.rttLogPath}\" && : > \"${config:debugoracle.rttLaunchLogPath}\" && rm -f \"${config:debugoracle.rttStatePath}\"",
       "windows": {
         "command": "New-Item -ItemType Directory -Force -Path \"${workspaceFolder}\\\\.dbgoracle\" | Out-Null; New-Item -ItemType File -Force -Path \"${config:debugoracle.miLogPath}\" | Out-Null; New-Item -ItemType File -Force -Path \"${config:debugoracle.rttLogPath}\" | Out-Null; New-Item -ItemType File -Force -Path \"${config:debugoracle.rttLaunchLogPath}\" | Out-Null; Remove-Item -ErrorAction SilentlyContinue \"${config:debugoracle.rttStatePath}\""
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "DebugOracle: Guard Attach Launch",
+      "detail": "Stops the attach launch early if a manual workspace-matching OpenOCD session, such as `make debug`, is already running.",
+      "type": "shell",
+      "command": "dbgoracle guard-openocd-launch --workspace-root \"${workspaceFolder}\"",
+      "windows": {
+        "command": "dbgoracle guard-openocd-launch --workspace-root \"${workspaceFolder}\""
       },
       "problemMatcher": []
     },

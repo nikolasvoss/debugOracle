@@ -194,7 +194,7 @@ dbgoracle report --workspace-root . --regs GPIOA:MODER RCC:AHB2ENR
 
 ## Preferred workflow by situation
 
-When `status` reports `prepared`, the next human step is to start `DebugOracle: Attach STM32` in VS Code and keep it running. `live` requires multiple runtime signals; one weak clue is not enough.
+When `status` reports `prepared`, the next human step is to start `DebugOracle: Attach STM32` in VS Code and keep it running. That launch now runs an OpenOCD ownership preflight first, so do not stack it on top of an already-running manual `make debug` session. `live` requires multiple runtime signals; one weak clue is not enough.
 
 For "get the debug report":
 

@@ -4,6 +4,7 @@ from unittest.mock import patch
 from pathlib import Path
 
 from debugoracle.cli.commands import find_tcl_port as helper
+from debugoracle import openocd
 
 
 class FindTclPortHelperTests(unittest.TestCase):
@@ -136,6 +137,42 @@ class FindTclPortHelperTests(unittest.TestCase):
             "dbgoracle fetch --workspace-root /workspace/project --svd-file "
             "/workspace/project/.dbgoracle/device.svd --openocd-tcl-port 50001",
         )
+
+    def test_parse_ps_output_processes_extracts_openocd_processes(self) -> None:
+        raw = (
+            " 1234 openocd -c \"tcl_port 50001\"\n"
+            " 4567 python -m http.server\n"
+        )
+
+        processes = list(openocd._parse_ps_output_processes(raw))
+
+        self.assertEqual(len(processes), 1)
+        self.assertEqual(processes[0].pid, 1234)
+        self.assertEqual(processes[0].argv, ("openocd", "-c", "tcl_port 50001"))
+        self.assertIsNone(processes[0].cwd)
+
+    def test_find_workspace_openocd_process_matches_falls_back_to_command_text(self) -> None:
+        workspace_root = Path("/tmp/current-workspace")
+        processes = [
+            openocd.OpenOcdProcess(
+                pid=100,
+                argv=("openocd", "-f", "interface/stlink.cfg"),
+                cwd=None,
+            ),
+            openocd.OpenOcdProcess(
+                pid=200,
+                argv=("openocd", "-s", str(workspace_root), "-f", "target/stm32l4x.cfg"),
+                cwd=None,
+            ),
+        ]
+
+        matches = openocd.find_workspace_openocd_process_matches(
+            processes,
+            workspace_root=workspace_root,
+        )
+
+        self.assertEqual(len(matches), 1)
+        self.assertEqual(matches[0].pid, 200)
 
 
 if __name__ == "__main__":

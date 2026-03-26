@@ -39,6 +39,12 @@ class DebugOracleCliTests(unittest.TestCase):
         self.assertEqual(parsed.command, "find-tcl-port")
         self.assertTrue(parsed.print_fetch)
 
+    def test_guard_openocd_launch_command_parses(self) -> None:
+        parser = build_parser()
+        parsed = parser.parse_args(["guard-openocd-launch", "--workspace-root", "."])
+
+        self.assertEqual(parsed.command, "guard-openocd-launch")
+
     def test_find_tcl_port_prints_fetch_command_for_workspace_default_svd(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
@@ -292,8 +298,41 @@ class DebugOracleCliTests(unittest.TestCase):
         self.assertIn('"postDebugTask": "DebugOracle: Stop RTT run"', launch_text)
         self.assertIn('"monitor rtt setup 0x20000000 0x1000 \\\"SEGGER RTT\\\""', launch_text)
         self.assertIn('"monitor rtt start"', launch_text)
-        self.assertIn('"monitor rtt server start 60001 0"', launch_text)
+        self.assertIn('"monitor rtt server start ${config:debugoracle.rttPort} 0"', launch_text)
         self.assertNotIn('// "monitor rtt setup 0x20000000 0x1000 \\\"SEGGER RTT\\\""', launch_text)
+        self.assertIn("init-workspace", stdout)
+
+    def test_init_workspace_with_custom_rtt_port_keeps_tasks_and_launch_in_sync(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            with patch("debugoracle.cli.commands.init_workspace.shutil.which", return_value="/usr/bin/openocd"):
+                stdout, stderr, exit_code = self._run_cli_capture(
+                    [
+                        "init-workspace",
+                        "--workspace-root",
+                        str(workspace),
+                        "--executable",
+                        "build/app.elf",
+                        "--openocd-config",
+                        "interface/stlink.cfg",
+                        "--openocd-config",
+                        "target/stm32l4x.cfg",
+                        "--with-rtt",
+                        "--rtt-port",
+                        "9090",
+                    ]
+                )
+
+            settings = json.loads((workspace / ".vscode" / "settings.json").read_text(encoding="utf-8"))
+            launch_text = (workspace / ".vscode" / "launch.json").read_text(encoding="utf-8")
+            tasks_text = (workspace / ".vscode" / "tasks.json").read_text(encoding="utf-8")
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stderr, "")
+        self.assertEqual(settings["debugoracle.rttPort"], "9090")
+        self.assertIn("${config:debugoracle.rttPort}", launch_text)
+        self.assertIn("--port ${config:debugoracle.rttPort}", tasks_text)
+        self.assertNotIn("monitor rtt server start 60001 0", launch_text)
         self.assertIn("init-workspace", stdout)
 
     def test_init_workspace_resolves_executable_relative_to_workspace_root(self) -> None:
@@ -432,7 +471,34 @@ class DebugOracleCliTests(unittest.TestCase):
         self.assertIn('"name": "DebugOracle: Attach STM32"', payload["required_actions"][1]["fragment"])
         self.assertIn('"debugoracleRole": "golden-path-attach"', payload["required_actions"][1]["fragment"])
         self.assertIn('"label": "DebugOracle: Prelaunch"', payload["required_actions"][2]["fragment"])
+        self.assertIn('"label": "DebugOracle: Guard Attach Launch"', payload["required_actions"][2]["fragment"])
         self.assertFalse((workspace / ".vscode").exists())
+
+    def test_init_workspace_attach_mode_without_rtt_still_wires_prelaunch_guard(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            stdout, stderr, exit_code = self._run_cli_capture(
+                [
+                    "init-workspace",
+                    "--workspace-root",
+                    str(workspace),
+                    "--executable",
+                    "build/app.elf",
+                    "--attach",
+                    "--openocd-config",
+                    "interface/stlink.cfg",
+                    "--format",
+                    "json",
+                ]
+            )
+
+            payload = json.loads(stdout)
+
+        self.assertEqual(exit_code, 2)
+        self.assertEqual(stderr, "")
+        self.assertIn('"preLaunchTask": "DebugOracle: Prelaunch"', payload["required_actions"][1]["fragment"])
+        self.assertIn('"label": "DebugOracle: Guard Attach Launch"', payload["required_actions"][2]["fragment"])
+        self.assertNotIn("DebugOracle: Start RTT run", payload["required_actions"][2]["fragment"])
 
     def test_init_workspace_attach_mode_keeps_existing_launch_file_untouched(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
