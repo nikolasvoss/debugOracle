@@ -15,4 +15,4 @@ class _CliPackage(ModuleType):
 sys.modules[__name__].__class__ = _CliPackage
 
 
-__all__ = ["main"]
+__all__: list[str] = []
