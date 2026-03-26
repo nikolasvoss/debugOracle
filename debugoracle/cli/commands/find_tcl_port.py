@@ -169,7 +169,7 @@ def parse_ps_output(raw_text: str):
 
 
 def resolve_svd_file(workspace_root: Path) -> tuple[str | None, str | None]:
-    resolved, _, notice = resolve_fetch_svd_file(SimpleNamespace(svd_file=None), workspace_root)
+    resolved, _, notice = resolve_fetch_svd_file(argparse.Namespace(svd_file=None), workspace_root)
     return resolved, notice
 
 

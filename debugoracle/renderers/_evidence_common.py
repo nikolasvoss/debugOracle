@@ -290,7 +290,7 @@ def coerce_pattern_counts(value: object) -> list[dict[str, int | str]]:
         if not isinstance(pattern, str):
             continue
         try:
-            parsed_count = int(count)
+            parsed_count = int(count)  # type: ignore[arg-type]
         except (TypeError, ValueError):
             continue
         if parsed_count <= 0:

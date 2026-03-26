@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass
+from typing import cast
 
 from ..artifacts.models import (
     EvidenceBundle,
@@ -11,6 +12,7 @@ from ..artifacts.models import (
     VARIABLE_BUCKETS,
 )
 from ._evidence_common import (
+    VariableRenderOptions,
     mapping_section,
     parsing_summary_section,
     render_bullets,
@@ -336,7 +338,7 @@ def _render_report_text(
             render_bullets(_current_state_lines(bundle)),
             "",
             "Trust Reasons:",
-            render_bullets(list(trust.get("reasons", [])) or ["None"]),
+            render_bullets(cast(list[str], trust.get("reasons") or []) or ["None"]),
             "",
             "Next Useful Commands:",
             render_bullets([f"`{trust.get('recommended_action', 'dbgoracle fetch --workspace-root .')}`"]),
@@ -401,7 +403,7 @@ def _trust_header_lines(trust: dict[str, object]) -> list[str]:
         f"- Summary: {summary}",
         f"- Recommended action: `{recommended_action}`",
     ]
-    reasons = list(trust.get("reasons", []))
+    reasons = cast(list[str], trust.get("reasons") or [])
     if reasons:
         lines.append("- Reasons:")
         lines.extend(f"  - {reason}" for reason in reasons)
@@ -491,10 +493,5 @@ def _source_availability_lines(bundle: EvidenceBundle) -> str:
     return "\n".join(lines)
 
 
-def _default_variable_options():
-    class _Options:
-        scope = "all"
-        names: list[str] = []
-        detail = "compact"
-
-    return _Options()
+def _default_variable_options() -> VariableRenderOptions:
+    return VariableRenderOptions(scope="all", names=[], detail="compact")

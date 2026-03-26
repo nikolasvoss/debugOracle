@@ -6,6 +6,7 @@ import os
 import re
 import sys
 from pathlib import Path
+from typing import TypedDict
 
 from ...artifacts.models import InvestigationArtifact
 from ...artifacts.repository import ArtifactLoadError, load_artifact, save_artifact
@@ -256,7 +257,7 @@ def attempt_fetch_openocd_recovery(
     gdb_mi: str | None,
     rtt: str | None,
     state_out: str,
-    discovery: dict[str, str | None | bool],
+    discovery: _FetchInputs,
     resolved_svd_file: str | None,
     svd_discovered: bool,
     initial_error: OpenOcdReachabilityError,
@@ -615,10 +616,19 @@ def resolve_session_config(
     )
 
 
+class _FetchInputs(TypedDict):
+    gdb_mi: str | None
+    rtt: str | None
+    gdb_mi_discovered: bool
+    rtt_discovered: bool
+    gdb_mi_explicit: bool
+    rtt_explicit: bool
+
+
 def resolve_fetch_inputs(
     args: argparse.Namespace,
     workspace_root: Path,
-) -> dict[str, str | None | bool]:
+) -> _FetchInputs:
     config = resolve_session_config(args, workspace_root)
     explicit_gdb = getattr(args, "gdb_mi", None) is not None
     explicit_rtt = getattr(args, "rtt", None) is not None
@@ -922,7 +932,7 @@ def resolve_state_out_path(
     rtt: str | None,
 ) -> str:
     if requested_state_out:
-        return resolve_workspace_path(requested_state_out, workspace_root)
+        return resolve_workspace_path(requested_state_out, workspace_root) or ""
 
     if gdb_mi:
         return str(Path(gdb_mi).parent / DEFAULT_SNAPSHOT_FILENAME)
@@ -983,6 +993,6 @@ def _critical_warnings(bundle: InvestigationArtifact, critical_warning_count: in
 
 def _as_int(value: object) -> int | None:
     try:
-        return int(value)
+        return int(value)  # type: ignore[arg-type]
     except (TypeError, ValueError):
         return None

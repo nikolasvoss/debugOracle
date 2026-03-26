@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from typing import Any
+from typing import Any, overload
 
 CURRENT_BUNDLE_SCHEMA_VERSION = "3"
 
@@ -165,17 +165,23 @@ class InvestigationArtifact:
 
     def require_embedded_gdb_source(self) -> GdbSource:
         if not self.has_embedded_gdb_source:
-            raise RuntimeError("embedded gdb source data is unavailable in this snapshot")
+            raise RuntimeError(
+                "embedded gdb source data is unavailable in this snapshot"
+            )
         return self.sources.gdb
 
     def require_embedded_rtt_source(self) -> RttSource:
         if not self.has_embedded_rtt_source:
-            raise RuntimeError("embedded rtt source data is unavailable in this snapshot")
+            raise RuntimeError(
+                "embedded rtt source data is unavailable in this snapshot"
+            )
         return self.sources.rtt
 
     def require_embedded_register_source(self) -> RegisterSource:
         if not self.has_embedded_register_source:
-            raise RuntimeError("embedded register source data is unavailable in this snapshot")
+            raise RuntimeError(
+                "embedded register source data is unavailable in this snapshot"
+            )
         return self.sources.registers
 
     def to_dict(self) -> dict[str, Any]:
@@ -209,7 +215,9 @@ class InvestigationArtifact:
             pc=_as_optional_str(raw.get("pc")),
             lr=_as_optional_str(raw.get("lr")),
             sp=_as_optional_str(raw.get("sp")),
-            schema_version=_as_optional_str(raw.get("schema_version"), CURRENT_BUNDLE_SCHEMA_VERSION)
+            schema_version=_as_optional_str(
+                raw.get("schema_version"), CURRENT_BUNDLE_SCHEMA_VERSION
+            )
             or CURRENT_BUNDLE_SCHEMA_VERSION,
             frames=frames,
             registers=_as_str_dict(raw.get("registers")),
@@ -234,9 +242,23 @@ class InvestigationArtifact:
 
 EvidenceBundle = InvestigationArtifact
 
+
+@dataclass(frozen=True)
+class EvidenceAnswer:
+    """Structured answer to a debug question, synthesized from artifact evidence."""
+
+    question: str
+    conclusion: str
+    confidence: str  # "high" | "medium" | "low" | "unknown"
+    evidence_sources: list[str] = field(default_factory=list)
+    conflicts: list[str] = field(default_factory=list)
+    provenance: dict[str, str] = field(default_factory=dict)
+
+
 __all__ = [
     "ArtifactSources",
     "CURRENT_BUNDLE_SCHEMA_VERSION",
+    "EvidenceAnswer",
     "EvidenceBundle",
     "GdbSource",
     "InvestigationArtifact",
@@ -292,10 +314,18 @@ def _parse_variable_evidence(raw: dict[str, Any]) -> VariableEvidence:
     payload = raw.get("variable_evidence")
     if isinstance(payload, dict):
         return VariableEvidence(
-            locals=_parse_variable_bucket(payload.get(VARIABLE_BUCKET_LOCALS), VARIABLE_BUCKET_LOCALS),
-            globals=_parse_variable_bucket(payload.get(VARIABLE_BUCKET_GLOBALS), VARIABLE_BUCKET_GLOBALS),
-            watchpoints=_parse_variable_bucket(payload.get(VARIABLE_BUCKET_WATCHPOINTS), VARIABLE_BUCKET_WATCHPOINTS),
-            unknown=_parse_variable_bucket(payload.get(VARIABLE_BUCKET_UNKNOWN), VARIABLE_BUCKET_UNKNOWN),
+            locals=_parse_variable_bucket(
+                payload.get(VARIABLE_BUCKET_LOCALS), VARIABLE_BUCKET_LOCALS
+            ),
+            globals=_parse_variable_bucket(
+                payload.get(VARIABLE_BUCKET_GLOBALS), VARIABLE_BUCKET_GLOBALS
+            ),
+            watchpoints=_parse_variable_bucket(
+                payload.get(VARIABLE_BUCKET_WATCHPOINTS), VARIABLE_BUCKET_WATCHPOINTS
+            ),
+            unknown=_parse_variable_bucket(
+                payload.get(VARIABLE_BUCKET_UNKNOWN), VARIABLE_BUCKET_UNKNOWN
+            ),
         )
 
     legacy = _as_str_dict(raw.get("watched_values"))
@@ -319,26 +349,35 @@ def _parse_variable_evidence(raw: dict[str, Any]) -> VariableEvidence:
 def _parse_sources(raw: dict[str, Any]) -> ArtifactSources:
     payload = raw.get("sources")
     if isinstance(payload, dict):
-        gdb_raw = payload.get("gdb") if isinstance(payload.get("gdb"), dict) else {}
-        rtt_raw = payload.get("rtt") if isinstance(payload.get("rtt"), dict) else {}
-        registers_raw = payload.get("registers") if isinstance(payload.get("registers"), dict) else {}
+        _gdb = payload.get("gdb")
+        _rtt = payload.get("rtt")
+        _regs = payload.get("registers")
+        gdb_raw: dict[str, Any] = _gdb if isinstance(_gdb, dict) else {}
+        rtt_raw: dict[str, Any] = _rtt if isinstance(_rtt, dict) else {}
+        registers_raw: dict[str, Any] = _regs if isinstance(_regs, dict) else {}
         gdb_events = _parse_session_events(gdb_raw.get("events"))
         rtt_lines = [
             _as_optional_str(line, "")
             for line in _as_list(rtt_raw.get("lines"), [])
             if line is not None
         ]
+        _gdb_event_count = _to_int(gdb_raw.get("event_count"))
+        _rtt_line_count = _to_int(rtt_raw.get("line_count"))
         return ArtifactSources(
             gdb=GdbSource(
                 raw_text=_as_optional_str(gdb_raw.get("raw_text")),
                 events=gdb_events,
-                event_count=_to_int(gdb_raw.get("event_count")) if _to_int(gdb_raw.get("event_count")) is not None else len(gdb_events),
+                event_count=_gdb_event_count
+                if _gdb_event_count is not None
+                else len(gdb_events),
                 embedded=True,
             ),
             rtt=RttSource(
                 raw_text=_as_optional_str(rtt_raw.get("raw_text")),
                 lines=rtt_lines,
-                line_count=_to_int(rtt_raw.get("line_count")) if _to_int(rtt_raw.get("line_count")) is not None else len(rtt_lines),
+                line_count=_rtt_line_count
+                if _rtt_line_count is not None
+                else len(rtt_lines),
                 embedded=True,
             ),
             registers=_parse_register_source(registers_raw),
@@ -351,8 +390,15 @@ def _parse_sources(raw: dict[str, Any]) -> ArtifactSources:
         if line is not None
     ]
     return ArtifactSources(
-        gdb=GdbSource(raw_text=None, events=legacy_events, event_count=len(legacy_events), embedded=False),
-        rtt=RttSource(raw_text=None, lines=legacy_rtt, line_count=len(legacy_rtt), embedded=False),
+        gdb=GdbSource(
+            raw_text=None,
+            events=legacy_events,
+            event_count=len(legacy_events),
+            embedded=False,
+        ),
+        rtt=RttSource(
+            raw_text=None, lines=legacy_rtt, line_count=len(legacy_rtt), embedded=False
+        ),
         registers=RegisterSource(embedded=False),
     )
 
@@ -379,7 +425,12 @@ def _parse_register_source(value: object) -> RegisterSource:
             address = _as_optional_str(raw_register.get("address"))
             width_bits = _to_int(raw_register.get("width_bits"))
             read_status = _as_optional_str(raw_register.get("read_status"))
-            if register_name is None or address is None or width_bits is None or read_status is None:
+            if (
+                register_name is None
+                or address is None
+                or width_bits is None
+                or read_status is None
+            ):
                 continue
             registers.append(
                 RegisterEntry(
@@ -405,12 +456,18 @@ def _parse_register_source(value: object) -> RegisterSource:
                 ],
             )
         )
+    _peripheral_count = _to_int(value.get("peripheral_count"))
+    _register_count = _to_int(value.get("register_count"))
     return RegisterSource(
         embedded=True,
         svd_source=_as_optional_str(value.get("svd_source")),
         device_name=_as_optional_str(value.get("device_name")),
-        peripheral_count=_to_int(value.get("peripheral_count")) if _to_int(value.get("peripheral_count")) is not None else len(peripherals),
-        register_count=_to_int(value.get("register_count")) if _to_int(value.get("register_count")) is not None else sum(len(item.registers) for item in peripherals),
+        peripheral_count=_peripheral_count
+        if _peripheral_count is not None
+        else len(peripherals),
+        register_count=_register_count
+        if _register_count is not None
+        else sum(len(item.registers) for item in peripherals),
         success_count=_to_int(value.get("success_count")) or 0,
         failure_count=_to_int(value.get("failure_count")) or 0,
         skipped_count=_to_int(value.get("skipped_count")) or 0,
@@ -454,7 +511,8 @@ def _parse_variable_bucket(value: object, bucket: str) -> list[VariableEntry]:
                 name=name,
                 value=_as_optional_str(item.get("value")),
                 bucket=_as_optional_str(item.get("bucket"), bucket) or bucket,
-                availability=_as_optional_str(item.get("availability"), "captured") or "captured",
+                availability=_as_optional_str(item.get("availability"), "captured")
+                or "captured",
                 origin=_as_optional_str(item.get("origin"), "") or "",
                 frame=_as_optional_str(item.get("frame")),
                 order=order if order is not None else index,
@@ -462,6 +520,12 @@ def _parse_variable_bucket(value: object, bucket: str) -> list[VariableEntry]:
             )
         )
     return entries
+
+
+@overload
+def _as_optional_str(value: object, default: str) -> str: ...
+@overload
+def _as_optional_str(value: object, default: None = ...) -> str | None: ...
 
 
 def _as_optional_str(value: object, default: str | None = None) -> str | None:

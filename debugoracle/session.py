@@ -412,7 +412,7 @@ def _extract_critical_warnings(
 
 def _as_int(value: object) -> int | None:
     try:
-        return int(value)
+        return int(value)  # type: ignore[arg-type]
     except (TypeError, ValueError):
         return None
 

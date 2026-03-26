@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -12,7 +13,7 @@ class LinuxPathPlan:
     export_line: str | None
 
 
-def detect_profile_path(shell: str | None, home: Path, env: dict[str, str] | None = None) -> Path | None:
+def detect_profile_path(shell: str | None, home: Path, env: Mapping[str, str] | None = None) -> Path | None:
     env = env or os.environ
     shell_name = Path(shell or env.get("SHELL", "")).name
     if shell_name == "bash":
@@ -25,7 +26,7 @@ def detect_profile_path(shell: str | None, home: Path, env: dict[str, str] | Non
     return None
 
 
-def build_path_plan(bin_dir: Path, shell: str | None, home: Path, env: dict[str, str] | None = None) -> LinuxPathPlan:
+def build_path_plan(bin_dir: Path, shell: str | None, home: Path, env: Mapping[str, str] | None = None) -> LinuxPathPlan:
     profile_path = detect_profile_path(shell, home, env)
     shell_name = Path(shell or (env or os.environ).get("SHELL", "")).name
     if shell_name == "fish":

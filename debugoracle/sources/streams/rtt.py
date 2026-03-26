@@ -6,7 +6,7 @@ import time
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 from ..base import SourceDescriptor, validate_source_descriptor
 
@@ -92,8 +92,8 @@ def capture_rtt_impl(
     idle_timeout: float | None = None,
     append: bool = False,
     on_connect: Callable[[RttCaptureState], None] | None = None,
-    socket_module: object,
-    time_module: object,
+    socket_module: Any,
+    time_module: Any,
 ) -> RttCaptureState:
     target = Path(output_path)
     state_target = default_state_path(target) if state_path is None else Path(state_path)

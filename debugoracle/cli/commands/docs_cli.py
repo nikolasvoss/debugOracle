@@ -3,7 +3,14 @@ from __future__ import annotations
 import argparse
 import json
 
-from ...docs_sidecar import ingest_documents, search_documents, status_documents
+from ...docs_sidecar import (
+    DocsIngestBatch,
+    DocsSearchResult,
+    DocsStatusEntry,
+    ingest_documents,
+    search_documents,
+    status_documents,
+)
 from .status_capture import emit
 
 
@@ -46,50 +53,41 @@ def cmd_docs_status(args: argparse.Namespace) -> int:
     return 1 if any(item.ingest_state == "failed" for item in statuses) else 0
 
 
-def _render_ingest(batch: object, *, fmt: str) -> str:
+def _render_ingest(batch: DocsIngestBatch, *, fmt: str) -> str:
     if fmt == "json":
-        payload = batch.to_dict()  # type: ignore[call-arg]
-        return json.dumps(payload, indent=2) + "\n"
+        return json.dumps(batch.to_dict(), indent=2) + "\n"
     lines = ["DebugOracle Docs Ingest"]
-    results = getattr(batch, "results", [])
-    warnings = getattr(batch, "warnings", [])
-    discovered = getattr(batch, "discovered_candidates", [])
-    confirmation_required = getattr(batch, "confirmation_required", False)
-    if discovered:
+    if batch.discovered_candidates:
         lines.append("Discovered candidates:")
-        lines.extend(f"- {item}" for item in discovered)
-    if confirmation_required:
+        lines.extend(f"- {item}" for item in batch.discovered_candidates)
+    if batch.confirmation_required:
         lines.append("Action: re-run with --yes to ingest the discovered PDFs, or pass --file/--folder.")
-    if results:
+    if batch.results:
         lines.append("Results:")
-        for result in results:
+        for result in batch.results:
             lines.append(
                 f"- {result.source_pdf}: state={result.ingest_state}, parser={result.parser_used}, "
                 f"pages={result.page_count}, chunks={result.chunk_count}"
             )
             if result.warning_summary:
                 lines.append(f"  warnings: {result.warning_summary}")
-    if warnings:
+    if batch.warnings:
         lines.append("Warnings:")
-        lines.extend(f"- {warning}" for warning in warnings)
+        lines.extend(f"- {warning}" for warning in batch.warnings)
     return "\n".join(lines).rstrip() + "\n"
 
 
-def _render_search(result: object, *, fmt: str) -> str:
+def _render_search(result: DocsSearchResult, *, fmt: str) -> str:
     if fmt == "json":
-        payload = result.to_dict()  # type: ignore[call-arg]
-        return json.dumps(payload, indent=2) + "\n"
-    query = getattr(result, "query", "")
-    hits = getattr(result, "hits", [])
-    warnings = getattr(result, "warnings", [])
-    lines = [f"DebugOracle Docs Search: {query}"]
-    if warnings:
+        return json.dumps(result.to_dict(), indent=2) + "\n"
+    lines = [f"DebugOracle Docs Search: {result.query}"]
+    if result.warnings:
         lines.append("Warnings:")
-        lines.extend(f"- {warning}" for warning in warnings)
-    if not hits:
+        lines.extend(f"- {warning}" for warning in result.warnings)
+    if not result.hits:
         lines.append("No results.")
         return "\n".join(lines) + "\n"
-    for hit in hits:
+    for hit in result.hits:
         lines.append(
             f"- {hit.source_pdf} pages {hit.page_start}-{hit.page_end} score={hit.score:.2f} state={hit.ingest_state}"
         )
@@ -100,7 +98,7 @@ def _render_search(result: object, *, fmt: str) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-def _render_status(statuses: list[object], *, fmt: str) -> str:
+def _render_status(statuses: list[DocsStatusEntry], *, fmt: str) -> str:
     if fmt == "json":
         return json.dumps(
             {"documents": [item.to_dict() for item in statuses]},
@@ -120,15 +118,14 @@ def _render_status(statuses: list[object], *, fmt: str) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-def _ingest_exit_code(batch: object) -> int:
-    if getattr(batch, "confirmation_required", False):
+def _ingest_exit_code(batch: DocsIngestBatch) -> int:
+    if batch.confirmation_required:
         return 2
-    if getattr(batch, "invalid_inputs", []):
-        return 2 if getattr(batch, "results", []) else 1
-    results = getattr(batch, "results", [])
-    if not results:
+    if batch.invalid_inputs:
+        return 2 if batch.results else 1
+    if not batch.results:
         return 1
-    states = {result.ingest_state for result in results}
+    states = {result.ingest_state for result in batch.results}
     if "failed" in states:
         return 1
     if "partial" in states:

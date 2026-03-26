@@ -31,7 +31,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     workspace_root = Path(args.workspace_root).resolve()
     output_path = resolve_run_output_path(workspace_root, args.output)
     state_path = (
-        Path(resolve_workspace_path(args.state_out, workspace_root))
+        Path(resolve_workspace_path(args.state_out, workspace_root) or "")
         if args.state_out
         else default_state_path(output_path)
     )
@@ -55,7 +55,7 @@ def cmd_run(args: argparse.Namespace) -> int:
 def cmd_stop(args: argparse.Namespace) -> int:
     workspace_root = Path(args.workspace_root).resolve()
     runtime_path = (
-        Path(resolve_workspace_path(args.runtime_file, workspace_root))
+        Path(resolve_workspace_path(args.runtime_file, workspace_root) or "")
         if args.runtime_file
         else workspace_root / DEFAULT_SESSION_DIR / DEFAULT_RUN_METADATA
     )
@@ -63,7 +63,7 @@ def cmd_stop(args: argparse.Namespace) -> int:
     if runtime is None:
         print(f"No detached RTT run is active for workspace {workspace_root}.")
         return 0
-    pid = int(runtime.get("pid", 0))
+    pid = int(runtime.get("pid", 0))  # type: ignore[arg-type]
     if pid <= 0:
         print(f"Warning: Invalid runtime metadata in {runtime_path}. Cleaning up stale file.")
         safe_unlink(runtime_path)
@@ -121,7 +121,7 @@ def _cmd_run_detach(
 ) -> int:
     existing_runtime = load_runtime_metadata(runtime_path)
     if existing_runtime is not None:
-        pid = int(existing_runtime.get("pid", 0))
+        pid = int(existing_runtime.get("pid", 0))  # type: ignore[arg-type]
         if pid > 0 and is_pid_running(pid):
             if is_owned_run_process(pid):
                 print(
@@ -230,7 +230,7 @@ def _run_capture_foreground(
 def resolve_run_output_path(workspace_root: Path, output: str | None) -> Path:
     if output:
         resolved = resolve_workspace_path(output, workspace_root)
-        return Path(resolved)
+        return Path(resolved or "")
     return workspace_root / DEFAULT_SESSION_DIR / DEFAULT_RUN_OUTPUT
 
 
