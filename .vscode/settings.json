@@ -1,0 +1,24 @@
+{
+  // Ruff as the primary linter + formatter
+  "[python]": {
+    "editor.defaultFormatter": "Anthropic.claude-code",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.fixAll.ruff": "explicit",
+      "source.organizeImports.ruff": "explicit"
+    }
+  },
+
+  // Pylance for type checking
+  "python.analysis.typeCheckingMode": "strict",
+  "python.analysis.diagnosticSeverityOverrides": {
+    "reportUnknownMemberType": "warning"
+  },
+
+  // Show problems inline — Claude can read these via diagnostic sharing
+  "problems.decorations.enabled": true,
+
+  // Claude Code extension settings
+  "claude-code.autoAcceptEdits": false,
+  "claude-code.showInlineHints": true
+}

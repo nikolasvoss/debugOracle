@@ -1,0 +1,23 @@
+# Python artifacts
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Large data / generated files
+data/raw/
+*.csv
+*.parquet
+*.pkl
+
+# Secrets
+.env
+.env.*
+secrets/
