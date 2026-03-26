@@ -1,5 +1,7 @@
 these notes are just for the developer. not for agent use.
 
+- pyright for type checking / LSP: `pip install pyright` or `pip install -e ".[dev]"`
+
 - reduce to short error, when no input data was found.
 - add mcu detection to warn about mismatched svd file.
 - fetch is capture-only. report is inspection-only.

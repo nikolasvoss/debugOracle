@@ -11,5 +11,8 @@ dependencies = [
     "pypdf>=5,<6",
 ]
 
+[project.optional-dependencies]
+dev = ["pyright"]
+
 [project.scripts]
 dbgoracle = "debugoracle:main"
