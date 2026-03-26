@@ -7,7 +7,7 @@ import re
 import shlex
 import socket
 import subprocess
-from typing import Iterable
+from typing import Iterable, TypeVar
 
 DEFAULT_OPENOCD_HOST = "127.0.0.1"
 OPENOCD_PROCESS_NAME = "openocd"
@@ -61,6 +61,9 @@ class OpenOcdReachabilityError(Exception):
 
     def __str__(self) -> str:
         return f"Could not reach the OpenOCD live-read backend at {self.host}:{self.port}: {self.detail}"
+
+
+_T_Ocd = TypeVar("_T_Ocd", OpenOcdProcess, OpenOcdCandidate)
 
 
 def discover_workspace_openocd_session(
@@ -309,10 +312,10 @@ def _parse_ps_output_processes(raw_text: str) -> Iterable[OpenOcdProcess]:
 
 
 def _matching_openocd_items(
-    items: list[OpenOcdProcess | OpenOcdCandidate],
+    items: list[_T_Ocd],
     *,
     workspace_root: Path,
-) -> list[OpenOcdProcess | OpenOcdCandidate]:
+) -> list[_T_Ocd]:
     cwd_matches = [
         item for item in items if item.cwd and Path(item.cwd).resolve() == workspace_root
     ]

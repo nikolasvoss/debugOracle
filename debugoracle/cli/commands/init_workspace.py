@@ -6,6 +6,7 @@ import shutil
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import cast
 
 DEFAULT_MI_LOG_PATH = "${workspaceFolder}/.dbgoracle/cortex-debug-shared-mi.log"
 DEFAULT_RTT_LOG_PATH = "${workspaceFolder}/.dbgoracle/session.rtt"
@@ -274,7 +275,7 @@ def _launch_configuration(
         payload["debugoracleManagedBy"] = MANAGED_BY_VALUE
     if with_rtt:
         payload["postDebugTask"] = "DebugOracle: Stop RTT run"
-        payload["postLaunchCommands"].extend(
+        cast(list[str], payload["postLaunchCommands"]).extend(
             [
                 "monitor rtt setup 0x20000000 0x1000 \"SEGGER RTT\"",
                 "monitor rtt start",
