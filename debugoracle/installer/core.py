@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from ..diagnostics import build_installer_doctor_notes
 from .backend.pipx import InstallationStatus, PipxBackend, PipxError
 from .manifest import ManifestError, ManifestFetcher, ManifestNetworkError, ReleaseManifest
 from .outcomes import InstallState, InstallerOutcome, InstallerOutcomeCode, PathAction
@@ -248,7 +249,7 @@ class InstallerCore:
         options: InstallerOptions,
     ) -> None:
         if options.doctor:
-            outcome.doctor_notes.extend(_doctor_notes(self.env))
+            outcome.doctor_notes.extend(build_installer_doctor_notes(self.env))
         binary_path = status.binary_path or str(self.backend.bin_dir() / DEFAULT_BINARY_NAME)
         binary_dir = Path(binary_path).parent
         if self._is_binary_discoverable(binary_path):
@@ -312,14 +313,6 @@ def create_default_installer(
         env=runtime_env,
         input_func=input_func,
     )
-
-
-def _doctor_notes(env: dict[str, str]) -> list[str]:
-    notes: list[str] = []
-    if shutil.which("openocd", path=env.get("PATH")) is None:
-        notes.append("Later workflow note: openocd is not on PATH yet. Install success is still valid; embedded capture checks happen later.")
-    return notes
-
 
 def _python_satisfies(version: tuple[int, int, int], specifier: str) -> bool:
     clauses = [piece.strip() for piece in specifier.split(",") if piece.strip()]

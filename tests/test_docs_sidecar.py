@@ -10,15 +10,19 @@ from pathlib import Path
 from unittest.mock import patch
 
 from debugoracle.cli import main
-from debugoracle.cli.commands.docs_cli import _render_ingest
+from debugoracle.cli.commands.docs_cli import _render_ingest, _run_docs_ingest
 from debugoracle.cli.main import build_parser
 from debugoracle.docs_sidecar import (
     ENVELOPE_FILENAME,
+    STAGING_SUFFIX,
     DocsArtifact,
+    DocsChunk,
     DocsEnvelope,
     DocsIngestBatch,
     DocsIngestResult,
     DocsIndexEntry,
+    DocsParseResult,
+    PlainTextParser,
     DoclingParser,
     compute_source_hash,
     discover_candidate_documents,
@@ -47,6 +51,7 @@ class DocsSidecarTests(unittest.TestCase):
                 "pymupdf",
                 "--semantic",
                 "--force",
+                "--no-interactive",
             ]
         )
 
@@ -56,6 +61,15 @@ class DocsSidecarTests(unittest.TestCase):
         self.assertEqual(parsed.parser, "pymupdf")
         self.assertTrue(parsed.semantic)
         self.assertTrue(parsed.force)
+        self.assertTrue(parsed.no_interactive)
+
+    def test_docs_doctor_command_parses(self) -> None:
+        parser = build_parser()
+        parsed = parser.parse_args(["docs", "doctor", "--format", "json"])
+
+        self.assertEqual(parsed.command, "docs")
+        self.assertEqual(parsed.docs_command, "doctor")
+        self.assertEqual(parsed.format, "json")
 
     def test_docs_search_parses_semantic_flag(self) -> None:
         parser = build_parser()
@@ -499,6 +513,90 @@ second-page text
         self.assertIn("hint: extraction quality may improve with Docling", rendered)
         self.assertIn("pipx inject debugoracle docling", rendered)
         self.assertIn("pip install 'debugoracle[docling]'", rendered)
+
+    def test_cli_docs_doctor_json_returns_summary(self) -> None:
+        stdout_buffer = StringIO()
+        stderr_buffer = StringIO()
+        with redirect_stdout(stdout_buffer), redirect_stderr(stderr_buffer):
+            exit_code = main(["docs", "doctor", "--format", "json"])
+        payload = json.loads(stdout_buffer.getvalue())
+
+        self.assertIn(exit_code, (0, 1, 2))
+        self.assertEqual(stderr_buffer.getvalue(), "")
+        self.assertIn("checks", payload)
+        self.assertIn("summary", payload)
+
+    def test_run_docs_ingest_interactive_confirmation_retries_with_yes(self) -> None:
+        parser = build_parser()
+        args = parser.parse_args(["docs", "ingest", "--workspace-root", "."])
+        first = DocsIngestBatch(
+            results=[],
+            discovered_candidates=["/tmp/a.pdf"],
+            warnings=["re-run with --yes"],
+            confirmation_required=True,
+        )
+        second = DocsIngestBatch(
+            results=[
+                DocsIngestResult(
+                    source_pdf="/tmp/a.pdf",
+                    sidecar_dir="/tmp/a.pdf.dbgoracle-docs",
+                    parser_used="pymupdf",
+                    page_count=1,
+                    chunk_count=1,
+                    ingest_state="clean",
+                    warning_summary="",
+                )
+            ],
+            discovered_candidates=["/tmp/a.pdf"],
+        )
+        with patch("debugoracle.cli.commands.docs_cli.ingest_documents", side_effect=[first, second]) as mocked_ingest, patch(
+            "debugoracle.cli.commands.docs_cli._interactive_enabled", return_value=True
+        ), patch("builtins.input", return_value="y"):
+            batch = _run_docs_ingest(args, progress_cb=None)
+
+        self.assertEqual(batch.results[0].ingest_state, "clean")
+        self.assertEqual(mocked_ingest.call_count, 2)
+        self.assertTrue(mocked_ingest.call_args.kwargs["confirm_discovered"])
+
+    def test_resume_reuses_staged_parse_after_semantic_failure(self) -> None:
+        calls: list[int] = []
+
+        def fake_parse(self: PlainTextParser, source: Path, *, progress_cb=None) -> DocsParseResult:
+            calls.append(1)
+            return DocsParseResult(
+                chunks=[
+                    DocsChunk(
+                        chunk_id="page-1",
+                        heading_path="",
+                        chunk_type="prose",
+                        page_start=1,
+                        page_end=1,
+                        text="USART2 BRR register",
+                    )
+                ],
+                parser_used="plain-text",
+                warnings=[],
+                page_count=1,
+            )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manual = Path(tmpdir) / "manual.txt"
+            manual.write_text("USART2 BRR register.\n", encoding="utf-8")
+
+            with patch("debugoracle.docs_sidecar.PlainTextParser.parse", new=fake_parse), patch(
+                "debugoracle.docs_sidecar.encode_embeddings",
+                side_effect=[RuntimeError("semantic failed"), [[0.0]]],
+            ), patch("debugoracle.docs_sidecar.save_embeddings", side_effect=lambda sidecar_dir, _: (Path(sidecar_dir) / "embeddings.npy").write_bytes(b"x")):
+                first = ingest_documents(workspace_root=tmpdir, files=[str(manual)], semantic=True)
+                second = ingest_documents(workspace_root=tmpdir, files=[str(manual)], semantic=True)
+
+            sidecar = sidecar_dir_for(manual)
+            staging = sidecar.with_name(f"{sidecar.name}{STAGING_SUFFIX}")
+
+        self.assertEqual(first.results[0].ingest_state, "failed")
+        self.assertIn(second.results[0].ingest_state, {"clean", "warning", "partial"})
+        self.assertEqual(len(calls), 1)
+        self.assertFalse(staging.exists())
 
     def test_docling_import_failure_surfaces_nested_module_reason(self) -> None:
         parser = DoclingParser()

@@ -3,9 +3,13 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import sys
+from typing import Any
 
+from ...diagnostics import collect_docs_doctor_checks
 from ...docs_sidecar import (
     DocsIngestBatch,
+    DocsIngestResult,
     ProgressCallback,
     DocsSearchResult,
     DocsStatusEntry,
@@ -18,16 +22,7 @@ from .status_capture import emit
 
 def cmd_docs_ingest(args: argparse.Namespace) -> int:
     progress_cb = _make_progress_cb(enabled=(args.format == "text" and not args.output))
-    batch = ingest_documents(
-        workspace_root=args.workspace_root,
-        files=args.file,
-        folders=args.folder,
-        confirm_discovered=args.yes,
-        parser_name=args.parser,
-        semantic=args.semantic,
-        force=args.force,
-        progress_cb=progress_cb,
-    )
+    batch = _run_docs_ingest(args, progress_cb=progress_cb)
     output = _render_ingest(batch, fmt=args.format)
     exit_code = _ingest_exit_code(batch)
     emit(output, args.output)
@@ -61,6 +56,52 @@ def cmd_docs_status(args: argparse.Namespace) -> int:
     return 1 if any(item.ingest_state == "failed" for item in statuses) else 0
 
 
+def cmd_docs_doctor(args: argparse.Namespace) -> int:
+    checks = collect_docs_doctor_checks()
+    payload: dict[str, Any] = {
+        "checks": [
+            {
+                "name": check.key,
+                "required": check.required,
+                "ready": check.ready,
+                "detail": check.detail,
+                "remedy": check.remedy,
+            }
+            for check in checks
+        ]
+    }
+    required_missing = [check for check in checks if check.required and not check.ready]
+    optional_missing = [check for check in checks if not check.required and not check.ready]
+    payload["summary"] = {
+        "required_ready": not required_missing,
+        "missing_required": [check.key for check in required_missing],
+        "missing_optional": [check.key for check in optional_missing],
+    }
+    if args.format == "json":
+        emit(json.dumps(payload, indent=2) + "\n", args.output)
+    else:
+        lines = ["DebugOracle Docs Doctor", "Checks:"]
+        for check in checks:
+            state = "ok" if check.ready else "missing"
+            requirement = "required" if check.required else "optional"
+            lines.append(f"- {check.key}: {state} ({requirement})")
+            if check.remedy:
+                lines.append(f"  remedy: {check.remedy}")
+        if required_missing:
+            lines.append("Status: blocked (required docs dependencies missing)")
+        elif optional_missing:
+            lines.append("Status: ready for default ingest; optional extras missing")
+        else:
+            lines.append("Status: fully ready")
+        emit("\n".join(lines).rstrip() + "\n", args.output)
+
+    if required_missing:
+        return 1
+    if optional_missing:
+        return 2
+    return 0
+
+
 def _render_ingest(batch: DocsIngestBatch, *, fmt: str) -> str:
     if fmt == "json":
         return json.dumps(batch.to_dict(), indent=2) + "\n"
@@ -92,6 +133,8 @@ def _render_ingest(batch: DocsIngestBatch, *, fmt: str) -> str:
     if batch.warnings:
         lines.append("Warnings:")
         lines.extend(f"- {warning}" for warning in batch.warnings)
+    if batch.results:
+        lines.extend(_next_steps_lines(batch.results))
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -169,3 +212,57 @@ def _make_progress_cb(enabled: bool) -> ProgressCallback | None:
 
 def _docling_installed() -> bool:
     return importlib.util.find_spec("docling") is not None
+
+
+def _run_docs_ingest(
+    args: argparse.Namespace,
+    *,
+    progress_cb: ProgressCallback | None,
+) -> DocsIngestBatch:
+    batch = ingest_documents(
+        workspace_root=args.workspace_root,
+        files=args.file,
+        folders=args.folder,
+        confirm_discovered=args.yes,
+        parser_name=args.parser,
+        semantic=args.semantic,
+        force=args.force,
+        progress_cb=progress_cb,
+    )
+    if not _interactive_enabled(args):
+        return batch
+    if args.file or args.folder or args.yes:
+        return batch
+    if not batch.confirmation_required or not batch.discovered_candidates:
+        return batch
+    discovered_count = len(batch.discovered_candidates)
+    answer = input(f"Ingest {discovered_count} discovered PDF(s) now? [y/N] ").strip().lower()
+    if answer not in {"y", "yes"}:
+        return batch
+    return ingest_documents(
+        workspace_root=args.workspace_root,
+        files=args.file,
+        folders=args.folder,
+        confirm_discovered=True,
+        parser_name=args.parser,
+        semantic=args.semantic,
+        force=args.force,
+        progress_cb=progress_cb,
+    )
+
+
+def _interactive_enabled(args: argparse.Namespace) -> bool:
+    if getattr(args, "no_interactive", False):
+        return False
+    return bool(sys.stdin.isatty() and sys.stdout.isatty() and args.format == "text" and not args.output)
+
+
+def _next_steps_lines(results: list[DocsIngestResult]) -> list[str]:
+    lines = ["Next:"]
+    first_source = results[0].source_pdf
+    lines.append(f"- Search now: dbgoracle docs search \"<query>\" --file {first_source}")
+    if any(result.ingest_state in {"partial", "warning"} for result in results):
+        lines.append("- If quality looks degraded, retry with: --parser docling --force")
+    if any(result.ingest_state == "failed" for result in results):
+        lines.append("- Run diagnostics: dbgoracle docs doctor")
+    return lines

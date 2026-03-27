@@ -89,6 +89,7 @@ Dispatch treats these as snapshot filters only.
 - `docs` is the public CLI group for local manual ingestion and lookup.
 - `docs ingest` accepts explicit `--file` and `--folder` selections.
 - When `docs ingest` is invoked without explicit inputs, parser construction must still allow the command, but command execution must require explicit confirmation before discovered PDFs under `doc/` or `docs/` are ingested.
+- `docs doctor` reports required/optional docs dependency readiness with explicit remediation commands.
 - `docs search` is query-only and must not mutate sidecar artifacts.
 - `docs status` reports the persisted ingest state and parser warnings for local sidecars.
 

@@ -13,7 +13,7 @@ from .commands.evidence import cmd_fetch, cmd_report
 from .commands.find_tcl_port import cmd_find_tcl_port
 from .commands.guard_openocd_launch import cmd_guard_openocd_launch
 from .commands.install_cli import cmd_install_cli
-from .commands.docs_cli import cmd_docs_ingest, cmd_docs_search, cmd_docs_status
+from .commands.docs_cli import cmd_docs_doctor, cmd_docs_ingest, cmd_docs_search, cmd_docs_status
 from .commands.init_workspace import (
     DEFAULT_MI_LOG_PATH,
     DEFAULT_RTT_LAUNCH_LOG_PATH,
@@ -311,6 +311,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Force re-ingest even when source hash is unchanged",
     )
     docs_ingest.add_argument(
+        "--no-interactive",
+        action="store_true",
+        help="Disable TTY prompts and run docs ingest in non-interactive mode",
+    )
+    docs_ingest.add_argument(
         "--format",
         choices=["text", "json"],
         default="text",
@@ -376,6 +381,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     docs_status.add_argument("--output", help="Optional output file path")
     docs_status.set_defaults(command="docs", func=cmd_docs_status)
+
+    docs_doctor = docs_subparsers.add_parser(
+        "doctor",
+        help="Check docs ingest dependencies and suggest exact remediation commands",
+    )
+    docs_doctor.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="Output format",
+    )
+    docs_doctor.add_argument("--output", help="Optional output file path")
+    docs_doctor.set_defaults(command="docs", func=cmd_docs_doctor)
 
     fetch = subparsers.add_parser(
         "fetch",

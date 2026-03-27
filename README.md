@@ -89,7 +89,10 @@ Key points:
 - Default parser is `pymupdf` (`pymupdf` + `pymupdf4llm` are installed with base dependencies).
 - Optional parser: `--parser docling` (install with `pipx inject debugoracle docling`).
 - Optional hybrid search: ingest with `--semantic`, search with `--semantic` (install with `pipx inject debugoracle sentence-transformers numpy`).
+- Preflight dependency check: `dbgoracle docs doctor`.
 - If you run ingest without `--file`/`--folder`, DebugOracle discovers likely PDFs under `doc/` and `docs/` and requires `--yes` confirmation.
+- In TTY mode, ingest can prompt for discovered-doc confirmation; use `--no-interactive` to disable prompts.
+- Failed long ingests keep staging checkpoints and can resume compatible reruns.
 - Sidecar artifacts are written next to each source as `<source>.dbgoracle-docs/`.
 
 Full usage and troubleshooting:

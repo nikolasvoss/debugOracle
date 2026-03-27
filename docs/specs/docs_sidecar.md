@@ -20,6 +20,7 @@ Provide deterministic local document ingestion and search for manuals/datasheets
 - Preserve compatibility with legacy sidecars via defaulted `from_dict()` fields.
 - Optionally build semantic embeddings (`embeddings.npy`) for hybrid search.
 - Skip ingest when source hash + parser + semantic requirements are unchanged, unless forced.
+- Support resumable ingest through explicit staging checkpoints and atomic sidecar publish.
 
 ## Canonical Envelope Contract
 
@@ -41,6 +42,7 @@ Every ingest writes `envelope.json` with at least:
 - Sidecars contain `envelope.json` and `index.json`.
 - Optional `embeddings.npy` is written when semantic indexing is enabled.
 - `index.json` stores chunk entries with text/tokens and structural metadata (`heading_path`, `chunk_type`, optional `table_rows`).
+- In-progress checkpoint artifacts are stored in a sibling staging directory and are not treated as final sidecars.
 
 ## Quality Policy
 

@@ -54,6 +54,12 @@ Check ingest health:
 dbgoracle docs status
 ```
 
+Check docs tooling readiness:
+
+```bash
+dbgoracle docs doctor
+```
+
 ## Ingest Inputs
 
 You can ingest with:
@@ -82,6 +88,7 @@ dbgoracle docs ingest \
   [--parser pymupdf|docling] \
   [--semantic] \
   [--force] \
+  [--no-interactive] \
   [--format text|json]
 ```
 
@@ -103,6 +110,12 @@ dbgoracle docs status \
   [--workspace-root .] \
   [--file <path> ...] \
   [--format text|json]
+```
+
+Doctor:
+
+```bash
+dbgoracle docs doctor [--format text|json]
 ```
 
 ## Parser Choice
@@ -137,6 +150,8 @@ If semantic dependencies or embeddings are unavailable, search falls back to BM2
 ## Re-ingest and Staleness
 
 Ingest skips unchanged sources automatically (hash + parser + semantic compatibility check).
+
+If ingest fails partway through, DebugOracle keeps deterministic staging checkpoints and can resume compatible reruns instead of restarting from zero.
 
 Force re-ingest:
 
@@ -191,3 +206,4 @@ No search results:
 - run `dbgoracle docs status` and check for `failed`/`partial`
 - try `--parser docling` for difficult PDFs
 - use exact register/peripheral terms first, then add `--semantic` if installed
+- run `dbgoracle docs doctor` to verify parser/semantic dependency readiness

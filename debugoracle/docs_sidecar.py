@@ -3,7 +3,13 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import re
+import shlex
+import shutil
+import sys
+import threading
+import time
 from collections import Counter
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -16,6 +22,10 @@ SIDECAR_SUFFIX = ".dbgoracle-docs"
 ENVELOPE_FILENAME = "envelope.json"
 INDEX_FILENAME = "index.json"
 EMBEDDINGS_FILENAME = "embeddings.npy"
+CHECKPOINT_FILENAME = "checkpoint.json"
+CHUNKS_FILENAME = "chunks.json"
+STAGED_INDEX_FILENAME = "index.staged.json"
+STAGING_SUFFIX = ".staging"
 
 ProgressCallback = Callable[[int, int, str], None]
 
@@ -128,6 +138,36 @@ class DocsParseResult:
     warnings: list[str] = field(default_factory=list)
     page_count: int = 0
     empty_page_count: int = 0
+
+
+@dataclass
+class DocsIngestCheckpoint:
+    source_pdf: str
+    source_hash: str
+    parser_name: str
+    semantic: bool
+    stage: str
+    parser_used: str
+    page_count: int
+    empty_page_count: int
+    warnings: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> "DocsIngestCheckpoint":
+        return cls(
+            source_pdf=str(raw.get("source_pdf") or ""),
+            source_hash=str(raw.get("source_hash") or ""),
+            parser_name=_canonical_parser_name(str(raw.get("parser_name") or "")),
+            semantic=bool(raw.get("semantic", False)),
+            stage=str(raw.get("stage") or ""),
+            parser_used=str(raw.get("parser_used") or ""),
+            page_count=max(0, _to_int(raw.get("page_count"))),
+            empty_page_count=max(0, _to_int(raw.get("empty_page_count"))),
+            warnings=[str(item) for item in raw.get("warnings", []) if item is not None],
+        )
 
 
 class DocsParser(Protocol):
@@ -319,6 +359,7 @@ def ingest_document(
 ) -> DocsIngestResult:
     source = Path(path).expanduser().resolve()
     sidecar_dir = sidecar_dir_for(source)
+    staging_dir = _staging_dir_for(sidecar_dir)
     expected_parser = "plain-text" if source.suffix.lower() in {".txt", ".md", ".rst"} else parser_name
 
     if not force and is_ingest_fresh(source, sidecar_dir, parser_name=expected_parser, semantic=semantic):
@@ -334,25 +375,73 @@ def ingest_document(
             skipped=True,
             warnings=list(artifact.envelope.warnings),
         )
+    source_hash = compute_source_hash(source) if source.exists() else ""
+    if force:
+        _discard_staging_dir(staging_dir)
 
     warnings: list[str] = []
     fatal_error: str | None = None
     parser_used = parser_name
     parse_result: DocsParseResult | None = None
+    chunks: list[DocsChunk] = []
+    index_entries: list[DocsIndexEntry] = []
+    page_count = 0
+    empty_page_count = 0
+    semantic_indexed = False
+
+    checkpoint = _load_checkpoint(staging_dir)
+    checkpoint_compatible = _is_checkpoint_compatible(
+        checkpoint=checkpoint,
+        source=source,
+        source_hash=source_hash,
+        parser_name=expected_parser,
+        semantic=semantic,
+    )
+    if checkpoint and not checkpoint_compatible:
+        _discard_staging_dir(staging_dir)
+        checkpoint = None
+
+    if checkpoint and checkpoint.stage in {"parsed", "indexed", "embedded"}:
+        parser_used = checkpoint.parser_used or parser_used
+        page_count = checkpoint.page_count
+        empty_page_count = checkpoint.empty_page_count
+        warnings = list(checkpoint.warnings)
+        chunks = _load_staged_chunks(staging_dir)
+        if checkpoint.stage in {"indexed", "embedded"}:
+            index_entries = _load_staged_index_entries(staging_dir)
+        if checkpoint.stage == "embedded":
+            semantic_indexed = semantic and (staging_dir / EMBEDDINGS_FILENAME).exists()
 
     try:
-        if source.suffix.lower() in {".txt", ".md", ".rst"}:
-            parse_result = make_parser("plaintext").parse(source, progress_cb=progress_cb)
-        elif source.suffix.lower() == ".pdf":
-            if parser_name == "plaintext":
-                raise RuntimeError(
-                    "Parser 'plaintext' is not supported for PDF ingestion. Use --parser=pymupdf or --parser=docling."
-                )
-            parse_result = make_parser(parser_name).parse(source, progress_cb=progress_cb)
-        else:
-            raise RuntimeError(f"Unsupported document type for ingestion: {source.suffix or '<none>'}")
-        parser_used = parse_result.parser_used
-        warnings.extend(parse_result.warnings)
+        if not chunks:
+            if source.suffix.lower() in {".txt", ".md", ".rst"}:
+                parse_result = make_parser("plaintext").parse(source, progress_cb=progress_cb)
+            elif source.suffix.lower() == ".pdf":
+                if parser_name == "plaintext":
+                    raise RuntimeError(
+                        "Parser 'plaintext' is not supported for PDF ingestion. Use --parser=pymupdf or --parser=docling."
+                    )
+                parse_result = make_parser(parser_name).parse(source, progress_cb=progress_cb)
+            else:
+                raise RuntimeError(f"Unsupported document type for ingestion: {source.suffix or '<none>'}")
+            parser_used = parse_result.parser_used
+            warnings = list(parse_result.warnings)
+            chunks = list(parse_result.chunks)
+            page_count = parse_result.page_count
+            empty_page_count = parse_result.empty_page_count
+            checkpoint = DocsIngestCheckpoint(
+                source_pdf=str(source),
+                source_hash=source_hash,
+                parser_name=_canonical_parser_name(expected_parser),
+                semantic=semantic,
+                stage="parsed",
+                parser_used=parser_used,
+                page_count=page_count,
+                empty_page_count=empty_page_count,
+                warnings=warnings,
+            )
+            _save_staged_chunks(staging_dir, chunks)
+            _save_checkpoint(staging_dir, checkpoint)
     except OSError as error:
         fatal_error = f"Could not read source document: {error}"
         warnings.append(fatal_error)
@@ -360,18 +449,39 @@ def ingest_document(
         fatal_error = str(error)
         warnings.append(fatal_error)
 
-    chunks = parse_result.chunks if parse_result else []
-    page_count = parse_result.page_count if parse_result else 0
-    empty_page_count = parse_result.empty_page_count if parse_result else 0
+    if fatal_error is None and not index_entries:
+        index_entries = build_index_entries(source, chunks)
+        _save_staged_index_entries(staging_dir, index_entries)
+        checkpoint = DocsIngestCheckpoint(
+            source_pdf=str(source),
+            source_hash=source_hash,
+            parser_name=_canonical_parser_name(expected_parser),
+            semantic=semantic,
+            stage="indexed",
+            parser_used=parser_used,
+            page_count=page_count,
+            empty_page_count=empty_page_count,
+            warnings=warnings,
+        )
+        _save_checkpoint(staging_dir, checkpoint)
 
-    index_entries = build_index_entries(source, chunks)
-
-    semantic_indexed = False
-    if fatal_error is None and semantic and index_entries:
+    if fatal_error is None and semantic and index_entries and not semantic_indexed:
         try:
             embeddings = encode_embeddings(chunks)
-            save_embeddings(sidecar_dir, embeddings)
+            save_embeddings(staging_dir, embeddings)
             semantic_indexed = True
+            checkpoint = DocsIngestCheckpoint(
+                source_pdf=str(source),
+                source_hash=source_hash,
+                parser_name=_canonical_parser_name(expected_parser),
+                semantic=True,
+                stage="embedded",
+                parser_used=parser_used,
+                page_count=page_count,
+                empty_page_count=empty_page_count,
+                warnings=warnings,
+            )
+            _save_checkpoint(staging_dir, checkpoint)
         except RuntimeError as error:
             fatal_error = str(error)
             warnings.append(fatal_error)
@@ -388,7 +498,9 @@ def ingest_document(
             empty_page_count=empty_page_count,
         )
 
-    sidecar_dir.mkdir(parents=True, exist_ok=True)
+    publish_dir = _publish_dir_for(sidecar_dir)
+    _discard_staging_dir(publish_dir)
+    publish_dir.mkdir(parents=True, exist_ok=True)
     envelope_path = sidecar_dir / ENVELOPE_FILENAME
     index_path = sidecar_dir / INDEX_FILENAME
     derived_paths = [str(envelope_path), str(index_path)]
@@ -407,7 +519,13 @@ def ingest_document(
         semantic_indexed=semantic_indexed,
         warnings=warnings,
     )
-    save_docs_artifact(DocsArtifact(envelope=envelope, index_entries=index_entries), sidecar_dir)
+    save_docs_artifact(DocsArtifact(envelope=envelope, index_entries=index_entries), publish_dir)
+    if semantic_indexed and (staging_dir / EMBEDDINGS_FILENAME).exists():
+        shutil.copy2(staging_dir / EMBEDDINGS_FILENAME, publish_dir / EMBEDDINGS_FILENAME)
+    _publish_sidecar_atomically(publish_dir=publish_dir, sidecar_dir=sidecar_dir)
+    if fatal_error is None:
+        _discard_staging_dir(staging_dir)
+
     return DocsIngestResult(
         source_pdf=str(source),
         sidecar_dir=str(sidecar_dir),
@@ -660,6 +778,152 @@ def sidecar_dir_for(source_path: str | Path) -> Path:
     return source.with_name(f"{source.name}{SIDECAR_SUFFIX}")
 
 
+def _staging_dir_for(sidecar_dir: Path) -> Path:
+    return sidecar_dir.with_name(f"{sidecar_dir.name}{STAGING_SUFFIX}")
+
+
+def _publish_dir_for(sidecar_dir: Path) -> Path:
+    return sidecar_dir.with_name(f"{sidecar_dir.name}.publish")
+
+
+def _discard_staging_dir(path: Path) -> None:
+    if path.exists():
+        shutil.rmtree(path, ignore_errors=True)
+
+
+def _load_checkpoint(staging_dir: Path) -> DocsIngestCheckpoint | None:
+    checkpoint_path = staging_dir / CHECKPOINT_FILENAME
+    if not checkpoint_path.exists():
+        return None
+    try:
+        raw = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        _discard_staging_dir(staging_dir)
+        return None
+    checkpoint = DocsIngestCheckpoint.from_dict(raw if isinstance(raw, dict) else {})
+    if checkpoint.stage not in {"parsed", "indexed", "embedded"}:
+        _discard_staging_dir(staging_dir)
+        return None
+    return checkpoint
+
+
+def _save_checkpoint(staging_dir: Path, checkpoint: DocsIngestCheckpoint) -> None:
+    staging_dir.mkdir(parents=True, exist_ok=True)
+    (staging_dir / CHECKPOINT_FILENAME).write_text(
+        json.dumps(checkpoint.to_dict(), indent=2),
+        encoding="utf-8",
+    )
+
+
+def _save_staged_chunks(staging_dir: Path, chunks: list[DocsChunk]) -> None:
+    staging_dir.mkdir(parents=True, exist_ok=True)
+    (staging_dir / CHUNKS_FILENAME).write_text(
+        json.dumps([asdict(chunk) for chunk in chunks], indent=2),
+        encoding="utf-8",
+    )
+
+
+def _load_staged_chunks(staging_dir: Path) -> list[DocsChunk]:
+    chunks_path = staging_dir / CHUNKS_FILENAME
+    if not chunks_path.exists():
+        _discard_staging_dir(staging_dir)
+        return []
+    try:
+        raw = json.loads(chunks_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        _discard_staging_dir(staging_dir)
+        return []
+    if not isinstance(raw, list):
+        _discard_staging_dir(staging_dir)
+        return []
+    chunks: list[DocsChunk] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            _discard_staging_dir(staging_dir)
+            return []
+        table_rows_raw = item.get("table_rows")
+        table_rows: list[list[str]] | None = None
+        if isinstance(table_rows_raw, list):
+            rows: list[list[str]] = []
+            for row in table_rows_raw:
+                if isinstance(row, list):
+                    rows.append([str(cell) for cell in row])
+            table_rows = rows or None
+        chunks.append(
+            DocsChunk(
+                chunk_id=str(item.get("chunk_id") or ""),
+                heading_path=str(item.get("heading_path") or ""),
+                chunk_type=str(item.get("chunk_type") or "prose"),
+                page_start=max(1, _to_int(item.get("page_start"), 1)),
+                page_end=max(1, _to_int(item.get("page_end"), 1)),
+                text=str(item.get("text") or ""),
+                table_rows=table_rows,
+            )
+        )
+    return chunks
+
+
+def _save_staged_index_entries(staging_dir: Path, entries: list[DocsIndexEntry]) -> None:
+    staging_dir.mkdir(parents=True, exist_ok=True)
+    (staging_dir / STAGED_INDEX_FILENAME).write_text(
+        json.dumps([entry.to_dict() for entry in entries], indent=2),
+        encoding="utf-8",
+    )
+
+
+def _load_staged_index_entries(staging_dir: Path) -> list[DocsIndexEntry]:
+    index_path = staging_dir / STAGED_INDEX_FILENAME
+    if not index_path.exists():
+        _discard_staging_dir(staging_dir)
+        return []
+    try:
+        raw = json.loads(index_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        _discard_staging_dir(staging_dir)
+        return []
+    if not isinstance(raw, list):
+        _discard_staging_dir(staging_dir)
+        return []
+    return [DocsIndexEntry.from_dict(item if isinstance(item, dict) else {}) for item in raw]
+
+
+def _is_checkpoint_compatible(
+    *,
+    checkpoint: DocsIngestCheckpoint | None,
+    source: Path,
+    source_hash: str,
+    parser_name: str,
+    semantic: bool,
+) -> bool:
+    if checkpoint is None:
+        return False
+    if checkpoint.source_pdf != str(source):
+        return False
+    if checkpoint.source_hash != source_hash:
+        return False
+    if _canonical_parser_name(checkpoint.parser_name) != _canonical_parser_name(parser_name):
+        return False
+    if checkpoint.semantic != semantic:
+        return False
+    return True
+
+
+def _publish_sidecar_atomically(*, publish_dir: Path, sidecar_dir: Path) -> None:
+    backup_dir = sidecar_dir.with_name(f"{sidecar_dir.name}.backup")
+    _discard_staging_dir(backup_dir)
+    try:
+        if sidecar_dir.exists():
+            os.replace(sidecar_dir, backup_dir)
+        os.replace(publish_dir, sidecar_dir)
+        _discard_staging_dir(backup_dir)
+    except Exception:
+        if publish_dir.exists():
+            _discard_staging_dir(publish_dir)
+        if backup_dir.exists() and not sidecar_dir.exists():
+            os.replace(backup_dir, sidecar_dir)
+        raise
+
+
 def build_index_entries(source_path: str | Path, chunks: list[DocsChunk]) -> list[DocsIndexEntry]:
     entries: list[DocsIndexEntry] = []
     source = str(Path(source_path).expanduser().resolve())
@@ -803,10 +1067,10 @@ class PyMuPDFParser:
         doc = fitz.open(str(source))
         total_pages = len(doc)
         if progress_cb:
-            progress_cb(0, total_pages, source.name)
+            progress_cb(0, total_pages, f"{source.name} (extracting markdown; may take minutes)")
         md = pymupdf4llm.to_markdown(doc)
         if progress_cb:
-            progress_cb(total_pages, total_pages, source.name)
+            progress_cb(0, total_pages, f"{source.name} (validating extracted pages)")
 
         empty_page_count = 0
         warnings: list[str] = []
@@ -815,6 +1079,8 @@ class PyMuPDFParser:
             if not text:
                 warnings.append(f"Page {page_index + 1} extracted no text.")
                 empty_page_count += 1
+            if progress_cb:
+                progress_cb(page_index + 1, total_pages, source.name)
 
         chunks, split_warnings = split_markdown_by_headings(md, source, doc=doc)
         warnings.extend(split_warnings)
@@ -842,10 +1108,11 @@ class DoclingParser:
             from docling.document_converter import DocumentConverter
         except ModuleNotFoundError as error:
             if error.name == "docling":
+                quoted_executable = shlex.quote(sys.executable)
                 raise RuntimeError(
                     "Docling is not installed in this DebugOracle environment. "
                     "If using pipx, run: pipx inject debugoracle docling. "
-                    "Otherwise install in the active environment: pip install 'debugoracle[docling]'"
+                    f"Otherwise install in the active environment: {quoted_executable} -m pip install 'debugoracle[docling]'"
                 ) from error
             raise RuntimeError(
                 "Docling import failed in this DebugOracle environment. "
@@ -859,6 +1126,19 @@ class DoclingParser:
 
         if progress_cb:
             progress_cb(0, 1, f"{source.name} (Docling -- may take 1-5 min)")
+        heartbeat_stop = threading.Event()
+        heartbeat_thread: threading.Thread | None = None
+        start_time = time.monotonic()
+
+        def heartbeat() -> None:
+            while not heartbeat_stop.wait(15.0):
+                elapsed = int(max(0, time.monotonic() - start_time))
+                if progress_cb:
+                    progress_cb(0, 1, f"{source.name} (Docling running, elapsed {elapsed}s)")
+
+        if progress_cb:
+            heartbeat_thread = threading.Thread(target=heartbeat, daemon=True)
+            heartbeat_thread.start()
 
         try:
             converter = DocumentConverter()
@@ -868,6 +1148,10 @@ class DoclingParser:
                 "Docling conversion failed. If running offline, pre-populate DOCLING_CACHE_HOME with models. "
                 f"Original error: {error}"
             ) from error
+        finally:
+            heartbeat_stop.set()
+            if heartbeat_thread is not None:
+                heartbeat_thread.join(timeout=0.2)
 
         md = result.document.export_to_markdown()
         chunks, warnings = split_markdown_by_headings(md, source, doc=None)
