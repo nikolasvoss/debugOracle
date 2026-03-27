@@ -23,6 +23,20 @@ Manifest-driven launcher path from a checkout:
 ./scripts/install/linux.sh
 ```
 
+After `dbgoracle` is installed, the setup script asks whether to install optional docs tooling:
+
+- `docling` for stronger extraction on difficult/scanned PDFs
+- semantic search deps (`sentence-transformers`, `numpy`) for hybrid docs search
+
+Non-interactive or scripted installs can choose explicitly:
+
+```bash
+./scripts/install/linux.sh --docs-tools none
+./scripts/install/linux.sh --docs-tools docling
+./scripts/install/linux.sh --docs-tools semantic
+./scripts/install/linux.sh --docs-tools all
+```
+
 Secondary local-dev path from a checkout:
 
 ```bash
@@ -73,8 +87,8 @@ dbgoracle docs status
 Key points:
 
 - Default parser is `pymupdf` (`pymupdf` + `pymupdf4llm` are installed with base dependencies).
-- Optional parser: `--parser docling` (requires `debugoracle[docling]`).
-- Optional hybrid search: ingest with `--semantic`, search with `--semantic` (requires `debugoracle[semantic]`).
+- Optional parser: `--parser docling` (install with `pipx inject debugoracle docling`).
+- Optional hybrid search: ingest with `--semantic`, search with `--semantic` (install with `pipx inject debugoracle sentence-transformers numpy`).
 - If you run ingest without `--file`/`--folder`, DebugOracle discovers likely PDFs under `doc/` and `docs/` and requires `--yes` confirmation.
 - Sidecar artifacts are written next to each source as `<source>.dbgoracle-docs/`.
 

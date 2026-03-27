@@ -9,7 +9,9 @@ Base requirements:
 - Python 3.10+
 - Installed `dbgoracle` CLI
 
-Included by default (no extra install needed for normal PDF ingest):
+If you installed with `./scripts/install/linux.sh`, setup now offers an interactive optional docs-tooling step (`docling`, `semantic`, or both).
+
+Included by default in packaged installs (no extra install needed for normal PDF ingest):
 
 - `pymupdf`
 - `pymupdf4llm`
@@ -17,16 +19,18 @@ Included by default (no extra install needed for normal PDF ingest):
 Optional extras:
 
 - Docling parser (better extraction on hard PDFs, scanned docs):
-  - packaged install: `pip install 'debugoracle[docling]'`
-  - local checkout: `pip install '.[docling]'`
+  - `pipx inject debugoracle docling`
 - Semantic search embeddings:
-  - packaged install: `pip install 'debugoracle[semantic]'`
-  - local checkout: `pip install '.[semantic]'`
+  - `pipx inject debugoracle sentence-transformers numpy`
 
-If you installed with `pipx`, add extras with:
+If your distro enforces PEP 668 (`error: externally-managed-environment`), install into an isolated environment:
 
-- `pipx inject debugoracle docling`
-- `pipx inject debugoracle sentence-transformers numpy`
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install -U pip
+python3 -m pip install debugoracle pymupdf pymupdf4llm
+```
 
 Docling first run can download large models. For offline/CI usage, pre-populate and point `DOCLING_CACHE_HOME` at a prepared cache.
 
@@ -170,15 +174,17 @@ doc/STM32F4_Reference_Manual.pdf.dbgoracle-docs/
 
 PyMuPDF import/install issue:
 
-- reinstall base deps (`pymupdf`, `pymupdf4llm`)
+- install/reinstall base deps (`pymupdf`, `pymupdf4llm`) in your active venv/pipx environment
 
 Docling not installed:
 
-- install `debugoracle[docling]` (or `.[docling]` from checkout)
+- if using pipx: `pipx inject debugoracle docling`
+- otherwise install `debugoracle[docling]` in the active environment
 
 Semantic mode not available:
 
-- install `debugoracle[semantic]` (or `.[semantic]` from checkout)
+- if using pipx: `pipx inject debugoracle sentence-transformers numpy`
+- otherwise install `debugoracle[semantic]` in the active environment
 
 No search results:
 

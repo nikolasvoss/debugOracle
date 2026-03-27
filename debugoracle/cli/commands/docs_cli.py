@@ -86,7 +86,8 @@ def _render_ingest(batch: DocsIngestBatch, *, fmt: str) -> str:
                 and not _docling_installed()
             ):
                 lines.append("  hint: extraction quality may improve with Docling")
-                lines.append("    pip install 'debugoracle[docling]'")
+                lines.append("    pipx inject debugoracle docling")
+                lines.append("    # or in the active venv: pip install 'debugoracle[docling]'")
                 lines.append(f"    dbgoracle docs ingest {result.source_pdf} --parser=docling")
     if batch.warnings:
         lines.append("Warnings:")

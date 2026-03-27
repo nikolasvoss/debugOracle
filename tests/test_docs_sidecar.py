@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import builtins
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -18,6 +19,7 @@ from debugoracle.docs_sidecar import (
     DocsIngestBatch,
     DocsIngestResult,
     DocsIndexEntry,
+    DoclingParser,
     compute_source_hash,
     discover_candidate_documents,
     ingest_documents,
@@ -110,6 +112,24 @@ class DocsSidecarTests(unittest.TestCase):
         self.assertEqual(second.results[0].ingest_state, "warning")
         self.assertEqual(second.results[0].warning_summary, "existing warning")
 
+    def test_staleness_failed_envelope_forces_reingest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manual = Path(tmpdir) / "manual.txt"
+            manual.write_text("GPIOA MODER register.\n", encoding="utf-8")
+            ingest_documents(workspace_root=tmpdir, files=[str(manual)])
+
+            sidecar = sidecar_dir_for(manual)
+            envelope_path = sidecar / ENVELOPE_FILENAME
+            envelope = json.loads(envelope_path.read_text(encoding="utf-8"))
+            envelope["ingest_state"] = "failed"
+            envelope["warning_summary"] = "old failure"
+            envelope_path.write_text(json.dumps(envelope), encoding="utf-8")
+
+            second = ingest_documents(workspace_root=tmpdir, files=[str(manual)])
+
+        self.assertFalse(second.results[0].skipped)
+        self.assertNotEqual(second.results[0].ingest_state, "failed")
+
     def test_force_flag_bypasses_staleness(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             manual = Path(tmpdir) / "manual.txt"
@@ -158,6 +178,30 @@ class DocsSidecarTests(unittest.TestCase):
                 "chunk_count": 1,
                 "warning_summary": "",
                 "ingest_state": "clean",
+            }
+            (sidecar / ENVELOPE_FILENAME).write_text(json.dumps(envelope), encoding="utf-8")
+            (sidecar / "index.json").write_text("[]", encoding="utf-8")
+
+            fresh = is_ingest_fresh(source.resolve(), sidecar, parser_name="pymupdf")
+
+        self.assertFalse(fresh)
+
+    def test_failed_sidecar_is_not_fresh_even_when_hash_matches(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "manual.pdf"
+            source.write_bytes(b"%PDF-1.4")
+            sidecar = sidecar_dir_for(source)
+            sidecar.mkdir(parents=True)
+            envelope = {
+                "source_pdf": str(source.resolve()),
+                "parser_used": "pymupdf",
+                "derived_paths": [str(sidecar / ENVELOPE_FILENAME), str(sidecar / "index.json")],
+                "page_count": 1,
+                "chunk_count": 0,
+                "warning_summary": "failed run",
+                "ingest_state": "failed",
+                "source_hash": compute_source_hash(source.resolve()),
+                "semantic_indexed": False,
             }
             (sidecar / ENVELOPE_FILENAME).write_text(json.dumps(envelope), encoding="utf-8")
             (sidecar / "index.json").write_text("[]", encoding="utf-8")
@@ -453,6 +497,45 @@ second-page text
             rendered = _render_ingest(batch, fmt="text")
 
         self.assertIn("hint: extraction quality may improve with Docling", rendered)
+        self.assertIn("pipx inject debugoracle docling", rendered)
+        self.assertIn("pip install 'debugoracle[docling]'", rendered)
+
+    def test_docling_import_failure_surfaces_nested_module_reason(self) -> None:
+        parser = DoclingParser()
+        real_import = builtins.__import__
+
+        def fake_import(name: str, globals: object = None, locals: object = None, fromlist: object = (), level: int = 0) -> object:
+            if name == "docling.document_converter":
+                error = ModuleNotFoundError("No module named 'rapidocr'")
+                error.name = "rapidocr"
+                raise error
+            return real_import(name, globals, locals, fromlist, level)
+
+        with patch("builtins.__import__", side_effect=fake_import):
+            with self.assertRaises(RuntimeError) as ctx:
+                parser.parse(Path("/tmp/example.pdf"))
+
+        self.assertIn("Docling import failed", str(ctx.exception))
+        self.assertIn("rapidocr", str(ctx.exception))
+
+    def test_docling_missing_module_message_includes_pipx_and_venv_paths(self) -> None:
+        parser = DoclingParser()
+        real_import = builtins.__import__
+
+        def fake_import(name: str, globals: object = None, locals: object = None, fromlist: object = (), level: int = 0) -> object:
+            if name == "docling.document_converter":
+                error = ModuleNotFoundError("No module named 'docling'")
+                error.name = "docling"
+                raise error
+            return real_import(name, globals, locals, fromlist, level)
+
+        with patch("builtins.__import__", side_effect=fake_import):
+            with self.assertRaises(RuntimeError) as ctx:
+                parser.parse(Path("/tmp/example.pdf"))
+
+        message = str(ctx.exception)
+        self.assertIn("pipx inject debugoracle docling", message)
+        self.assertIn("pip install 'debugoracle[docling]'", message)
 
 
 if __name__ == "__main__":

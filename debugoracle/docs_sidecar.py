@@ -745,9 +745,12 @@ def is_ingest_fresh(
         raw = json.loads(envelope_path.read_text(encoding="utf-8"))
         stored_hash = str(raw.get("source_hash") or "")
         stored_parser = _canonical_parser_name(str(raw.get("parser_used") or ""))
+        ingest_state = str(raw.get("ingest_state") or "")
         parser_name = _canonical_parser_name(parser_name)
         semantic_indexed = bool(raw.get("semantic_indexed", False))
         if not stored_hash:
+            return False
+        if ingest_state == "failed":
             return False
         if stored_parser != parser_name:
             return False
@@ -792,7 +795,10 @@ class PyMuPDFParser:
             import fitz
             import pymupdf4llm
         except ImportError as error:
-            raise RuntimeError("Install with: pip install pymupdf pymupdf4llm") from error
+            raise RuntimeError(
+                "Install PyMuPDF deps in your tool environment "
+                "(venv/pipx), e.g. `python3 -m pip install pymupdf pymupdf4llm`."
+            ) from error
 
         doc = fitz.open(str(source))
         total_pages = len(doc)
@@ -834,14 +840,28 @@ class DoclingParser:
     ) -> DocsParseResult:
         try:
             from docling.document_converter import DocumentConverter
-        except ImportError as error:
-            raise RuntimeError("Install with: pip install 'debugoracle[docling]'") from error
+        except ModuleNotFoundError as error:
+            if error.name == "docling":
+                raise RuntimeError(
+                    "Docling is not installed in this DebugOracle environment. "
+                    "If using pipx, run: pipx inject debugoracle docling. "
+                    "Otherwise install in the active environment: pip install 'debugoracle[docling]'"
+                ) from error
+            raise RuntimeError(
+                "Docling import failed in this DebugOracle environment. "
+                f"Original error: {error}"
+            ) from error
+        except Exception as error:
+            raise RuntimeError(
+                "Docling import failed in this DebugOracle environment. "
+                f"Original error: {error}"
+            ) from error
 
         if progress_cb:
             progress_cb(0, 1, f"{source.name} (Docling -- may take 1-5 min)")
 
-        converter = DocumentConverter()
         try:
+            converter = DocumentConverter()
             result = converter.convert(str(source))
         except Exception as error:
             raise RuntimeError(
