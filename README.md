@@ -58,6 +58,29 @@ The most useful MI capture includes:
 
 ## Commands
 
+### Manual and datasheet docs ingestion
+
+DebugOracle can ingest local manuals/datasheets into a nearby docs sidecar for local search during debugging.
+
+Quick start:
+
+```bash
+dbgoracle docs ingest --file doc/STM32F4_Reference_Manual.pdf
+dbgoracle docs search "USART baud rate register"
+dbgoracle docs status
+```
+
+Key points:
+
+- Default parser is `pymupdf` (`pymupdf` + `pymupdf4llm` are installed with base dependencies).
+- Optional parser: `--parser docling` (requires `debugoracle[docling]`).
+- Optional hybrid search: ingest with `--semantic`, search with `--semantic` (requires `debugoracle[semantic]`).
+- If you run ingest without `--file`/`--folder`, DebugOracle discovers likely PDFs under `doc/` and `docs/` and requires `--yes` confirmation.
+- Sidecar artifacts are written next to each source as `<source>.dbgoracle-docs/`.
+
+Full usage and troubleshooting:
+[`docs/docs-ingestion.md`](docs/docs-ingestion.md)
+
 ### Bootstrap a workspace
 
 For a fresh project with an installed CLI, start here:

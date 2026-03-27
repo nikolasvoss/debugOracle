@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import re
 from collections import Counter
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Protocol
 
 DISCOVERY_DIRECTORIES = ("doc", "docs")
 DISCOVERY_SUFFIXES = (".pdf",)
@@ -14,6 +15,20 @@ SUPPORTED_INGEST_SUFFIXES = (".pdf", ".txt", ".md", ".rst")
 SIDECAR_SUFFIX = ".dbgoracle-docs"
 ENVELOPE_FILENAME = "envelope.json"
 INDEX_FILENAME = "index.json"
+EMBEDDINGS_FILENAME = "embeddings.npy"
+
+ProgressCallback = Callable[[int, int, str], None]
+
+
+@dataclass(frozen=True)
+class DocsChunk:
+    chunk_id: str
+    heading_path: str
+    chunk_type: str
+    page_start: int
+    page_end: int
+    text: str
+    table_rows: list[list[str]] | None = None
 
 
 @dataclass
@@ -25,6 +40,8 @@ class DocsEnvelope:
     chunk_count: int
     warning_summary: str
     ingest_state: str
+    source_hash: str = ""
+    semantic_indexed: bool = False
     warnings: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -41,6 +58,8 @@ class DocsEnvelope:
             chunk_count=_to_int(raw.get("chunk_count")),
             warning_summary=str(raw.get("warning_summary") or ""),
             ingest_state=str(raw.get("ingest_state") or "failed"),
+            source_hash=str(raw.get("source_hash") or ""),
+            semantic_indexed=bool(raw.get("semantic_indexed", False)),
             warnings=[str(item) for item in raw.get("warnings", []) if item is not None],
         )
 
@@ -55,6 +74,9 @@ class DocsIndexEntry:
     tokens: list[str]
     token_count: int
     term_freq: dict[str, int]
+    heading_path: str = ""
+    chunk_type: str = "prose"
+    table_rows: list[list[str]] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -64,10 +86,20 @@ class DocsIndexEntry:
         raw = raw if isinstance(raw, dict) else {}
         tokens = [str(item) for item in raw.get("tokens", []) if item is not None]
         term_freq_raw = raw.get("term_freq", {})
-        term_freq = {
-            str(key): _to_int(value)
-            for key, value in term_freq_raw.items()
-        } if isinstance(term_freq_raw, dict) else {}
+        term_freq = (
+            {str(key): _to_int(value) for key, value in term_freq_raw.items()}
+            if isinstance(term_freq_raw, dict)
+            else {}
+        )
+        table_rows_raw = raw.get("table_rows")
+        table_rows: list[list[str]] | None = None
+        if isinstance(table_rows_raw, list):
+            parsed_rows: list[list[str]] = []
+            for row in table_rows_raw:
+                if isinstance(row, list):
+                    parsed_rows.append([str(cell) for cell in row])
+            table_rows = parsed_rows or None
+
         return cls(
             chunk_id=str(raw.get("chunk_id") or ""),
             source_pdf=str(raw.get("source_pdf") or ""),
@@ -77,6 +109,9 @@ class DocsIndexEntry:
             tokens=tokens,
             token_count=max(0, _to_int(raw.get("token_count"), len(tokens))),
             term_freq=term_freq,
+            heading_path=str(raw.get("heading_path") or ""),
+            chunk_type=str(raw.get("chunk_type") or "prose"),
+            table_rows=table_rows,
         )
 
 
@@ -84,6 +119,24 @@ class DocsIndexEntry:
 class DocsArtifact:
     envelope: DocsEnvelope
     index_entries: list[DocsIndexEntry] = field(default_factory=list)
+
+
+@dataclass
+class DocsParseResult:
+    chunks: list[DocsChunk]
+    parser_used: str
+    warnings: list[str] = field(default_factory=list)
+    page_count: int = 0
+    empty_page_count: int = 0
+
+
+class DocsParser(Protocol):
+    def parse(
+        self,
+        source: Path,
+        *,
+        progress_cb: ProgressCallback | None = None,
+    ) -> DocsParseResult: ...
 
 
 @dataclass
@@ -95,6 +148,7 @@ class DocsIngestResult:
     chunk_count: int
     ingest_state: str
     warning_summary: str
+    skipped: bool = False
     warnings: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -122,6 +176,8 @@ class DocsSearchHit:
     ingest_state: str
     warning_summary: str
     text: str
+    heading_path: str = ""
+    table_rows: list[list[str]] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
@@ -159,6 +215,16 @@ class DocsStatusEntry:
         return asdict(self)
 
 
+def make_parser(parser_name: str) -> DocsParser:
+    if parser_name == "pymupdf":
+        return PyMuPDFParser()
+    if parser_name == "docling":
+        return DoclingParser()
+    if parser_name == "plaintext":
+        return PlainTextParser()
+    raise ValueError(f"Unknown parser: {parser_name!r}")
+
+
 def discover_candidate_documents(workspace_root: str | Path) -> list[Path]:
     workspace = Path(workspace_root).expanduser().resolve()
     candidates: list[Path] = []
@@ -177,6 +243,10 @@ def ingest_documents(
     files: list[str] | None = None,
     folders: list[str] | None = None,
     confirm_discovered: bool = False,
+    parser_name: str = "pymupdf",
+    semantic: bool = False,
+    force: bool = False,
+    progress_cb: ProgressCallback | None = None,
 ) -> DocsIngestBatch:
     explicit_files = files or []
     explicit_folders = folders or []
@@ -214,7 +284,23 @@ def ingest_documents(
             )
         selected = discovered
 
-    results = [ingest_document(path) for path in selected]
+    results: list[DocsIngestResult] = []
+    for source in selected:
+        try:
+            results.append(
+                ingest_document(
+                    source,
+                    parser_name=parser_name,
+                    semantic=semantic,
+                    force=force,
+                    progress_cb=progress_cb,
+                )
+            )
+        except Exception as error:
+            message = f"Ingest failed for '{source}': {error}"
+            warnings.append(message)
+            results.append(_build_failed_result(Path(source), parser_name, [message]))
+
     return DocsIngestBatch(
         results=results,
         discovered_candidates=[str(path) for path in discovered],
@@ -223,14 +309,50 @@ def ingest_documents(
     )
 
 
-def ingest_document(path: str | Path) -> DocsIngestResult:
+def ingest_document(
+    path: str | Path,
+    *,
+    parser_name: str = "pymupdf",
+    semantic: bool = False,
+    force: bool = False,
+    progress_cb: ProgressCallback | None = None,
+) -> DocsIngestResult:
     source = Path(path).expanduser().resolve()
-    pages: list[str] = []
+    sidecar_dir = sidecar_dir_for(source)
+    expected_parser = "plain-text" if source.suffix.lower() in {".txt", ".md", ".rst"} else parser_name
+
+    if not force and is_ingest_fresh(source, sidecar_dir, parser_name=expected_parser, semantic=semantic):
+        artifact = load_docs_artifact(sidecar_dir)
+        return DocsIngestResult(
+            source_pdf=str(source),
+            sidecar_dir=str(sidecar_dir),
+            parser_used=artifact.envelope.parser_used,
+            page_count=artifact.envelope.page_count,
+            chunk_count=artifact.envelope.chunk_count,
+            ingest_state=artifact.envelope.ingest_state,
+            warning_summary=artifact.envelope.warning_summary,
+            skipped=True,
+            warnings=list(artifact.envelope.warnings),
+        )
+
     warnings: list[str] = []
-    parser_used = "unknown"
     fatal_error: str | None = None
+    parser_used = parser_name
+    parse_result: DocsParseResult | None = None
+
     try:
-        pages, parser_used, warnings = _extract_document_pages(source)
+        if source.suffix.lower() in {".txt", ".md", ".rst"}:
+            parse_result = make_parser("plaintext").parse(source, progress_cb=progress_cb)
+        elif source.suffix.lower() == ".pdf":
+            if parser_name == "plaintext":
+                raise RuntimeError(
+                    "Parser 'plaintext' is not supported for PDF ingestion. Use --parser=pymupdf or --parser=docling."
+                )
+            parse_result = make_parser(parser_name).parse(source, progress_cb=progress_cb)
+        else:
+            raise RuntimeError(f"Unsupported document type for ingestion: {source.suffix or '<none>'}")
+        parser_used = parse_result.parser_used
+        warnings.extend(parse_result.warnings)
     except OSError as error:
         fatal_error = f"Could not read source document: {error}"
         warnings.append(fatal_error)
@@ -238,27 +360,51 @@ def ingest_document(path: str | Path) -> DocsIngestResult:
         fatal_error = str(error)
         warnings.append(fatal_error)
 
-    index_entries = build_index_entries(source, pages)
+    chunks = parse_result.chunks if parse_result else []
+    page_count = parse_result.page_count if parse_result else 0
+    empty_page_count = parse_result.empty_page_count if parse_result else 0
+
+    index_entries = build_index_entries(source, chunks)
+
+    semantic_indexed = False
+    if fatal_error is None and semantic and index_entries:
+        try:
+            embeddings = encode_embeddings(chunks)
+            save_embeddings(sidecar_dir, embeddings)
+            semantic_indexed = True
+        except RuntimeError as error:
+            fatal_error = str(error)
+            warnings.append(fatal_error)
+        except Exception as error:
+            warnings.append(f"Semantic indexing failed: {error}")
+
     if fatal_error is not None:
         ingest_state = "failed"
     else:
         ingest_state = evaluate_ingest_state(
-            page_count=len(pages),
+            page_count=page_count,
             chunk_count=len(index_entries),
             warnings=warnings,
+            empty_page_count=empty_page_count,
         )
-    sidecar_dir = sidecar_dir_for(source)
+
     sidecar_dir.mkdir(parents=True, exist_ok=True)
     envelope_path = sidecar_dir / ENVELOPE_FILENAME
     index_path = sidecar_dir / INDEX_FILENAME
+    derived_paths = [str(envelope_path), str(index_path)]
+    if semantic_indexed:
+        derived_paths.append(str(sidecar_dir / EMBEDDINGS_FILENAME))
+
     envelope = DocsEnvelope(
         source_pdf=str(source),
         parser_used=parser_used,
-        derived_paths=[str(envelope_path), str(index_path)],
-        page_count=len(pages),
+        derived_paths=derived_paths,
+        page_count=page_count,
         chunk_count=len(index_entries),
         warning_summary=summarize_warnings(warnings),
         ingest_state=ingest_state,
+        source_hash=compute_source_hash(source) if source.exists() else "",
+        semantic_indexed=semantic_indexed,
         warnings=warnings,
     )
     save_docs_artifact(DocsArtifact(envelope=envelope, index_entries=index_entries), sidecar_dir)
@@ -266,7 +412,7 @@ def ingest_document(path: str | Path) -> DocsIngestResult:
         source_pdf=str(source),
         sidecar_dir=str(sidecar_dir),
         parser_used=parser_used,
-        page_count=len(pages),
+        page_count=page_count,
         chunk_count=len(index_entries),
         ingest_state=ingest_state,
         warning_summary=envelope.warning_summary,
@@ -298,13 +444,11 @@ def resolve_document_inputs(
             if child.is_file() and child.suffix.lower() in SUPPORTED_INGEST_SUFFIXES:
                 selected.append(child.resolve())
     return (
-        _dedupe_paths(
-            [
-                path
-                for path in selected
-                if path.suffix.lower() in SUPPORTED_INGEST_SUFFIXES
-            ]
-        ),
+        _dedupe_paths([
+            path
+            for path in selected
+            if path.suffix.lower() in SUPPORTED_INGEST_SUFFIXES
+        ]),
         invalid_inputs,
     )
 
@@ -315,25 +459,24 @@ def search_documents(
     query: str,
     limit: int = 5,
     files: list[str] | None = None,
+    semantic: bool = False,
 ) -> DocsSearchResult:
     artifacts, warnings = load_docs_artifacts(workspace_root=workspace_root, files=files or [])
-    entries = [
-        (artifact.envelope, index_entry)
-        for artifact in artifacts
-        for index_entry in artifact.index_entries
-    ]
+    entries = [(artifact.envelope, index_entry) for artifact in artifacts for index_entry in artifact.index_entries]
     if not entries:
         return DocsSearchResult(query=query, warnings=warnings)
     query_tokens = tokenize(query)
     if not query_tokens and not query.strip():
         return DocsSearchResult(query=query, warnings=warnings)
+
     document_frequency = Counter()
     for _, index_entry in entries:
         document_frequency.update(set(index_entry.tokens))
     average_length = sum(max(1, entry.token_count) for _, entry in entries) / len(entries)
-    results: list[DocsSearchHit] = []
+
+    bm25_scores: list[float] = []
     query_text = query.strip().lower()
-    for envelope, index_entry in entries:
+    for _, index_entry in entries:
         score = _bm25_score(
             query_tokens=query_tokens,
             index_entry=index_entry,
@@ -344,6 +487,22 @@ def search_documents(
         text_lower = index_entry.text.lower()
         if query_text and query_text in text_lower:
             score += 2.0
+        bm25_scores.append(score)
+
+    final_scores = list(bm25_scores)
+    if semantic:
+        cosine_scores, semantic_warnings = _semantic_scores_for_entries(entries, query)
+        warnings.extend(semantic_warnings)
+        if cosine_scores is not None:
+            normalized_bm25 = _normalize_scores(bm25_scores)
+            normalized_cosine = _normalize_scores(cosine_scores)
+            final_scores = [
+                0.6 * bm25 + 0.4 * cosine
+                for bm25, cosine in zip(normalized_bm25, normalized_cosine)
+            ]
+
+    results: list[DocsSearchHit] = []
+    for score, (envelope, index_entry) in zip(final_scores, entries):
         if score <= 0:
             continue
         results.append(
@@ -355,14 +514,12 @@ def search_documents(
                 ingest_state=envelope.ingest_state,
                 warning_summary=envelope.warning_summary,
                 text=index_entry.text,
+                heading_path=index_entry.heading_path,
+                table_rows=index_entry.table_rows,
             )
         )
     results.sort(key=lambda item: (-item.score, item.source_pdf, item.page_start, item.page_end))
-    return DocsSearchResult(
-        query=query,
-        hits=results[: max(1, limit)],
-        warnings=warnings,
-    )
+    return DocsSearchResult(query=query, hits=results[: max(1, limit)], warnings=warnings)
 
 
 def status_documents(
@@ -488,39 +645,60 @@ def save_docs_artifact(artifact: DocsArtifact, sidecar_dir: str | Path) -> None:
     )
 
 
+def save_embeddings(sidecar_dir: str | Path, embeddings: Any) -> None:
+    sidecar = Path(sidecar_dir).expanduser().resolve()
+    sidecar.mkdir(parents=True, exist_ok=True)
+    try:
+        import numpy as np
+    except ImportError as error:
+        raise RuntimeError("Install with: pip install 'debugoracle[semantic]'") from error
+    np.save(sidecar / EMBEDDINGS_FILENAME, embeddings)
+
+
 def sidecar_dir_for(source_path: str | Path) -> Path:
     source = Path(source_path).expanduser().resolve()
     return source.with_name(f"{source.name}{SIDECAR_SUFFIX}")
 
 
-def build_index_entries(source_path: str | Path, pages: list[str]) -> list[DocsIndexEntry]:
+def build_index_entries(source_path: str | Path, chunks: list[DocsChunk]) -> list[DocsIndexEntry]:
     entries: list[DocsIndexEntry] = []
     source = str(Path(source_path).expanduser().resolve())
-    for page_number, page_text in enumerate(pages, start=1):
-        normalized = normalize_text(page_text)
+    for chunk in chunks:
+        normalized = normalize_text(chunk.text)
         if not normalized:
             continue
         tokens = tokenize(normalized)
         term_freq = Counter(tokens)
         entries.append(
             DocsIndexEntry(
-                chunk_id=f"page-{page_number}",
+                chunk_id=chunk.chunk_id,
                 source_pdf=source,
-                page_start=page_number,
-                page_end=page_number,
+                page_start=chunk.page_start,
+                page_end=chunk.page_end,
                 text=normalized,
                 tokens=tokens,
                 token_count=len(tokens),
                 term_freq=dict(term_freq),
+                heading_path=chunk.heading_path,
+                chunk_type=chunk.chunk_type,
+                table_rows=chunk.table_rows,
             )
         )
     return entries
 
 
-def evaluate_ingest_state(*, page_count: int, chunk_count: int, warnings: list[str]) -> str:
+def evaluate_ingest_state(
+    *,
+    page_count: int,
+    chunk_count: int,
+    warnings: list[str],
+    empty_page_count: int = 0,
+) -> str:
     if page_count <= 0:
         return "failed"
     if chunk_count <= 0:
+        return "partial"
+    if empty_page_count > 0:
         return "partial"
     if warnings:
         return "partial" if chunk_count < page_count else "warning"
@@ -549,33 +727,345 @@ def normalize_text(text: str) -> str:
     return "\n".join(line for line in lines if line).strip()
 
 
-def _extract_document_pages(source: Path) -> tuple[list[str], str, list[str]]:
-    suffix = source.suffix.lower()
-    if suffix in {".txt", ".md", ".rst"}:
-        text = source.read_text(encoding="utf-8", errors="replace")
-        return [text], "plain-text", []
-    if suffix == ".pdf":
-        return _extract_pdf_pages(source)
-    raise RuntimeError(f"Unsupported document type for ingestion: {source.suffix or '<none>'}")
+def compute_source_hash(source: Path) -> str:
+    return hashlib.sha256(source.read_bytes()).hexdigest()
 
 
-def _extract_pdf_pages(source: Path) -> tuple[list[str], str, list[str]]:
+def is_ingest_fresh(
+    source: Path,
+    sidecar_dir: Path,
+    *,
+    parser_name: str,
+    semantic: bool = False,
+) -> bool:
+    envelope_path = sidecar_dir / ENVELOPE_FILENAME
+    if not envelope_path.exists():
+        return False
     try:
-        from pypdf import PdfReader
-    except ImportError as error:
-        raise RuntimeError(
-            "PDF parsing requires the optional 'pypdf' package for dbgoracle docs ingest."
-        ) from error
+        raw = json.loads(envelope_path.read_text(encoding="utf-8"))
+        stored_hash = str(raw.get("source_hash") or "")
+        stored_parser = _canonical_parser_name(str(raw.get("parser_used") or ""))
+        parser_name = _canonical_parser_name(parser_name)
+        semantic_indexed = bool(raw.get("semantic_indexed", False))
+        if not stored_hash:
+            return False
+        if stored_parser != parser_name:
+            return False
+        if semantic and not semantic_indexed:
+            return False
+        return stored_hash == compute_source_hash(source)
+    except (OSError, json.JSONDecodeError):
+        return False
 
-    reader = PdfReader(str(source))
-    pages: list[str] = []
+
+class PlainTextParser:
+    def parse(
+        self,
+        source: Path,
+        *,
+        progress_cb: ProgressCallback | None = None,
+    ) -> DocsParseResult:
+        text = source.read_text(encoding="utf-8", errors="replace")
+        if progress_cb:
+            progress_cb(0, 1, source.name)
+            progress_cb(1, 1, source.name)
+        chunk = DocsChunk(
+            chunk_id="page-1",
+            heading_path="",
+            chunk_type="prose",
+            page_start=1,
+            page_end=1,
+            text=text,
+            table_rows=None,
+        )
+        return DocsParseResult(chunks=[chunk], parser_used="plain-text", warnings=[], page_count=1)
+
+
+class PyMuPDFParser:
+    def parse(
+        self,
+        source: Path,
+        *,
+        progress_cb: ProgressCallback | None = None,
+    ) -> DocsParseResult:
+        try:
+            import fitz
+            import pymupdf4llm
+        except ImportError as error:
+            raise RuntimeError("Install with: pip install pymupdf pymupdf4llm") from error
+
+        doc = fitz.open(str(source))
+        total_pages = len(doc)
+        if progress_cb:
+            progress_cb(0, total_pages, source.name)
+        md = pymupdf4llm.to_markdown(doc)
+        if progress_cb:
+            progress_cb(total_pages, total_pages, source.name)
+
+        empty_page_count = 0
+        warnings: list[str] = []
+        for page_index in range(total_pages):
+            text = normalize_text(doc[page_index].get_text("text") or "")
+            if not text:
+                warnings.append(f"Page {page_index + 1} extracted no text.")
+                empty_page_count += 1
+
+        chunks, split_warnings = split_markdown_by_headings(md, source, doc=doc)
+        warnings.extend(split_warnings)
+
+        if not chunks:
+            chunks = _fallback_page_chunks(doc)
+
+        return DocsParseResult(
+            chunks=chunks,
+            parser_used="pymupdf",
+            warnings=warnings,
+            page_count=total_pages,
+            empty_page_count=empty_page_count,
+        )
+
+
+class DoclingParser:
+    def parse(
+        self,
+        source: Path,
+        *,
+        progress_cb: ProgressCallback | None = None,
+    ) -> DocsParseResult:
+        try:
+            from docling.document_converter import DocumentConverter
+        except ImportError as error:
+            raise RuntimeError("Install with: pip install 'debugoracle[docling]'") from error
+
+        if progress_cb:
+            progress_cb(0, 1, f"{source.name} (Docling -- may take 1-5 min)")
+
+        converter = DocumentConverter()
+        try:
+            result = converter.convert(str(source))
+        except Exception as error:
+            raise RuntimeError(
+                "Docling conversion failed. If running offline, pre-populate DOCLING_CACHE_HOME with models. "
+                f"Original error: {error}"
+            ) from error
+
+        md = result.document.export_to_markdown()
+        chunks, warnings = split_markdown_by_headings(md, source, doc=None)
+        if not chunks:
+            chunks = [
+                DocsChunk(
+                    chunk_id="page-1",
+                    heading_path="",
+                    chunk_type="prose",
+                    page_start=1,
+                    page_end=1,
+                    text=md,
+                    table_rows=parse_markdown_table(md),
+                )
+            ]
+        if progress_cb:
+            progress_cb(1, 1, source.name)
+
+        return DocsParseResult(
+            chunks=chunks,
+            parser_used="docling",
+            warnings=warnings,
+            page_count=max(chunk.page_end for chunk in chunks),
+        )
+
+
+def split_markdown_by_headings(
+    md: str,
+    source: Path,
+    doc: Any | None,
+) -> tuple[list[DocsChunk], list[str]]:
+    _ = source
+    text = md or ""
+    lines = text.splitlines()
+    chunks: list[DocsChunk] = []
     warnings: list[str] = []
-    for page_number, page in enumerate(reader.pages, start=1):
-        text = normalize_text(page.extract_text() or "")
-        if not text:
-            warnings.append(f"Page {page_number} extracted no text.")
-        pages.append(text)
-    return pages, "pypdf", warnings
+
+    heading_stack: list[str] = []
+    current_heading = ""
+    current_level = 1
+    current_page = 1
+    page_start = 1
+    body_lines: list[str] = []
+    heading_seen = False
+
+    def flush_chunk(page_end: int) -> None:
+        nonlocal body_lines, page_start
+        body = "\n".join(body_lines).strip()
+        body_lines = []
+        if not body:
+            page_start = current_page
+            return
+        chunk_id = _slugify(current_heading) if current_heading else f"page-{page_start}"
+        table_rows = parse_markdown_table(body)
+        chunks.append(
+            DocsChunk(
+                chunk_id=chunk_id,
+                heading_path=current_heading,
+                chunk_type=_classify_chunk_type(body, table_rows),
+                page_start=max(1, page_start),
+                page_end=max(1, page_end),
+                text=body,
+                table_rows=table_rows,
+            )
+        )
+        page_start = current_page
+
+    for line in lines:
+        page_marker = _parse_page_marker(line)
+        if page_marker is not None:
+            flush_chunk(page_end=max(1, page_marker - 1))
+            current_page = page_marker
+            page_start = page_marker
+            continue
+
+        heading_match = re.match(r"^(#{1,6})\s+(.+?)\s*$", line)
+        if heading_match:
+            heading_seen = True
+            flush_chunk(page_end=current_page)
+            level = len(heading_match.group(1))
+            heading = heading_match.group(2).strip()
+            if level <= 0:
+                level = 1
+            current_level = level
+            if len(heading_stack) < current_level:
+                heading_stack.extend([""] * (current_level - len(heading_stack)))
+            heading_stack = heading_stack[:current_level]
+            heading_stack[current_level - 1] = heading
+            current_heading = " / ".join(part for part in heading_stack if part)
+            page_start = current_page
+            continue
+
+        body_lines.append(line)
+
+    flush_chunk(page_end=current_page)
+
+    if not heading_seen:
+        if doc is not None:
+            return _fallback_page_chunks(doc), warnings
+        fallback = normalize_text(text)
+        if not fallback:
+            return [], warnings
+        rows = parse_markdown_table(fallback)
+        return [
+            DocsChunk(
+                chunk_id="page-1",
+                heading_path="",
+                chunk_type=_classify_chunk_type(fallback, rows),
+                page_start=1,
+                page_end=1,
+                text=fallback,
+                table_rows=rows,
+            )
+        ], warnings
+
+    if not chunks and doc is not None:
+        return _fallback_page_chunks(doc), warnings
+    return chunks, warnings
+
+
+def parse_markdown_table(text: str) -> list[list[str]] | None:
+    rows: list[list[str]] = []
+    block_lines: list[str] = []
+
+    def flush_block() -> None:
+        nonlocal block_lines
+        if len(block_lines) < 2:
+            block_lines = []
+            return
+        for line in block_lines:
+            stripped = line.strip()
+            if not stripped.startswith("|"):
+                continue
+            cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+            if not cells:
+                continue
+            if all(re.fullmatch(r":?-{3,}:?", cell or "") for cell in cells):
+                continue
+            rows.append(cells)
+        block_lines = []
+
+    for line in text.splitlines():
+        stripped = line.strip()
+        if "|" in stripped and stripped.startswith("|"):
+            block_lines.append(stripped)
+            continue
+        flush_block()
+    flush_block()
+    return rows or None
+
+
+def encode_embeddings(chunks: list[DocsChunk]) -> Any:
+    try:
+        from sentence_transformers import SentenceTransformer
+        import numpy as np
+    except ImportError as error:
+        raise RuntimeError("Install with: pip install 'debugoracle[semantic]'") from error
+    model = SentenceTransformer("all-MiniLM-L6-v2")
+    texts = [chunk.text for chunk in chunks]
+    embeddings = model.encode(texts, convert_to_numpy=True, show_progress_bar=False)
+    if not isinstance(embeddings, np.ndarray):
+        embeddings = np.asarray(embeddings)
+    return embeddings
+
+
+def _semantic_scores_for_entries(
+    entries: list[tuple[DocsEnvelope, DocsIndexEntry]],
+    query: str,
+) -> tuple[list[float] | None, list[str]]:
+    try:
+        from sentence_transformers import SentenceTransformer
+        import numpy as np
+    except ImportError as error:
+        return None, [f"Semantic search unavailable: {error}"]
+
+    model = SentenceTransformer("all-MiniLM-L6-v2")
+    query_embedding = model.encode([query], convert_to_numpy=True, show_progress_bar=False)
+    query_vector = query_embedding[0]
+
+    grouped: dict[str, list[tuple[int, DocsEnvelope, DocsIndexEntry]]] = {}
+    for idx, (envelope, entry) in enumerate(entries):
+        grouped.setdefault(envelope.source_pdf, []).append((idx, envelope, entry))
+
+    scores = [0.0] * len(entries)
+    warnings: list[str] = []
+
+    for source_pdf, group in grouped.items():
+        sidecar_dir = sidecar_dir_for(source_pdf)
+        embeddings_path = sidecar_dir / EMBEDDINGS_FILENAME
+        if not embeddings_path.exists():
+            continue
+        try:
+            embeddings = np.load(embeddings_path)
+            if embeddings.ndim == 1:
+                embeddings = embeddings.reshape(1, -1)
+            if embeddings.shape[0] != len(group):
+                warnings.append(
+                    f"Semantic embeddings row count mismatch for '{source_pdf}'; falling back to BM25 for this file."
+                )
+                continue
+            denom = np.linalg.norm(embeddings, axis=1) * max(np.linalg.norm(query_vector), 1e-12)
+            cosine = np.dot(embeddings, query_vector) / np.maximum(denom, 1e-12)
+            for (global_index, _, _), cosine_value in zip(group, cosine):
+                scores[global_index] = float(cosine_value)
+        except Exception as error:
+            warnings.append(
+                f"Could not read semantic embeddings for '{source_pdf}': {error}. Falling back to BM25 for this file."
+            )
+
+    return scores, warnings
+
+
+def _normalize_scores(scores: list[float]) -> list[float]:
+    min_score = min(scores, default=0.0)
+    max_score = max(scores, default=1.0)
+    if max_score == min_score:
+        return [1.0 if score > 0 else 0.0 for score in scores]
+    return [(score - min_score) / (max_score - min_score) for score in scores]
 
 
 def _bm25_score(
@@ -595,13 +1085,9 @@ def _bm25_score(
         if term_frequency <= 0:
             continue
         doc_freq = document_frequency.get(token, 0)
-        inverse_document_frequency = math.log(
-            1.0 + (corpus_size - doc_freq + 0.5) / (doc_freq + 0.5)
-        )
+        inverse_document_frequency = math.log(1.0 + (corpus_size - doc_freq + 0.5) / (doc_freq + 0.5))
         denominator = term_frequency + k1 * (1.0 - b + b * (doc_length / max(1.0, average_length)))
-        score += inverse_document_frequency * (
-            term_frequency * (k1 + 1.0) / max(1.0, denominator)
-        )
+        score += inverse_document_frequency * (term_frequency * (k1 + 1.0) / max(1.0, denominator))
     return score
 
 
@@ -636,3 +1122,83 @@ def _to_int(value: object, default: int = 0) -> int:
         return int(value)  # type: ignore[arg-type]
     except (TypeError, ValueError):
         return default
+
+
+def _canonical_parser_name(name: str) -> str:
+    return "plain-text" if name == "plaintext" else name
+
+
+def _slugify(heading_path: str) -> str:
+    cleaned = re.sub(r"[^a-z0-9]+", "-", heading_path.lower()).strip("-")
+    return f"sec-{cleaned}" if cleaned else "page-1"
+
+
+def _parse_page_marker(line: str) -> int | None:
+    # pymupdf4llm commonly emits markers like: <!-- Page 3 -->
+    match = re.search(r"<!--\s*Page\s+(\d+)\s*-->", line, flags=re.IGNORECASE)
+    if match:
+        return max(1, int(match.group(1)))
+    return None
+
+
+def _classify_chunk_type(text: str, table_rows: list[list[str]] | None) -> str:
+    if not table_rows:
+        return "prose"
+    non_table_lines = [line for line in text.splitlines() if "|" not in line]
+    return "table" if not any(line.strip() for line in non_table_lines) else "mixed"
+
+
+def _fallback_page_chunks(doc: Any) -> list[DocsChunk]:
+    chunks: list[DocsChunk] = []
+    for page_index in range(len(doc)):
+        page_num = page_index + 1
+        try:
+            page_md = doc[page_index].get_text("markdown") or ""
+        except Exception:
+            page_md = ""
+        normalized = normalize_text(page_md)
+        if not normalized:
+            continue
+        rows = parse_markdown_table(normalized)
+        chunks.append(
+            DocsChunk(
+                chunk_id=f"page-{page_num}",
+                heading_path="",
+                chunk_type=_classify_chunk_type(normalized, rows),
+                page_start=page_num,
+                page_end=page_num,
+                text=normalized,
+                table_rows=rows,
+            )
+        )
+    return chunks
+
+
+def _build_failed_result(source: Path, parser_name: str, warnings: list[str]) -> DocsIngestResult:
+    sidecar_dir = sidecar_dir_for(source)
+    sidecar_dir.mkdir(parents=True, exist_ok=True)
+    envelope_path = sidecar_dir / ENVELOPE_FILENAME
+    index_path = sidecar_dir / INDEX_FILENAME
+    envelope = DocsEnvelope(
+        source_pdf=str(source.resolve()),
+        parser_used=parser_name,
+        derived_paths=[str(envelope_path), str(index_path)],
+        page_count=0,
+        chunk_count=0,
+        warning_summary=summarize_warnings(warnings),
+        ingest_state="failed",
+        source_hash=compute_source_hash(source) if source.exists() else "",
+        semantic_indexed=False,
+        warnings=warnings,
+    )
+    save_docs_artifact(DocsArtifact(envelope=envelope, index_entries=[]), sidecar_dir)
+    return DocsIngestResult(
+        source_pdf=str(source.resolve()),
+        sidecar_dir=str(sidecar_dir),
+        parser_used=parser_name,
+        page_count=0,
+        chunk_count=0,
+        ingest_state="failed",
+        warning_summary=envelope.warning_summary,
+        warnings=warnings,
+    )

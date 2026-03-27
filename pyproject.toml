@@ -8,11 +8,14 @@ version = "0.1.0"
 description = "Passive embedded debug evidence packager for ChatGPT"
 requires-python = ">=3.10"
 dependencies = [
-    "pypdf>=5,<6",
+    "pymupdf>=1.24,<2",
+    "pymupdf4llm>=0.0.17",
 ]
 
 [project.optional-dependencies]
-dev = ["pyright"]
+docling = ["docling>=2.0"]
+semantic = ["sentence-transformers>=2.7", "numpy>=1.26"]
+dev = ["pyright", "pytest"]
 
 [project.scripts]
 dbgoracle = "debugoracle:main"

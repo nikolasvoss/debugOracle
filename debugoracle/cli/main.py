@@ -295,6 +295,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="Confirm ingestion of discovered PDFs when no explicit inputs are given",
     )
     docs_ingest.add_argument(
+        "--parser",
+        choices=["pymupdf", "docling"],
+        default="pymupdf",
+        help="Parser backend for PDF ingestion",
+    )
+    docs_ingest.add_argument(
+        "--semantic",
+        action="store_true",
+        help="Build semantic embeddings for hybrid search (requires optional dependency)",
+    )
+    docs_ingest.add_argument(
+        "--force",
+        action="store_true",
+        help="Force re-ingest even when source hash is unchanged",
+    )
+    docs_ingest.add_argument(
         "--format",
         choices=["text", "json"],
         default="text",
@@ -323,6 +339,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=positive_int,
         default=5,
         help="Maximum number of search results to return",
+    )
+    docs_search.add_argument(
+        "--semantic",
+        action="store_true",
+        help="Enable hybrid BM25 + semantic search when embeddings are available",
     )
     docs_search.add_argument(
         "--format",

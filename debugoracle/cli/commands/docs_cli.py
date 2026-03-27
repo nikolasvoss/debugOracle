@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 
 from ...docs_sidecar import (
     DocsIngestBatch,
+    ProgressCallback,
     DocsSearchResult,
     DocsStatusEntry,
     ingest_documents,
@@ -15,11 +17,16 @@ from .status_capture import emit
 
 
 def cmd_docs_ingest(args: argparse.Namespace) -> int:
+    progress_cb = _make_progress_cb(enabled=(args.format == "text" and not args.output))
     batch = ingest_documents(
         workspace_root=args.workspace_root,
         files=args.file,
         folders=args.folder,
         confirm_discovered=args.yes,
+        parser_name=args.parser,
+        semantic=args.semantic,
+        force=args.force,
+        progress_cb=progress_cb,
     )
     output = _render_ingest(batch, fmt=args.format)
     exit_code = _ingest_exit_code(batch)
@@ -33,6 +40,7 @@ def cmd_docs_search(args: argparse.Namespace) -> int:
         query=args.query,
         limit=args.limit,
         files=args.file,
+        semantic=args.semantic,
     )
     output = _render_search(result, fmt=args.format)
     emit(output, args.output)
@@ -65,12 +73,21 @@ def _render_ingest(batch: DocsIngestBatch, *, fmt: str) -> str:
     if batch.results:
         lines.append("Results:")
         for result in batch.results:
+            skipped_suffix = ", skipped=unchanged" if result.skipped else ""
             lines.append(
                 f"- {result.source_pdf}: state={result.ingest_state}, parser={result.parser_used}, "
-                f"pages={result.page_count}, chunks={result.chunk_count}"
+                f"pages={result.page_count}, chunks={result.chunk_count}{skipped_suffix}"
             )
             if result.warning_summary:
                 lines.append(f"  warnings: {result.warning_summary}")
+            if (
+                result.ingest_state in ("partial", "warning")
+                and result.parser_used == "pymupdf"
+                and not _docling_installed()
+            ):
+                lines.append("  hint: extraction quality may improve with Docling")
+                lines.append("    pip install 'debugoracle[docling]'")
+                lines.append(f"    dbgoracle docs ingest {result.source_pdf} --parser=docling")
     if batch.warnings:
         lines.append("Warnings:")
         lines.extend(f"- {warning}" for warning in batch.warnings)
@@ -91,6 +108,8 @@ def _render_search(result: DocsSearchResult, *, fmt: str) -> str:
         lines.append(
             f"- {hit.source_pdf} pages {hit.page_start}-{hit.page_end} score={hit.score:.2f} state={hit.ingest_state}"
         )
+        if hit.heading_path:
+            lines.append(f"  heading: {hit.heading_path}")
         if hit.warning_summary:
             lines.append(f"  warnings: {hit.warning_summary}")
         excerpt = hit.text.replace("\n", " ")
@@ -131,3 +150,21 @@ def _ingest_exit_code(batch: DocsIngestBatch) -> int:
     if "partial" in states:
         return 2
     return 0
+
+
+def _make_progress_cb(enabled: bool) -> ProgressCallback | None:
+    if not enabled:
+        return None
+
+    def cb(current: int, total: int, label: str) -> None:
+        total_safe = max(1, total)
+        pct = int(100 * current / total_safe)
+        print(f"\r  {label}: {current}/{total} pages ({pct}%)    ", end="", flush=True)
+        if current >= total_safe:
+            print()
+
+    return cb
+
+
+def _docling_installed() -> bool:
+    return importlib.util.find_spec("docling") is not None
