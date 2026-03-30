@@ -4,7 +4,14 @@ import hashlib
 from pathlib import Path
 from typing import Any
 
-from ..artifacts.models import ArtifactSources, EvidenceBundle, GdbSource, RegisterSource, RttSource, VariableEvidence
+from ..artifacts.models import (
+    ArtifactSources,
+    GdbSource,
+    InvestigationArtifact,
+    RegisterSource,
+    RttSource,
+    VariableEvidence,
+)
 
 
 def build_artifact_from_sources(
@@ -20,13 +27,19 @@ def build_artifact_from_sources(
     export_raw: bool = False,
     export_dir: str | Path | None = None,
     register_source: RegisterSource | None = None,
-) -> EvidenceBundle:
-    recent_rtt = _select_recent_rtt(rtt_text, rtt_window)
+) -> InvestigationArtifact:
+    rtt_window_lines = _select_rtt_window_lines(rtt_text, rtt_window)
 
-    if not recent_rtt:
-        transcript.parse_warnings.append("No RTT lines were available for this snapshot.")
-        transcript.parse_event_counts["missing-rtt"] = transcript.parse_event_counts.get("missing-rtt", 0) + 1
-        transcript.parse_event_severity_counts["warn"] = transcript.parse_event_severity_counts.get("warn", 0) + 1
+    if not rtt_window_lines:
+        transcript.parse_warnings.append(
+            "No RTT lines were available for this snapshot."
+        )
+        transcript.parse_event_counts["missing-rtt"] = (
+            transcript.parse_event_counts.get("missing-rtt", 0) + 1
+        )
+        transcript.parse_event_severity_counts["warn"] = (
+            transcript.parse_event_severity_counts.get("warn", 0) + 1
+        )
 
     if transcript.non_mi_line_count:
         transcript.parse_warnings.append(
@@ -39,9 +52,15 @@ def build_artifact_from_sources(
 
     critical_events: list[str] = []
     if not gdb_text:
-        critical_events.append("No GDB/MI input was provided before building this snapshot.")
-        transcript.parse_event_counts["critical-missing-input"] = transcript.parse_event_counts.get("critical-missing-input", 0) + 1
-        transcript.parse_event_severity_counts["warn"] = transcript.parse_event_severity_counts.get("warn", 0) + 1
+        critical_events.append(
+            "No GDB/MI input was provided before building this snapshot."
+        )
+        transcript.parse_event_counts["critical-missing-input"] = (
+            transcript.parse_event_counts.get("critical-missing-input", 0) + 1
+        )
+        transcript.parse_event_severity_counts["warn"] = (
+            transcript.parse_event_severity_counts.get("warn", 0) + 1
+        )
     if transcript.latest_stop is None:
         critical_events.append("Could not recover a stop context from the transcript.")
 
@@ -57,7 +76,9 @@ def build_artifact_from_sources(
     raw_export: dict[str, Any] = {}
     if export_dir is not None:
         should_export = export_raw or bool(
-            transcript.non_mi_line_count or transcript.mi_parse_error_count or not gdb_text
+            transcript.non_mi_line_count
+            or transcript.mi_parse_error_count
+            or not gdb_text
         )
         if should_export:
             raw_export["raw_exported"] = True
@@ -69,7 +90,7 @@ def build_artifact_from_sources(
                 )
             )
 
-    gdb_events = list(transcript.session_events)
+    gdb_events = list(transcript.events)
     rtt_lines = [line.rstrip() for line in rtt_text.splitlines()]
     has_gdb_source = bool(gdb_text) or gdb_source not in {"<missing-gdb-mi>", "<stdin>"}
     has_rtt_source = bool(rtt_text) or rtt_source is not None
@@ -102,7 +123,7 @@ def build_artifact_from_sources(
             "register_capture_mode": _register_capture_mode(sources.registers),
         }
 
-    return EvidenceBundle(
+    return InvestigationArtifact(
         snapshot_id=_make_snapshot_id(gdb_text, rtt_text, captured_at),
         captured_at=captured_at,
         stop_reason=halt_snapshot.stop_reason,
@@ -113,14 +134,13 @@ def build_artifact_from_sources(
         registers=halt_snapshot.registers,
         variable_evidence=halt_snapshot.variable_evidence,
         sources=sources,
-        recent_rtt=recent_rtt,
         parse_warnings=transcript.parse_warnings,
         source_context={},
         provenance={
             "gdb_mi_source": gdb_source,
             "rtt_source": rtt_source,
             "gdb_event_count": len(gdb_events),
-            "rtt_line_count": len(recent_rtt),
+            "rtt_line_count": len(rtt_window_lines),
             "rtt_total_line_count": len(rtt_lines),
             "rtt_window": rtt_window,
             "parse_warning_count": len(transcript.parse_warnings),
@@ -140,11 +160,10 @@ def build_artifact_from_sources(
             **register_provenance,
             **raw_export,
         },
-        session_events=gdb_events,
     )
 
 
-def _select_recent_rtt(rtt_text: str, rtt_window: int) -> list[str]:
+def _select_rtt_window_lines(rtt_text: str, rtt_window: int) -> list[str]:
     lines = [line.rstrip() for line in rtt_text.splitlines() if line.strip()]
     if rtt_window <= 0:
         return []
@@ -211,5 +230,7 @@ def _export_raw_inputs(
 
 
 def _make_snapshot_id(gdb_text: str, rtt_text: str, captured_at: str) -> str:
-    digest = hashlib.sha1(f"{captured_at}\n{gdb_text}\n{rtt_text}".encode("utf-8")).hexdigest()
+    digest = hashlib.sha1(
+        f"{captured_at}\n{gdb_text}\n{rtt_text}".encode("utf-8")
+    ).hexdigest()
     return f"snap-{digest[:12]}"

@@ -1030,7 +1030,7 @@ def emit(output: str, path: str | None) -> int:
 
 def derive_bundle_trust(bundle: InvestigationArtifact) -> dict[str, object]:
     halt_policy = evaluate_artifact_live_state(bundle.live_state)
-    snapshot_usable = bundle.snapshot_id != "invalid-snapshot" and halt_policy.allowed
+    snapshot_usable = halt_policy.allowed
     critical_warning_count = _as_int(bundle.provenance.get("critical_warning_count"))
     critical_warnings = _critical_warnings(bundle, critical_warning_count)
     action_reason = (

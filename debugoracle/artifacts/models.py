@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any, overload
 
-CURRENT_BUNDLE_SCHEMA_VERSION = "3"
+CURRENT_BUNDLE_SCHEMA_VERSION = "4"
 
 VARIABLE_BUCKET_LOCALS = "locals"
 VARIABLE_BUCKET_GLOBALS = "globals"
@@ -136,20 +136,10 @@ class InvestigationArtifact:
     registers: dict[str, str] = field(default_factory=dict)
     variable_evidence: VariableEvidence = field(default_factory=VariableEvidence)
     sources: ArtifactSources = field(default_factory=ArtifactSources)
-    recent_rtt: list[str] = field(default_factory=list)
     parse_warnings: list[str] = field(default_factory=list)
     live_state: dict[str, Any] = field(default_factory=dict)
     source_context: dict[str, Any] = field(default_factory=dict)
     provenance: dict[str, Any] = field(default_factory=dict)
-    session_events: list[SessionEvent] = field(default_factory=list)
-
-    @property
-    def watched_values(self) -> dict[str, str]:
-        values: dict[str, str] = {}
-        for entry in self.variable_evidence.all_entries():
-            if entry.value is not None:
-                values[entry.name] = entry.value
-        return values
 
     @property
     def has_embedded_gdb_source(self) -> bool:
@@ -189,9 +179,8 @@ class InvestigationArtifact:
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "InvestigationArtifact":
-        raw = raw or {}
         if not isinstance(raw, dict):
-            raw = {}
+            raise ValueError("snapshot payload must be a JSON object")
         frames = []
         for raw_frame in _as_list(raw.get("frames"), []):
             if not isinstance(raw_frame, dict):
@@ -223,11 +212,6 @@ class InvestigationArtifact:
             registers=_as_str_dict(raw.get("registers")),
             variable_evidence=variable_evidence,
             sources=sources,
-            recent_rtt=[
-                _as_optional_str(line, "")
-                for line in _as_list(raw.get("recent_rtt"), [])
-                if line is not None
-            ],
             parse_warnings=[
                 _as_optional_str(item, "")
                 for item in _as_list(raw.get("parse_warnings"), [])
@@ -236,11 +220,7 @@ class InvestigationArtifact:
             live_state=_as_any_dict(raw.get("live_state")),
             source_context=_as_any_dict(raw.get("source_context")),
             provenance=_as_any_dict(raw.get("provenance")),
-            session_events=sources.gdb.events,
         )
-
-
-EvidenceBundle = InvestigationArtifact
 
 
 @dataclass(frozen=True)
@@ -259,7 +239,6 @@ __all__ = [
     "ArtifactSources",
     "CURRENT_BUNDLE_SCHEMA_VERSION",
     "EvidenceAnswer",
-    "EvidenceBundle",
     "GdbSource",
     "InvestigationArtifact",
     "PeripheralRegisterSet",
@@ -327,79 +306,55 @@ def _parse_variable_evidence(raw: dict[str, Any]) -> VariableEvidence:
                 payload.get(VARIABLE_BUCKET_UNKNOWN), VARIABLE_BUCKET_UNKNOWN
             ),
         )
-
-    legacy = _as_str_dict(raw.get("watched_values"))
-    if not legacy:
-        return VariableEvidence()
-    return VariableEvidence(
-        unknown=[
-            VariableEntry(
-                name=name,
-                value=value,
-                bucket=VARIABLE_BUCKET_UNKNOWN,
-                availability="captured",
-                origin="legacy-watched-values",
-                order=index,
-            )
-            for index, (name, value) in enumerate(legacy.items())
-        ]
-    )
+    return VariableEvidence()
 
 
 def _parse_sources(raw: dict[str, Any]) -> ArtifactSources:
     payload = raw.get("sources")
-    if isinstance(payload, dict):
-        _gdb = payload.get("gdb")
-        _rtt = payload.get("rtt")
-        _regs = payload.get("registers")
-        gdb_raw: dict[str, Any] = _gdb if isinstance(_gdb, dict) else {}
-        rtt_raw: dict[str, Any] = _rtt if isinstance(_rtt, dict) else {}
-        registers_raw: dict[str, Any] = _regs if isinstance(_regs, dict) else {}
-        gdb_events = _parse_session_events(gdb_raw.get("events"))
-        rtt_lines = [
-            _as_optional_str(line, "")
-            for line in _as_list(rtt_raw.get("lines"), [])
-            if line is not None
-        ]
-        _gdb_event_count = _to_int(gdb_raw.get("event_count"))
-        _rtt_line_count = _to_int(rtt_raw.get("line_count"))
-        return ArtifactSources(
-            gdb=GdbSource(
-                raw_text=_as_optional_str(gdb_raw.get("raw_text")),
-                events=gdb_events,
-                event_count=_gdb_event_count
-                if _gdb_event_count is not None
-                else len(gdb_events),
-                embedded=True,
-            ),
-            rtt=RttSource(
-                raw_text=_as_optional_str(rtt_raw.get("raw_text")),
-                lines=rtt_lines,
-                line_count=_rtt_line_count
-                if _rtt_line_count is not None
-                else len(rtt_lines),
-                embedded=True,
-            ),
-            registers=_parse_register_source(registers_raw),
+    if not isinstance(payload, dict):
+        raise ValueError("snapshot payload is missing the canonical 'sources' object")
+    raw_gdb = payload.get("gdb")
+    raw_rtt = payload.get("rtt")
+    raw_registers = payload.get("registers")
+    if not isinstance(raw_gdb, dict):
+        raise ValueError(
+            "snapshot payload is missing the canonical 'sources.gdb' object"
+        )
+    if not isinstance(raw_rtt, dict):
+        raise ValueError(
+            "snapshot payload is missing the canonical 'sources.rtt' object"
+        )
+    if not isinstance(raw_registers, dict):
+        raise ValueError(
+            "snapshot payload is missing the canonical 'sources.registers' object"
         )
 
-    legacy_events = _parse_session_events(raw.get("session_events"))
-    legacy_rtt = [
+    gdb_events = _parse_events(raw_gdb.get("events"))
+    rtt_lines = [
         _as_optional_str(line, "")
-        for line in _as_list(raw.get("recent_rtt"), [])
+        for line in _as_list(raw_rtt.get("lines"), [])
         if line is not None
     ]
+    gdb_event_count = _to_int(raw_gdb.get("event_count"))
+    rtt_line_count = _to_int(raw_rtt.get("line_count"))
     return ArtifactSources(
         gdb=GdbSource(
-            raw_text=None,
-            events=legacy_events,
-            event_count=len(legacy_events),
-            embedded=False,
+            raw_text=_as_optional_str(raw_gdb.get("raw_text")),
+            events=gdb_events,
+            event_count=(
+                gdb_event_count if gdb_event_count is not None else len(gdb_events)
+            ),
+            embedded=bool(raw_gdb.get("embedded", False)),
         ),
         rtt=RttSource(
-            raw_text=None, lines=legacy_rtt, line_count=len(legacy_rtt), embedded=False
+            raw_text=_as_optional_str(raw_rtt.get("raw_text")),
+            lines=rtt_lines,
+            line_count=(
+                rtt_line_count if rtt_line_count is not None else len(rtt_lines)
+            ),
+            embedded=bool(raw_rtt.get("embedded", False)),
         ),
-        registers=RegisterSource(embedded=False),
+        registers=_parse_register_source(raw_registers),
     )
 
 
@@ -475,7 +430,7 @@ def _parse_register_source(value: object) -> RegisterSource:
     )
 
 
-def _parse_session_events(value: object) -> list[SessionEvent]:
+def _parse_events(value: object) -> list[SessionEvent]:
     events = []
     for raw_event in _as_list(value, []):
         if not isinstance(raw_event, dict):

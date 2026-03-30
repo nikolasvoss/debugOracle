@@ -6,11 +6,14 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .artifacts.repository import load_artifact
-from .openocd import DISCOVERY_MATCHED, DISCOVERY_UNREACHABLE, discover_workspace_openocd_session
+from .artifacts.repository import ArtifactLoadError, load_artifact
+from .openocd import (
+    DISCOVERY_MATCHED,
+    DISCOVERY_UNREACHABLE,
+    discover_workspace_openocd_session,
+)
 from .policy.halted_analysis import HaltPolicyDecision, evaluate_artifact_live_state
 from .policy.trust import evaluate_artifact_trust
-from .renderers.status import render_session_status
 from .sources.streams.rtt import default_state_path as default_rtt_state_path
 from .sources.streams.rtt import load_capture_state
 
@@ -78,7 +81,10 @@ class SessionConfig:
 
     def to_dict(self) -> dict[str, object]:
         payload = asdict(self)
-        return {key: str(value) if isinstance(value, Path) else value for key, value in payload.items()}
+        return {
+            key: str(value) if isinstance(value, Path) else value
+            for key, value in payload.items()
+        }
 
 
 @dataclass(frozen=True)
@@ -155,8 +161,12 @@ def collect_session_status(
     now: datetime | None = None,
 ) -> SessionStatus:
     checked_at_dt = _ensure_utc(now or datetime.now(timezone.utc))
-    snapshot = _artifact_status(config.snapshot_file, checked_at_dt, config.stale_after_seconds)
-    gdb_mi = _artifact_status(config.gdb_mi_file, checked_at_dt, config.stale_after_seconds)
+    snapshot = _artifact_status(
+        config.snapshot_file, checked_at_dt, config.stale_after_seconds
+    )
+    gdb_mi = _artifact_status(
+        config.gdb_mi_file, checked_at_dt, config.stale_after_seconds
+    )
     rtt = _artifact_status(config.rtt_file, checked_at_dt, config.stale_after_seconds)
     rtt_capture = _rtt_capture_status(
         config.rtt_state_file,
@@ -180,27 +190,38 @@ def collect_session_status(
     has_embedded_gdb_source: bool | None = None
     critical_warnings: list[str] = []
     if snapshot.exists:
-        bundle = load_artifact(snapshot.path)
-        snapshot_id = bundle.snapshot_id
-        parse_warnings = list(bundle.parse_warnings)
-        halt_policy = evaluate_artifact_live_state(bundle.live_state)
-        snapshot_usable = snapshot_id != "invalid-snapshot" and halt_policy.allowed
-        variable_count = bundle.variable_evidence.count()
-        has_embedded_gdb_source = bundle.has_embedded_gdb_source
-        if not halt_policy.allowed:
-            health_issues.extend(halt_policy.warnings)
-        critical_warning_count = _as_int(bundle.provenance.get("critical_warning_count"))
-        critical_warnings = _extract_critical_warnings(bundle, critical_warning_count)
-        if critical_warnings:
-            health_issues.extend(critical_warnings)
-        for warning in parse_warnings:
-            if _is_health_issue_warning(warning):
-                health_issues.append(warning)
-            else:
-                warnings.append(warning)
+        try:
+            bundle = load_artifact(snapshot.path)
+        except ArtifactLoadError as error:
+            health_issues.append(f"Could not load snapshot: {error}")
+            parse_warnings = [str(error)]
+        else:
+            snapshot_id = bundle.snapshot_id
+            parse_warnings = list(bundle.parse_warnings)
+            halt_policy = evaluate_artifact_live_state(bundle.live_state)
+            snapshot_usable = halt_policy.allowed
+            variable_count = bundle.variable_evidence.count()
+            has_embedded_gdb_source = bundle.has_embedded_gdb_source
+            if not halt_policy.allowed:
+                health_issues.extend(halt_policy.warnings)
+            critical_warning_count = _as_int(
+                bundle.provenance.get("critical_warning_count")
+            )
+            critical_warnings = _extract_critical_warnings(
+                bundle, critical_warning_count
+            )
+            if critical_warnings:
+                health_issues.extend(critical_warnings)
+            for warning in parse_warnings:
+                if _is_health_issue_warning(warning):
+                    health_issues.append(warning)
+                else:
+                    warnings.append(warning)
 
     if not any((snapshot.exists, gdb_mi.exists, rtt.exists, rtt_capture.exists)):
-        health_issues.append("No DebugOracle artifacts were found in the session directory.")
+        health_issues.append(
+            "No DebugOracle artifacts were found in the session directory."
+        )
 
     readiness = _derive_workspace_readiness(
         config=config,
@@ -250,7 +271,9 @@ def collect_session_status(
     )
 
 
-def _artifact_status(path: Path, now: datetime, stale_after_seconds: int) -> ArtifactStatus:
+def _artifact_status(
+    path: Path, now: datetime, stale_after_seconds: int
+) -> ArtifactStatus:
     try:
         stat = path.stat()
     except OSError:
@@ -334,8 +357,14 @@ def _track_artifact(
         messages.append(f"{label} file not found: {artifact.path}")
         return
     if artifact.stale:
-        messages.append(f"{label} file is stale: {artifact.path} ({artifact.age_seconds}s old)")
-    elif not missing_is_health_issue and artifact.age_seconds is not None and artifact.age_seconds > 0:
+        messages.append(
+            f"{label} file is stale: {artifact.path} ({artifact.age_seconds}s old)"
+        )
+    elif (
+        not missing_is_health_issue
+        and artifact.age_seconds is not None
+        and artifact.age_seconds > 0
+    ):
         return
 
 
@@ -544,18 +573,24 @@ def _derive_workspace_readiness(
         )
 
     setup_mode = _string_value(settings_payload.get("debugoracle.workspaceSetupMode"))
-    launch_config_name = _string_value(settings_payload.get("debugoracle.launchConfigName"))
-    launch_config_role = _string_value(settings_payload.get("debugoracle.launchConfigRole"))
+    launch_config_name = _string_value(
+        settings_payload.get("debugoracle.launchConfigName")
+    )
+    launch_config_role = _string_value(
+        settings_payload.get("debugoracle.launchConfigRole")
+    )
     if not launch_config_name or not launch_config_role:
         return WorkspaceReadiness(
             state="setup_missing",
             reason="DebugOracle launch metadata is incomplete in `.vscode/settings.json`.",
             next_human_action="Merge the DebugOracle settings fragment into `.vscode/settings.json`, then rerun `dbgoracle status --workspace-root .`.",
-            signals=["Workspace settings exist, but the DebugOracle launch metadata is incomplete."],
+            signals=[
+                "Workspace settings exist, but the DebugOracle launch metadata is incomplete."
+            ],
             setup_mode=setup_mode,
         )
 
-    signals = ["DebugOracle workspace metadata found in `.vscode/settings.json`." ]
+    signals = ["DebugOracle workspace metadata found in `.vscode/settings.json`."]
 
     launch_payload = _load_vscode_json(launch_path)
     if launch_path.exists() and launch_payload is None:
@@ -568,7 +603,9 @@ def _derive_workspace_readiness(
             launch_config_name=launch_config_name,
             launch_config_role=launch_config_role,
         )
-    launch_config = _find_launch_configuration(launch_payload, launch_config_name, launch_config_role)
+    launch_config = _find_launch_configuration(
+        launch_payload, launch_config_name, launch_config_role
+    )
     if launch_config is None:
         return WorkspaceReadiness(
             state="degraded",
@@ -579,7 +616,9 @@ def _derive_workspace_readiness(
             launch_config_name=launch_config_name,
             launch_config_role=launch_config_role,
         )
-    signals.append(f"Launch `{launch_config_name}` is present in `.vscode/launch.json`.")
+    signals.append(
+        f"Launch `{launch_config_name}` is present in `.vscode/launch.json`."
+    )
 
     tasks_payload = _load_vscode_json(tasks_path) if tasks_path.exists() else {}
     if tasks_path.exists() and tasks_payload is None:
@@ -630,10 +669,17 @@ def _derive_workspace_readiness(
     if openocd_matched:
         signals.append("A matching OpenOCD session is reachable right now.")
     elif openocd_unreachable:
-        signals.append("A matching OpenOCD session was found, but its Tcl endpoint is not reachable yet.")
+        signals.append(
+            "A matching OpenOCD session was found, but its Tcl endpoint is not reachable yet."
+        )
 
     fresh_mi = bool(gdb_mi.exists and not gdb_mi.stale and (gdb_mi.size_bytes or 0) > 0)
-    fresh_rtt_capture = bool(rtt_capture.exists and not rtt_capture.stale and rtt_capture.parse_error is None and (rtt_capture.bytes_captured or 0) >= 0)
+    fresh_rtt_capture = bool(
+        rtt_capture.exists
+        and not rtt_capture.stale
+        and rtt_capture.parse_error is None
+        and (rtt_capture.bytes_captured or 0) >= 0
+    )
     fresh_rtt_log = bool(rtt.exists and not rtt.stale and (rtt.size_bytes or 0) > 0)
     if fresh_mi:
         signals.append("The DebugOracle GDB/MI log is fresh.")
@@ -653,7 +699,13 @@ def _derive_workspace_readiness(
             launch_config_role=launch_config_role,
         )
 
-    if openocd_matched or openocd_unreachable or fresh_mi or fresh_rtt_capture or fresh_rtt_log:
+    if (
+        openocd_matched
+        or openocd_unreachable
+        or fresh_mi
+        or fresh_rtt_capture
+        or fresh_rtt_log
+    ):
         return WorkspaceReadiness(
             state="degraded",
             reason="The DebugOracle launch is configured, but the live signals are incomplete or ambiguous, so the session is not trusted as live yet.",
@@ -716,7 +768,9 @@ def _parse_vscode_json(raw_text: str) -> object | None:
             continue
         if char == "/" and next_char == "*":
             index += 2
-            while index + 1 < length and not (raw_text[index] == "*" and raw_text[index + 1] == "/"):
+            while index + 1 < length and not (
+                raw_text[index] == "*" and raw_text[index + 1] == "/"
+            ):
                 index += 1
             index = min(length, index + 2)
             continue

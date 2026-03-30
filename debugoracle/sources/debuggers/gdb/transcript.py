@@ -36,7 +36,7 @@ class GdbTranscriptParseResult:
     latest_stack: list[StackFrame]
     latest_registers: dict[str, str]
     variable_evidence: VariableEvidence
-    session_events: list[SessionEvent]
+    events: list[SessionEvent]
     parse_warnings: list[str]
     mi_record_count: int
     non_mi_line_count: int
@@ -47,13 +47,15 @@ class GdbTranscriptParseResult:
     noise_pattern_counts: Counter[str]
 
 
-def parse_gdb_transcript(gdb_text: str, *, now_text: Callable[[], str]) -> GdbTranscriptParseResult:
+def parse_gdb_transcript(
+    gdb_text: str, *, now_text: Callable[[], str]
+) -> GdbTranscriptParseResult:
     latest_stop: dict[str, Any] | None = None
     latest_stack: list[StackFrame] = []
     latest_registers: dict[str, str] = {}
     variable_evidence = VariableEvidence()
     variable_order = 0
-    session_events: list[SessionEvent] = []
+    events: list[SessionEvent] = []
     parse_warnings: list[str] = []
     mi_record_count = 0
     non_mi_line_count = 0
@@ -61,7 +63,9 @@ def parse_gdb_transcript(gdb_text: str, *, now_text: Callable[[], str]) -> GdbTr
     noise_line_counts = Counter[str]()
 
     if not gdb_text:
-        parse_warnings.append("No GDB/MI input was provided before building this snapshot.")
+        parse_warnings.append(
+            "No GDB/MI input was provided before building this snapshot."
+        )
 
     parse_event_counts = Counter[str]()
     parse_event_severity = Counter[str]()
@@ -83,12 +87,12 @@ def parse_gdb_transcript(gdb_text: str, *, now_text: Callable[[], str]) -> GdbTr
                 parse_event_severity=parse_event_severity,
                 noise_line_counts=noise_line_counts,
                 noise_pattern_counts=noise_pattern_counts,
-                session_events=session_events,
+                events=events,
             )
             non_mi_line_count += 1
             continue
 
-        if stripped.startswith("@\"") or stripped.startswith("~\""):
+        if stripped.startswith('@"') or stripped.startswith('~"'):
             normalized = strip_console_output(stripped)
             _record_noise_event(
                 kind="console-output",
@@ -102,7 +106,7 @@ def parse_gdb_transcript(gdb_text: str, *, now_text: Callable[[], str]) -> GdbTr
                 parse_event_severity=parse_event_severity,
                 noise_line_counts=noise_line_counts,
                 noise_pattern_counts=noise_pattern_counts,
-                session_events=session_events,
+                events=events,
             )
             non_mi_line_count += 1
             continue
@@ -118,7 +122,7 @@ def parse_gdb_transcript(gdb_text: str, *, now_text: Callable[[], str]) -> GdbTr
                 timestamp=timestamp,
                 parse_event_counts=parse_event_counts,
                 parse_event_severity=parse_event_severity,
-                session_events=session_events,
+                events=events,
                 parse_warnings=parse_warnings,
             )
             continue
@@ -138,7 +142,7 @@ def parse_gdb_transcript(gdb_text: str, *, now_text: Callable[[], str]) -> GdbTr
                     parse_event_severity=parse_event_severity,
                     noise_line_counts=noise_line_counts,
                     noise_pattern_counts=noise_pattern_counts,
-                    session_events=session_events,
+                    events=events,
                 )
             continue
 
@@ -149,7 +153,7 @@ def parse_gdb_transcript(gdb_text: str, *, now_text: Callable[[], str]) -> GdbTr
             timestamp=timestamp,
             parse_event_counts=parse_event_counts,
             parse_event_severity=parse_event_severity,
-            session_events=session_events,
+            events=events,
         )
         latest_stop, latest_stack = _update_stop_context(
             record=record,
@@ -165,7 +169,9 @@ def parse_gdb_transcript(gdb_text: str, *, now_text: Callable[[], str]) -> GdbTr
         )
 
     if latest_stop:
-        watchpoint_entries = extract_watchpoint_entries(latest_stop, start_order=variable_order)
+        watchpoint_entries = extract_watchpoint_entries(
+            latest_stop, start_order=variable_order
+        )
         if watchpoint_entries:
             variable_evidence.watchpoints = watchpoint_entries
 
@@ -174,13 +180,17 @@ def parse_gdb_transcript(gdb_text: str, *, now_text: Callable[[], str]) -> GdbTr
         latest_stack=latest_stack,
         latest_registers=latest_registers,
         variable_evidence=variable_evidence,
-        session_events=session_events,
+        events=events,
         parse_warnings=parse_warnings,
         mi_record_count=mi_record_count,
         non_mi_line_count=non_mi_line_count,
         mi_parse_error_count=mi_parse_error_count,
-        parse_event_counts={key: int(value) for key, value in parse_event_counts.items()},
-        parse_event_severity_counts={key: int(value) for key, value in parse_event_severity.items()},
+        parse_event_counts={
+            key: int(value) for key, value in parse_event_counts.items()
+        },
+        parse_event_severity_counts={
+            key: int(value) for key, value in parse_event_severity.items()
+        },
         noise_line_counts={key: int(value) for key, value in noise_line_counts.items()},
         noise_pattern_counts=noise_pattern_counts,
     )
@@ -199,12 +209,12 @@ def _record_noise_event(
     parse_event_severity: Counter[str],
     noise_line_counts: Counter[str],
     noise_pattern_counts: Counter[str],
-    session_events: list[SessionEvent],
+    events: list[SessionEvent],
 ) -> None:
     parse_event_counts[kind] += 1
     parse_event_severity["info"] += 1
     noise_line_counts[kind] += 1
-    session_events.append(
+    events.append(
         SessionEvent(
             source="gdb_mi",
             timestamp=timestamp,
@@ -229,14 +239,18 @@ def _record_parse_error_event(
     timestamp: str,
     parse_event_counts: Counter[str],
     parse_event_severity: Counter[str],
-    session_events: list[SessionEvent],
+    events: list[SessionEvent],
     parse_warnings: list[str],
 ) -> None:
-    kind = "mi-parse-error-known" if is_likely_mi_line(raw_line) else "mi-parse-error-unhandled"
+    kind = (
+        "mi-parse-error-known"
+        if is_likely_mi_line(raw_line)
+        else "mi-parse-error-unhandled"
+    )
     parse_event_counts[kind] += 1
     parse_event_severity["warn"] += 1
     parse_warnings.append(f"Line {line_number}: unable to parse MI record: {error}")
-    session_events.append(
+    events.append(
         SessionEvent(
             source="gdb_mi",
             timestamp=timestamp,
@@ -258,12 +272,12 @@ def _record_mi_event(
     timestamp: str,
     parse_event_counts: Counter[str],
     parse_event_severity: Counter[str],
-    session_events: list[SessionEvent],
+    events: list[SessionEvent],
 ) -> None:
     kind = f"{record.prefix}{record.kind}"
     parse_event_counts[kind] += 1
     parse_event_severity["info"] += 1
-    session_events.append(
+    events.append(
         SessionEvent(
             source="gdb_mi",
             timestamp=timestamp,
@@ -328,16 +342,24 @@ def extract_stack(raw_stack: object) -> list[StackFrame]:
     frames: list[StackFrame] = []
     if isinstance(raw_stack, list):
         for item in raw_stack:
-            if isinstance(item, dict) and "frame" in item and isinstance(item["frame"], dict):
+            if (
+                isinstance(item, dict)
+                and "frame" in item
+                and isinstance(item["frame"], dict)
+            ):
                 frames.append(normalize_frame(item["frame"]))
             elif isinstance(item, dict):
                 frames.append(normalize_frame(item))
     elif isinstance(raw_stack, dict):
         frames.append(normalize_frame(raw_stack))
-    return sorted(frames, key=lambda frame: frame.level if frame.level is not None else 9999)
+    return sorted(
+        frames, key=lambda frame: frame.level if frame.level is not None else 9999
+    )
 
 
-def normalize_frame(raw_frame: dict[str, Any], default_level: int | None = None) -> StackFrame:
+def normalize_frame(
+    raw_frame: dict[str, Any], default_level: int | None = None
+) -> StackFrame:
     line = to_int(raw_frame.get("line"))
     level = to_int(raw_frame.get("level"))
     if level is None:
@@ -387,23 +409,33 @@ def extract_variable_entries(
                     name=name,
                     value=value or "<unavailable>",
                     bucket=bucket,
-                    availability="captured" if value is not None else "value-unavailable",
+                    availability="captured"
+                    if value is not None
+                    else "value-unavailable",
                     origin=origin,
-                    frame=as_text(item.get("arg")) if bucket == VARIABLE_BUCKET_LOCALS else None,
+                    frame=as_text(item.get("arg"))
+                    if bucket == VARIABLE_BUCKET_LOCALS
+                    else None,
                     order=start_order + offset,
                 )
             )
     return values
 
 
-def extract_watchpoint_entries(latest_stop: dict[str, Any], *, start_order: int) -> list[VariableEntry]:
+def extract_watchpoint_entries(
+    latest_stop: dict[str, Any], *, start_order: int
+) -> list[VariableEntry]:
     reason = as_text(latest_stop.get("reason")) or ""
     if "watchpoint" not in reason:
         return []
     watchpoint = latest_stop.get("wpt")
     if not isinstance(watchpoint, dict):
         return []
-    name = as_text(watchpoint.get("exp")) or as_text(watchpoint.get("number")) or "watchpoint"
+    name = (
+        as_text(watchpoint.get("exp"))
+        or as_text(watchpoint.get("number"))
+        or "watchpoint"
+    )
     value_payload = latest_stop.get("value")
     value = None
     availability = "value-unavailable"
@@ -459,10 +491,10 @@ def is_likely_mi_line(line: str) -> bool:
 
 
 def strip_console_output(line: str) -> str:
-    if not (line.startswith("@\"") or line.startswith("~\"")):
+    if not (line.startswith('@"') or line.startswith('~"')):
         return line
     start = 2
-    if not line.endswith("\""):
+    if not line.endswith('"'):
         return line[start:]
     body = line[start:-1]
     chars: list[str] = []
@@ -472,7 +504,11 @@ def strip_console_output(line: str) -> str:
         if char == "\\" and cursor + 1 < len(body):
             cursor += 1
             escaped = body[cursor]
-            chars.append({"n": "\n", "r": "\r", "t": "\t", '"': '"', "\\": "\\"}.get(escaped, escaped))
+            chars.append(
+                {"n": "\n", "r": "\r", "t": "\t", '"': '"', "\\": "\\"}.get(
+                    escaped, escaped
+                )
+            )
             cursor += 1
             continue
         chars.append(char)

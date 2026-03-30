@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import Iterable
 
 from ..artifacts.models import (
-    EvidenceBundle,
+    InvestigationArtifact,
     VariableEntry,
     VariableEvidence,
     VARIABLE_BUCKETS,
@@ -20,18 +20,24 @@ class VariableRenderOptions:
     detail: str = "compact"
 
 
-def unknowns(bundle: EvidenceBundle) -> list[str]:
+def unknowns(bundle: InvestigationArtifact) -> list[str]:
     unknowns_list: list[str] = []
     _, _, mi_parse_error_count = parsing_summary_counts(bundle)
     if bundle.stop_reason is None:
-        unknowns_list.append("No stop reason was found in the parsed GDB/MI transcript.")
+        unknowns_list.append(
+            "No stop reason was found in the parsed GDB/MI transcript."
+        )
     if not bundle.frames:
         unknowns_list.append("No stack trace was available in the parsed transcript.")
     if not bundle.registers:
-        unknowns_list.append("No register-values record was found in the parsed transcript.")
+        unknowns_list.append(
+            "No register-values record was found in the parsed transcript."
+        )
     if bundle.variable_evidence.count() == 0:
-        unknowns_list.append("No variable evidence was captured in the parsed transcript.")
-    if not bundle.recent_rtt:
+        unknowns_list.append(
+            "No variable evidence was captured in the parsed transcript."
+        )
+    if not bundle.sources.rtt.lines:
         unknowns_list.append("No RTT lines were available for this snapshot.")
     evidence_quality = evidence_quality_score(bundle)
     if evidence_quality is not None and evidence_quality < 60:
@@ -39,13 +45,17 @@ def unknowns(bundle: EvidenceBundle) -> list[str]:
             f"Evidence quality is reduced ({evidence_quality}/100), which may hide state transitions."
         )
     if mi_parse_error_count:
-        unknowns_list.append(f"MI parse errors detected: {mi_parse_error_count} (see Parsing Summary).")
+        unknowns_list.append(
+            f"MI parse errors detected: {mi_parse_error_count} (see Parsing Summary)."
+        )
     for warning in critical_warnings(bundle):
         unknowns_list.append(f"Critical parser warning: {warning}")
-    return unknowns_list or ["No major evidence gaps detected in the captured snapshot."]
+    return unknowns_list or [
+        "No major evidence gaps detected in the captured snapshot."
+    ]
 
 
-def session_summary(bundle: EvidenceBundle, plain: bool = False) -> str:
+def session_summary(bundle: InvestigationArtifact, plain: bool = False) -> str:
     top = bundle.frames[0] if bundle.frames else None
     location = frame_label(top) if top else "No stack frame available"
     _ = plain
@@ -118,7 +128,9 @@ def variable_section(
         if not entries:
             sections.append("  - None")
             continue
-        display_entries = entries if options.detail == "full" else entries[:COMPACT_VARIABLE_LIMIT]
+        display_entries = (
+            entries if options.detail == "full" else entries[:COMPACT_VARIABLE_LIMIT]
+        )
         for entry in display_entries:
             sections.append(f"  - {format_variable_entry(entry)}")
         omitted = len(entries) - len(display_entries)
@@ -135,7 +147,10 @@ def filtered_variable_entries(
     normalized_scope: str | None = None,
     wanted_names: set[str] | None = None,
 ) -> list[VariableEntry]:
-    if options.scope != "all" and (normalized_scope or normalize_scope(options.scope)) != bucket:
+    if (
+        options.scope != "all"
+        and (normalized_scope or normalize_scope(options.scope)) != bucket
+    ):
         return []
     if options.names and wanted_names is None:
         wanted_names = {name.lower() for name in options.names}
@@ -180,7 +195,7 @@ def format_variable_entry(entry: VariableEntry) -> str:
     return f"{entry.name}: {value}{suffix}"
 
 
-def parsing_summary_counts(bundle: EvidenceBundle) -> tuple[int, int, int]:
+def parsing_summary_counts(bundle: InvestigationArtifact) -> tuple[int, int, int]:
     mi_record_count = int(bundle.provenance.get("mi_record_count", 0) or 0)
     non_mi_line_count = int(bundle.provenance.get("non_mi_line_count", 0) or 0)
     mi_parse_error_count = int(bundle.provenance.get("mi_parse_error_count", 0) or 0)
@@ -189,21 +204,42 @@ def parsing_summary_counts(bundle: EvidenceBundle) -> tuple[int, int, int]:
         mi_record_count = sum(
             value
             for kind, value in parse_event_counts.items()
-            if kind not in {"non_mi_line", "prompt-marker", "console-output", "missing-rtt", "critical-missing-input", "critical-mi-parse-errors"}
+            if kind
+            not in {
+                "non_mi_line",
+                "prompt-marker",
+                "console-output",
+                "missing-rtt",
+                "critical-missing-input",
+                "critical-mi-parse-errors",
+            }
             and not kind.startswith("mi-parse-error")
         )
     if not non_mi_line_count and parse_event_counts:
-        non_mi_line_count = sum(parse_event_counts.get(kind, 0) for kind in ("non_mi_line", "prompt-marker", "console-output"))
+        non_mi_line_count = sum(
+            parse_event_counts.get(kind, 0)
+            for kind in ("non_mi_line", "prompt-marker", "console-output")
+        )
     if not mi_parse_error_count and parse_event_counts:
-        mi_parse_error_count = sum(value for kind, value in parse_event_counts.items() if kind.startswith("mi-parse-error"))
+        mi_parse_error_count = sum(
+            value
+            for kind, value in parse_event_counts.items()
+            if kind.startswith("mi-parse-error")
+        )
     return mi_record_count, non_mi_line_count, mi_parse_error_count
 
 
-def parsing_summary_section(bundle: EvidenceBundle, plain: bool = False) -> str:
-    mi_record_count, non_mi_line_count, mi_parse_error_count = parsing_summary_counts(bundle)
+def parsing_summary_section(bundle: InvestigationArtifact, plain: bool = False) -> str:
+    mi_record_count, non_mi_line_count, mi_parse_error_count = parsing_summary_counts(
+        bundle
+    )
     parse_event_counts = coerce_count_map(bundle.provenance.get("parse_event_counts"))
-    parse_event_severity_counts = coerce_count_map(bundle.provenance.get("parse_event_severity_counts"))
-    parse_patterns = coerce_pattern_counts(bundle.provenance.get("non_mi_pattern_counts"))
+    parse_event_severity_counts = coerce_count_map(
+        bundle.provenance.get("parse_event_severity_counts")
+    )
+    parse_patterns = coerce_pattern_counts(
+        bundle.provenance.get("non_mi_pattern_counts")
+    )
     quality = evidence_quality_score(bundle)
     lines = [
         f"- MI records parsed: {mi_record_count}",
@@ -217,7 +253,13 @@ def parsing_summary_section(bundle: EvidenceBundle, plain: bool = False) -> str:
         info_count = parse_event_severity_counts.get("info", 0)
         lines.append(f"- Event severity: info={info_count}, warn={warn_count}")
     if parse_patterns:
-        lines.extend(["- Top non-MI patterns:"] + [f"  - {item['pattern']} (repeated {item['count']} times)" for item in parse_patterns[:6]])
+        lines.extend(
+            ["- Top non-MI patterns:"]
+            + [
+                f"  - {item['pattern']} (repeated {item['count']} times)"
+                for item in parse_patterns[:6]
+            ]
+        )
     if parse_event_counts:
         lines.append("- Event types:")
         for kind in sorted(parse_event_counts):
@@ -225,8 +267,12 @@ def parsing_summary_section(bundle: EvidenceBundle, plain: bool = False) -> str:
     return "\n".join(lines)
 
 
-def non_mi_excerpt(bundle: EvidenceBundle, limit: int = 50) -> list[str]:
-    events = [event for event in bundle.session_events if event.kind in {"non_mi_line", "console-output", "prompt-marker"}]
+def non_mi_excerpt(bundle: InvestigationArtifact, limit: int = 50) -> list[str]:
+    events = [
+        event
+        for event in bundle.sources.gdb.events
+        if event.kind in {"non_mi_line", "console-output", "prompt-marker"}
+    ]
     if not events or limit <= 0:
         return []
     noise_lines: list[str] = []
@@ -252,17 +298,24 @@ def non_mi_excerpt(bundle: EvidenceBundle, limit: int = 50) -> list[str]:
             break
     noise_lines.reverse()
     lines: list[str] = []
-    noise_patterns = coerce_pattern_counts(bundle.provenance.get("non_mi_pattern_counts"))
+    noise_patterns = coerce_pattern_counts(
+        bundle.provenance.get("non_mi_pattern_counts")
+    )
     if noise_patterns:
         lines.append("Top non-MI patterns:")
-        lines.extend([f"  {item['pattern']} (repeated {item['count']} times)" for item in noise_patterns[:3]])
+        lines.extend(
+            [
+                f"  {item['pattern']} (repeated {item['count']} times)"
+                for item in noise_patterns[:3]
+            ]
+        )
     if noise_lines:
         lines.append("Latest distinct non-MI samples:")
         lines.extend(noise_lines)
     return lines
 
 
-def evidence_quality_score(bundle: EvidenceBundle) -> int | None:
+def evidence_quality_score(bundle: InvestigationArtifact) -> int | None:
     value = bundle.provenance.get("evidence_quality_score")
     try:
         return int(value) if value is not None else None
@@ -270,7 +323,7 @@ def evidence_quality_score(bundle: EvidenceBundle) -> int | None:
         return None
 
 
-def critical_warnings(bundle: EvidenceBundle) -> list[str]:
+def critical_warnings(bundle: InvestigationArtifact) -> list[str]:
     raw = bundle.provenance.get("critical_warnings")
     if isinstance(raw, list):
         return [item for item in raw if isinstance(item, str)]
@@ -310,7 +363,9 @@ def coerce_pattern_counts(value: object) -> list[dict[str, int | str]]:
             continue
         if parsed_count <= 0:
             continue
-        patterns.append({"pattern": sanitize_pattern_for_display(pattern), "count": parsed_count})
+        patterns.append(
+            {"pattern": sanitize_pattern_for_display(pattern), "count": parsed_count}
+        )
     return patterns
 
 
@@ -319,7 +374,9 @@ def sanitize_pattern_for_display(value: str) -> str:
     return " ".join(normalized.split()) or "<empty>"
 
 
-def with_parse_warnings(sections: list[str], parse_warnings: list[str], *, header: str) -> list[str]:
+def with_parse_warnings(
+    sections: list[str], parse_warnings: list[str], *, header: str
+) -> list[str]:
     if not parse_warnings:
         return sections
     return [*sections, "", header, lines_section(parse_warnings)]

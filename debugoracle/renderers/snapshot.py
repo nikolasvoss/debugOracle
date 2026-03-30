@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import json
 
-from ..artifacts.models import EvidenceBundle
+from ..artifacts.models import InvestigationArtifact
 
 
 def render_snapshot(
-    bundle: EvidenceBundle,
+    bundle: InvestigationArtifact,
     fmt: str = "json",
     *,
     variable_options=None,

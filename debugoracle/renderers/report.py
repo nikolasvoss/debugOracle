@@ -5,7 +5,7 @@ from dataclasses import asdict, dataclass
 from typing import cast
 
 from ..artifacts.models import (
-    EvidenceBundle,
+    InvestigationArtifact,
     PeripheralRegisterSet,
     RegisterEntry,
     VariableEntry,
@@ -60,7 +60,7 @@ class ReportRenderOptions:
 
 
 def render_report(
-    bundle: EvidenceBundle,
+    bundle: InvestigationArtifact,
     fmt: str = "text",
     *,
     options: ReportRenderOptions | None = None,
@@ -76,7 +76,7 @@ def render_report(
 
 
 def compose_report_payload(
-    bundle: EvidenceBundle,
+    bundle: InvestigationArtifact,
     *,
     options: ReportRenderOptions,
     trust: dict[str, object],
@@ -95,15 +95,21 @@ def compose_report_payload(
         payload["parse_warnings"] = list(bundle.parse_warnings)
         return payload
     if options.include_variables:
-        payload["variables"] = grouped_variables_payload(bundle, names=options.variable_names)
+        payload["variables"] = grouped_variables_payload(
+            bundle, names=options.variable_names
+        )
     if options.include_gdb:
         payload["gdb"] = gdb_payload(bundle, tail=options.tail)
     if options.include_rtt:
         payload["rtt"] = rtt_payload(bundle, tail=options.tail)
     if options.include_regs_list:
-        payload["registers_list"] = regs_list_payload(bundle, selector=options.regs_list_selector)
+        payload["registers_list"] = regs_list_payload(
+            bundle, selector=options.regs_list_selector
+        )
     if options.include_regs:
-        payload["registers"] = regs_payload(bundle, selectors=options.regs_selectors or [])
+        payload["registers"] = regs_payload(
+            bundle, selectors=options.regs_selectors or []
+        )
     return payload
 
 
@@ -117,7 +123,7 @@ def _should_include_metadata(options: ReportRenderOptions) -> bool:
     )
 
 
-def report_metadata_payload(bundle: EvidenceBundle) -> dict[str, object]:
+def report_metadata_payload(bundle: InvestigationArtifact) -> dict[str, object]:
     freshness_class = bundle.provenance.get("freshness_class", "unknown")
     return {
         "snapshot_id": bundle.snapshot_id,
@@ -131,7 +137,7 @@ def report_metadata_payload(bundle: EvidenceBundle) -> dict[str, object]:
     }
 
 
-def summary_payload(bundle: EvidenceBundle) -> dict[str, object]:
+def summary_payload(bundle: InvestigationArtifact) -> dict[str, object]:
     payload = {
         "snapshot_id": bundle.snapshot_id,
         "captured_at": bundle.captured_at,
@@ -152,7 +158,7 @@ def summary_payload(bundle: EvidenceBundle) -> dict[str, object]:
 
 
 def grouped_variables_payload(
-    bundle: EvidenceBundle,
+    bundle: InvestigationArtifact,
     names: list[str] | None,
 ) -> dict[str, list[dict[str, object]]]:
     wanted = {name.lower() for name in names} if names else None
@@ -174,7 +180,9 @@ def variable_entry_payload(entry: VariableEntry) -> dict[str, object]:
     return asdict(entry)
 
 
-def gdb_payload(bundle: EvidenceBundle, *, tail: int | None) -> dict[str, object]:
+def gdb_payload(
+    bundle: InvestigationArtifact, *, tail: int | None
+) -> dict[str, object]:
     source = bundle.require_embedded_gdb_source()
     events = source.events
     if tail is not None:
@@ -188,7 +196,9 @@ def gdb_payload(bundle: EvidenceBundle, *, tail: int | None) -> dict[str, object
     }
 
 
-def rtt_payload(bundle: EvidenceBundle, *, tail: int | None) -> dict[str, object]:
+def rtt_payload(
+    bundle: InvestigationArtifact, *, tail: int | None
+) -> dict[str, object]:
     source = bundle.require_embedded_rtt_source()
     lines = source.lines
     if tail is not None:
@@ -202,12 +212,16 @@ def rtt_payload(bundle: EvidenceBundle, *, tail: int | None) -> dict[str, object
     }
 
 
-def regs_list_payload(bundle: EvidenceBundle, *, selector: str | None) -> dict[str, object]:
+def regs_list_payload(
+    bundle: InvestigationArtifact, *, selector: str | None
+) -> dict[str, object]:
     source = bundle.require_embedded_register_source()
     if selector in (None, ""):
         peripherals: list[dict[str, object]] = []
         for peripheral in source.peripherals:
-            success_count, failure_count, skipped_count = _peripheral_status_counts(peripheral)
+            success_count, failure_count, skipped_count = _peripheral_status_counts(
+                peripheral
+            )
             peripherals.append(
                 {
                     "name": peripheral.name,
@@ -241,22 +255,30 @@ def regs_list_payload(bundle: EvidenceBundle, *, selector: str | None) -> dict[s
     }
 
 
-def regs_payload(bundle: EvidenceBundle, *, selectors: list[str]) -> dict[str, object]:
+def regs_payload(
+    bundle: InvestigationArtifact, *, selectors: list[str]
+) -> dict[str, object]:
     source = bundle.require_embedded_register_source()
     if not selectors:
         return {
             "device_name": source.device_name,
             "svd_source": source.svd_source,
-            "peripherals": [_peripheral_payload(peripheral) for peripheral in source.peripherals],
+            "peripherals": [
+                _peripheral_payload(peripheral) for peripheral in source.peripherals
+            ],
         }
 
-    wanted_peripherals = {selector.lower() for selector in selectors if ":" not in selector}
+    wanted_peripherals = {
+        selector.lower() for selector in selectors if ":" not in selector
+    }
     wanted_registers: dict[str, set[str]] = {}
     for selector in selectors:
         if ":" not in selector:
             continue
         peripheral_name, register_name = selector.split(":", 1)
-        wanted_registers.setdefault(peripheral_name.lower(), set()).add(register_name.lower())
+        wanted_registers.setdefault(peripheral_name.lower(), set()).add(
+            register_name.lower()
+        )
 
     matched_peripherals: list[dict[str, object]] = []
     matched_any = False
@@ -307,7 +329,9 @@ def _register_payload(register: RegisterEntry) -> dict[str, object]:
     return asdict(register)
 
 
-def _peripheral_status_counts(peripheral: PeripheralRegisterSet) -> tuple[int, int, int]:
+def _peripheral_status_counts(
+    peripheral: PeripheralRegisterSet,
+) -> tuple[int, int, int]:
     success_count = 0
     failure_count = 0
     skipped_count = 0
@@ -333,7 +357,7 @@ def _match_peripheral(
 
 
 def _render_report_text(
-    bundle: EvidenceBundle,
+    bundle: InvestigationArtifact,
     *,
     trust: dict[str, object],
     allow_unsafe: bool,
@@ -352,11 +376,17 @@ def _render_report_text(
             render_bullets(cast(list[str], trust.get("reasons") or []) or ["None"]),
             "",
             "Next Useful Commands:",
-            render_bullets([f"`{trust.get('recommended_action', 'dbgoracle fetch --workspace-root .')}`"]),
+            render_bullets(
+                [
+                    f"`{trust.get('recommended_action', 'dbgoracle fetch --workspace-root .')}`"
+                ]
+            ),
         ]
         return (
             "\n".join(
-                with_parse_warnings(sections, bundle.parse_warnings, header="Parse Warnings Detail:")
+                with_parse_warnings(
+                    sections, bundle.parse_warnings, header="Parse Warnings Detail:"
+                )
             ).rstrip()
             + "\n"
         )
@@ -385,7 +415,9 @@ def _render_report_text(
         mapping_section(bundle.registers, plain=True),
         "",
         "Variable Summary:",
-        variable_section(bundle.variable_evidence, _default_variable_options(), plain=True),
+        variable_section(
+            bundle.variable_evidence, _default_variable_options(), plain=True
+        ),
         "",
         "Parsing Summary:",
         parsing_summary_section(bundle, plain=True),
@@ -400,7 +432,11 @@ def _render_report_text(
         _source_availability_lines(bundle),
     ]
     return (
-        "\n".join(with_parse_warnings(sections, bundle.parse_warnings, header="Parse Warnings Detail:")).rstrip()
+        "\n".join(
+            with_parse_warnings(
+                sections, bundle.parse_warnings, header="Parse Warnings Detail:"
+            )
+        ).rstrip()
         + "\n"
     )
 
@@ -408,7 +444,9 @@ def _render_report_text(
 def _trust_header_lines(trust: dict[str, object]) -> list[str]:
     verdict = str(trust.get("verdict", "unknown")).upper()
     summary = str(trust.get("summary", "Trust status unavailable."))
-    recommended_action = str(trust.get("recommended_action", "dbgoracle fetch --workspace-root ."))
+    recommended_action = str(
+        trust.get("recommended_action", "dbgoracle fetch --workspace-root .")
+    )
     lines = [
         f"Trust: {verdict}",
         f"- Summary: {summary}",
@@ -430,7 +468,7 @@ def default_trust_payload() -> dict[str, object]:
     }
 
 
-def _current_state_lines(bundle: EvidenceBundle) -> list[str]:
+def _current_state_lines(bundle: InvestigationArtifact) -> list[str]:
     return [
         f"Snapshot ID: {bundle.snapshot_id}",
         f"Stop reason: {bundle.stop_reason or 'unavailable'}",
@@ -439,20 +477,22 @@ def _current_state_lines(bundle: EvidenceBundle) -> list[str]:
     ]
 
 
-def _gap_lines(bundle: EvidenceBundle) -> list[str]:
+def _gap_lines(bundle: InvestigationArtifact) -> list[str]:
     gaps: list[str] = []
     if not bundle.has_embedded_gdb_source:
         gaps.append("GDB data: absent.")
     if not bundle.has_embedded_rtt_source:
         gaps.append("RTT data: absent.")
     if not bundle.has_embedded_register_source:
-        gaps.append("Register data: absent. Use `fetch --svd-file <file>` if peripheral state matters.")
+        gaps.append(
+            "Register data: absent. Use `fetch --svd-file <file>` if peripheral state matters."
+        )
     if bundle.parse_warnings:
         gaps.append(f"Parse warnings: {len(bundle.parse_warnings)} present.")
     return gaps or ["None"]
 
 
-def _next_command_lines(bundle: EvidenceBundle) -> list[str]:
+def _next_command_lines(bundle: InvestigationArtifact) -> list[str]:
     commands = ["`report --vars [NAME ...]`"]
     if bundle.has_embedded_gdb_source:
         commands.append("`report --gdb --tail 50`")
@@ -465,7 +505,7 @@ def _next_command_lines(bundle: EvidenceBundle) -> list[str]:
     return commands
 
 
-def _embedded_evidence_summary(bundle: EvidenceBundle) -> str:
+def _embedded_evidence_summary(bundle: InvestigationArtifact) -> str:
     return ", ".join(
         [
             f"gdb {'present' if bundle.has_embedded_gdb_source else 'absent'}",
@@ -475,7 +515,7 @@ def _embedded_evidence_summary(bundle: EvidenceBundle) -> str:
     )
 
 
-def _register_availability_lines(bundle: EvidenceBundle) -> str:
+def _register_availability_lines(bundle: InvestigationArtifact) -> str:
     if not bundle.has_embedded_register_source:
         return "\n".join(
             [
@@ -495,7 +535,7 @@ def _register_availability_lines(bundle: EvidenceBundle) -> str:
     )
 
 
-def _source_availability_lines(bundle: EvidenceBundle) -> str:
+def _source_availability_lines(bundle: InvestigationArtifact) -> str:
     lines = [
         f"- GDB embedded source data: {'present' if bundle.has_embedded_gdb_source else 'absent'}",
         f"- RTT embedded source data: {'present' if bundle.has_embedded_rtt_source else 'absent'}",
