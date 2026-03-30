@@ -74,7 +74,8 @@ def cmd_fetch(args: argparse.Namespace) -> int:
             resolved_openocd_tcl_host=resolved_openocd_tcl_host,
             resolved_openocd_tcl_port=resolved_openocd_tcl_port,
         )
-    except OpenOcdReachabilityError as error:
+    except OpenOcdReachabilityError as initial_error:
+        recovery_error = initial_error
         if resolved_svd_file and tcl_discovered:
             endpoint = f"{resolved_openocd_tcl_host or '127.0.0.1'}:{resolved_openocd_tcl_port}"
             try:
@@ -93,7 +94,7 @@ def cmd_fetch(args: argparse.Namespace) -> int:
                     resolved_openocd_tcl_port=None,
                 )
             except OpenOcdReachabilityError as fallback_error:
-                error = fallback_error
+                recovery_error = fallback_error
             except SystemExit as fallback_error:
                 reason = str(fallback_error) or "register enrichment failed"
                 print(
@@ -126,7 +127,7 @@ def cmd_fetch(args: argparse.Namespace) -> int:
                 discovery=discovery,
                 resolved_svd_file=resolved_svd_file,
                 svd_discovered=svd_discovered,
-                initial_error=error,
+                initial_error=recovery_error,
             )
         except SystemExit as recovery_error:
             reason = str(recovery_error) or "register enrichment failed"

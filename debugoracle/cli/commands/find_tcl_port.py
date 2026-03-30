@@ -5,7 +5,6 @@ import json
 from pathlib import Path
 import re
 import sys
-from types import SimpleNamespace
 
 from ...openocd import (
     DEFAULT_OPENOCD_HOST,
@@ -16,8 +15,6 @@ from ...openocd import (
     DISCOVERY_UNREACHABLE,
     OpenOcdCandidate,
     OpenOcdDiscoveryResult,
-    _discover_openocd_candidates_from_proc,
-    _discover_openocd_candidates_from_ps,
     _parse_ps_output,
     discover_openocd_candidates,
     is_tcp_endpoint_reachable,
@@ -25,6 +22,18 @@ from ...openocd import (
     select_openocd_candidate,
 )
 from .evidence import resolve_fetch_svd_file
+
+
+__all__ = [
+    "OpenOcdCandidate",
+    "build_fetch_command",
+    "cmd_find_tcl_port",
+    "discover_openocd_candidates",
+    "parse_openocd_ports",
+    "parse_ps_output",
+    "resolve_svd_file",
+    "select_candidate",
+]
 
 
 def cmd_find_tcl_port(args: argparse.Namespace) -> int:
