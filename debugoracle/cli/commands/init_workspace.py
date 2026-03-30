@@ -127,7 +127,9 @@ def _missing_openocd_config_guidance(args: argparse.Namespace) -> str:
     return "\n".join(parts)
 
 
-def initialize_workspace(args: argparse.Namespace, workspace_root: Path) -> InitWorkspaceResult:
+def initialize_workspace(
+    args: argparse.Namespace, workspace_root: Path
+) -> InitWorkspaceResult:
     attach_mode = bool(getattr(args, "attach", False))
     mode = "attach" if attach_mode else "fresh"
     launch_config_name = ATTACH_LAUNCH_NAME if attach_mode else DEFAULT_LAUNCH_NAME
@@ -139,7 +141,12 @@ def initialize_workspace(args: argparse.Namespace, workspace_root: Path) -> Init
     if not attach_mode:
         vscode_dir.mkdir(parents=True, exist_ok=True)
 
-    desired_settings = _settings_payload(args, attach_mode=attach_mode, launch_config_name=launch_config_name, launch_config_role=launch_config_role)
+    desired_settings = _settings_payload(
+        args,
+        attach_mode=attach_mode,
+        launch_config_name=launch_config_name,
+        launch_config_role=launch_config_role,
+    )
     desired_launch_config = _launch_configuration(
         openocd_config_files=list(args.openocd_config),
         with_rtt=bool(args.with_rtt),
@@ -159,7 +166,11 @@ def initialize_workspace(args: argparse.Namespace, workspace_root: Path) -> Init
     required_actions: list[RequiredAction] = []
 
     if attach_mode:
-        for path in (vscode_dir / "settings.json", vscode_dir / "launch.json", vscode_dir / "tasks.json"):
+        for path in (
+            vscode_dir / "settings.json",
+            vscode_dir / "launch.json",
+            vscode_dir / "tasks.json",
+        ):
             blocked_files.append(str(path))
             required_actions.append(
                 _required_action(
@@ -172,7 +183,10 @@ def initialize_workspace(args: argparse.Namespace, workspace_root: Path) -> Init
             )
     else:
         desired_files = [
-            (vscode_dir / "settings.json", json.dumps(desired_settings, indent=2) + "\n"),
+            (
+                vscode_dir / "settings.json",
+                json.dumps(desired_settings, indent=2) + "\n",
+            ),
             (vscode_dir / "launch.json", _render_launch_file(desired_launch_config)),
             (vscode_dir / "tasks.json", json.dumps(desired_tasks, indent=2) + "\n"),
         ]
@@ -192,7 +206,9 @@ def initialize_workspace(args: argparse.Namespace, workspace_root: Path) -> Init
             path.write_text(content, encoding="utf-8")
             created_files.append(str(path))
 
-    dependency_checks = _dependency_checks(_resolve_workspace_dependency_path(args.executable, workspace_root))
+    dependency_checks = _dependency_checks(
+        _resolve_workspace_dependency_path(args.executable, workspace_root)
+    )
     status = _overall_status(blocked_files, dependency_checks)
     return InitWorkspaceResult(
         status=status,
@@ -257,7 +273,9 @@ def _launch_configuration(
         "configFiles": openocd_config_files,
         "cwd": "${workspaceFolder}",
         "executable": "${config:debugoracle.executable}",
-        "preLaunchTask": "DebugOracle: Prelaunch" if (with_rtt or attach_mode) else "Prepare debug logs",
+        "preLaunchTask": "DebugOracle: Prelaunch"
+        if (with_rtt or attach_mode)
+        else "Prepare debug logs",
         "preLaunchCommands": [
             "set pagination off",
             "set logging overwrite on",
@@ -277,7 +295,7 @@ def _launch_configuration(
         payload["postDebugTask"] = "DebugOracle: Stop RTT run"
         cast(list[str], payload["postLaunchCommands"]).extend(
             [
-                "monitor rtt setup 0x20000000 0x1000 \"SEGGER RTT\"",
+                'monitor rtt setup 0x20000000 0x1000 "SEGGER RTT"',
                 "monitor rtt start",
                 "monitor rtt server start ${config:debugoracle.rttPort} 0",
             ]
@@ -294,13 +312,15 @@ def _render_launch_file(configuration: dict[str, object]) -> str:
     return json.dumps(payload, indent=2) + "\n"
 
 
-def _tasks_payload(*, with_rtt: bool, attach_mode: bool, include_managed_marker: bool) -> dict[str, object]:
+def _tasks_payload(
+    *, with_rtt: bool, attach_mode: bool, include_managed_marker: bool
+) -> dict[str, object]:
     prepare_debug_logs = {
         "label": "Prepare debug logs",
         "type": "shell",
-        "command": "mkdir -p \"${workspaceFolder}/.dbgoracle\" && : > \"${config:debugoracle.miLogPath}\"",
+        "command": 'mkdir -p "${workspaceFolder}/.dbgoracle" && : > "${config:debugoracle.miLogPath}"',
         "windows": {
-            "command": "New-Item -ItemType Directory -Force -Path \"${workspaceFolder}\\.dbgoracle\" | Out-Null; New-Item -ItemType File -Force -Path \"${config:debugoracle.miLogPath}\" | Out-Null"
+            "command": 'New-Item -ItemType Directory -Force -Path "${workspaceFolder}\\.dbgoracle" | Out-Null; New-Item -ItemType File -Force -Path "${config:debugoracle.miLogPath}" | Out-Null'
         },
         "problemMatcher": [],
     }
@@ -308,9 +328,9 @@ def _tasks_payload(*, with_rtt: bool, attach_mode: bool, include_managed_marker:
         prepare_debug_logs = {
             "label": "Prepare debug logs",
             "type": "shell",
-            "command": "mkdir -p \"${workspaceFolder}/.dbgoracle\" && : > \"${config:debugoracle.miLogPath}\" && : > \"${config:debugoracle.rttLogPath}\" && : > \"${config:debugoracle.rttLaunchLogPath}\" && rm -f \"${config:debugoracle.rttStatePath}\"",
+            "command": 'mkdir -p "${workspaceFolder}/.dbgoracle" && : > "${config:debugoracle.miLogPath}" && : > "${config:debugoracle.rttLogPath}" && : > "${config:debugoracle.rttLaunchLogPath}" && rm -f "${config:debugoracle.rttStatePath}"',
             "windows": {
-                "command": "New-Item -ItemType Directory -Force -Path \"${workspaceFolder}\\.dbgoracle\" | Out-Null; New-Item -ItemType File -Force -Path \"${config:debugoracle.miLogPath}\" | Out-Null; New-Item -ItemType File -Force -Path \"${config:debugoracle.rttLogPath}\" | Out-Null; New-Item -ItemType File -Force -Path \"${config:debugoracle.rttLaunchLogPath}\" | Out-Null; Remove-Item -ErrorAction SilentlyContinue \"${config:debugoracle.rttStatePath}\""
+                "command": 'New-Item -ItemType Directory -Force -Path "${workspaceFolder}\\.dbgoracle" | Out-Null; New-Item -ItemType File -Force -Path "${config:debugoracle.miLogPath}" | Out-Null; New-Item -ItemType File -Force -Path "${config:debugoracle.rttLogPath}" | Out-Null; New-Item -ItemType File -Force -Path "${config:debugoracle.rttLaunchLogPath}" | Out-Null; Remove-Item -ErrorAction SilentlyContinue "${config:debugoracle.rttStatePath}"'
             },
             "problemMatcher": [],
         }
@@ -324,9 +344,9 @@ def _tasks_payload(*, with_rtt: bool, attach_mode: bool, include_managed_marker:
                 {
                     "label": "DebugOracle: Guard Attach Launch",
                     "type": "shell",
-                    "command": "dbgoracle guard-openocd-launch --workspace-root \"${workspaceFolder}\"",
+                    "command": 'dbgoracle guard-openocd-launch --workspace-root "${workspaceFolder}"',
                     "windows": {
-                        "command": "dbgoracle guard-openocd-launch --workspace-root \"${workspaceFolder}\""
+                        "command": 'dbgoracle guard-openocd-launch --workspace-root "${workspaceFolder}"'
                     },
                     "problemMatcher": [],
                 }
@@ -337,9 +357,9 @@ def _tasks_payload(*, with_rtt: bool, attach_mode: bool, include_managed_marker:
                 {
                     "label": "DebugOracle: Start RTT run",
                     "type": "shell",
-                    "command": "dbgoracle run --detach --workspace-root \"${workspaceFolder}\" --port ${config:debugoracle.rttPort} --connect-timeout 30 --output \"${config:debugoracle.rttLogPath}\" --state-out \"${config:debugoracle.rttStatePath}\"",
+                    "command": 'dbgoracle run --detach --workspace-root "${workspaceFolder}" --port ${config:debugoracle.rttPort} --connect-timeout 30 --output "${config:debugoracle.rttLogPath}" --state-out "${config:debugoracle.rttStatePath}"',
                     "windows": {
-                        "command": "dbgoracle run --detach --workspace-root \"${workspaceFolder}\" --port ${config:debugoracle.rttPort} --connect-timeout 30 --output \"${config:debugoracle.rttLogPath}\" --state-out \"${config:debugoracle.rttStatePath}\""
+                        "command": 'dbgoracle run --detach --workspace-root "${workspaceFolder}" --port ${config:debugoracle.rttPort} --connect-timeout 30 --output "${config:debugoracle.rttLogPath}" --state-out "${config:debugoracle.rttStatePath}"'
                     },
                     "problemMatcher": [],
                 }
@@ -348,9 +368,9 @@ def _tasks_payload(*, with_rtt: bool, attach_mode: bool, include_managed_marker:
                 {
                     "label": "DebugOracle: Stop RTT run",
                     "type": "shell",
-                    "command": "dbgoracle stop --workspace-root \"${workspaceFolder}\"",
+                    "command": 'dbgoracle stop --workspace-root "${workspaceFolder}"',
                     "windows": {
-                        "command": "dbgoracle stop --workspace-root \"${workspaceFolder}\""
+                        "command": 'dbgoracle stop --workspace-root "${workspaceFolder}"'
                     },
                     "problemMatcher": [],
                 }
@@ -427,7 +447,10 @@ def _can_overwrite(path: Path, *, force: bool) -> bool:
         if not isinstance(configurations, list) or len(configurations) != 1:
             return False
         configuration = configurations[0]
-        return isinstance(configuration, dict) and configuration.get("debugoracleManagedBy") == MANAGED_BY_VALUE
+        return (
+            isinstance(configuration, dict)
+            and configuration.get("debugoracleManagedBy") == MANAGED_BY_VALUE
+        )
     return False
 
 
@@ -462,7 +485,9 @@ def _parse_vscode_json(raw_text: str) -> object | None:
             continue
         if char == "/" and next_char == "*":
             index += 2
-            while index + 1 < length and not (raw_text[index] == "*" and raw_text[index + 1] == "/"):
+            while index + 1 < length and not (
+                raw_text[index] == "*" and raw_text[index + 1] == "/"
+            ):
                 index += 1
             index = min(length, index + 2)
             continue
@@ -507,7 +532,9 @@ def _dependency_checks(executable_path: Path) -> list[DependencyCheck]:
     ]
 
 
-def _overall_status(blocked_files: list[str], dependency_checks: list[DependencyCheck]) -> str:
+def _overall_status(
+    blocked_files: list[str], dependency_checks: list[DependencyCheck]
+) -> str:
     if blocked_files:
         return "partial"
     if any(check.status == "missing" for check in dependency_checks):
@@ -515,18 +542,14 @@ def _overall_status(blocked_files: list[str], dependency_checks: list[Dependency
     return "complete"
 
 
-def _next_human_action(*, attach_mode: bool, blocked_files: list[str], launch_config_name: str) -> str:
+def _next_human_action(
+    *, attach_mode: bool, blocked_files: list[str], launch_config_name: str
+) -> str:
     if attach_mode:
-        return (
-            f"Merge the DebugOracle attach fragments into the workspace, then start `{launch_config_name}` in VS Code and rerun `dbgoracle status --workspace-root .`."
-        )
+        return f"Merge the DebugOracle attach fragments into the workspace, then start `{launch_config_name}` in VS Code and rerun `dbgoracle status --workspace-root .`."
     if blocked_files:
-        return (
-            f"Update the blocked workspace files, then start `{launch_config_name}` in VS Code and rerun `dbgoracle status --workspace-root .`."
-        )
-    return (
-        f"Start `{launch_config_name}` in VS Code, keep the debug session running, then rerun `dbgoracle status --workspace-root .`."
-    )
+        return f"Update the blocked workspace files, then start `{launch_config_name}` in VS Code and rerun `dbgoracle status --workspace-root .`."
+    return f"Start `{launch_config_name}` in VS Code, keep the debug session running, then rerun `dbgoracle status --workspace-root .`."
 
 
 def _emit_result(result: InitWorkspaceResult, *, fmt: str) -> None:
@@ -550,7 +573,9 @@ def _emit_result(result: InitWorkspaceResult, *, fmt: str) -> None:
     print(f"dbgoracle init-workspace: {result.status}")
     print(f"Workspace: {result.workspace_root}")
     print(f"Mode: {result.mode}")
-    print(f"Launch Configuration: {result.launch_config_name} ({result.launch_config_role})")
+    print(
+        f"Launch Configuration: {result.launch_config_name} ({result.launch_config_role})"
+    )
     if result.created_files:
         print("Created:")
         for path in result.created_files:

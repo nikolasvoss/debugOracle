@@ -53,7 +53,10 @@ def cmd_install_cli(args: Any) -> int:
             if outcome.path_action.profile_path:
                 print(f"Profile file: {outcome.path_action.profile_path}", file=stream)
             if outcome.path_action.export_line:
-                print(f"Add this line if needed: {outcome.path_action.export_line}", file=stream)
+                print(
+                    f"Add this line if needed: {outcome.path_action.export_line}",
+                    file=stream,
+                )
             if outcome.path_action.error:
                 print(f"Profile update error: {outcome.path_action.error}", file=stream)
         if outcome.doctor_notes:

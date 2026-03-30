@@ -10,7 +10,13 @@ from unittest.mock import patch
 
 from debugoracle.builder import build_bundle_from_files, save_bundle
 from debugoracle.cli import main
-from debugoracle.openocd import DISCOVERY_MATCHED, DISCOVERY_NO_SESSION, OpenOcdCandidate, OpenOcdDiscoveryResult
+from debugoracle.openocd import (
+    DISCOVERY_MATCHED,
+    DISCOVERY_NO_SESSION,
+    OpenOcdCandidate,
+    OpenOcdDiscoveryResult,
+)
+
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
@@ -20,7 +26,9 @@ class DebugOracleLiveCliTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             self._prepare_workspace(tmpdir)
-            output = self._run_cli_with(cli_module.main, ["status", "--workspace-root", tmpdir])
+            output = self._run_cli_with(
+                cli_module.main, ["status", "--workspace-root", tmpdir]
+            )
 
         self.assertIn("DebugOracle Session Status", output)
         self.assertIn("Health: healthy", output)
@@ -86,9 +94,13 @@ class DebugOracleLiveCliTests(unittest.TestCase):
         self.assertIn("RTT file not found", output)
         self.assertIn("Snapshot Parse Warnings: 1", output)
 
-    def test_status_command_reports_connected_but_empty_managed_rtt_capture(self) -> None:
+    def test_status_command_reports_connected_but_empty_managed_rtt_capture(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
-            self._prepare_workspace(tmpdir, include_rtt=True, include_rtt_state=True, rtt_bytes=0)
+            self._prepare_workspace(
+                tmpdir, include_rtt=True, include_rtt_state=True, rtt_bytes=0
+            )
             output = self._run_cli(["status", "--workspace-root", tmpdir])
 
         self.assertIn("Transport Status: connected", output)
@@ -122,15 +134,23 @@ class DebugOracleLiveCliTests(unittest.TestCase):
             )
             with patch(
                 "debugoracle.session.discover_workspace_openocd_session",
-                return_value=OpenOcdDiscoveryResult(status=DISCOVERY_MATCHED, candidate=candidate),
+                return_value=OpenOcdDiscoveryResult(
+                    status=DISCOVERY_MATCHED, candidate=candidate
+                ),
             ):
-                output = self._run_cli(["status", "--workspace-root", tmpdir, "--format", "json"])
+                output = self._run_cli(
+                    ["status", "--workspace-root", tmpdir, "--format", "json"]
+                )
 
         payload = __import__("json").loads(output)
         self.assertEqual(payload["readiness"]["state"], "live")
-        self.assertEqual(payload["readiness"]["launch_config_name"], "DebugOracle: Attach STM32")
+        self.assertEqual(
+            payload["readiness"]["launch_config_name"], "DebugOracle: Attach STM32"
+        )
 
-    def test_status_command_keeps_attach_workspace_degraded_when_live_proof_is_weak(self) -> None:
+    def test_status_command_keeps_attach_workspace_degraded_when_live_proof_is_weak(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             self._prepare_workspace(tmpdir)
             self._write_attach_workspace(Path(tmpdir))
@@ -213,15 +233,15 @@ class DebugOracleLiveCliTests(unittest.TestCase):
             "{\n"
             '  "version": "0.2.0",\n'
             '  "configurations": [\n'
-            '    {\n'
+            "    {\n"
             '      "name": "DebugOracle: Attach STM32",\n'
             '      "type": "cortex-debug",\n'
             '      "request": "launch",\n'
             '      "debugoracleRole": "golden-path-attach",\n'
             '      "preLaunchTask": "DebugOracle: Prelaunch",\n'
             '      "postDebugTask": "DebugOracle: Stop RTT run"\n'
-            '    }\n'
-            '  ]\n'
+            "    }\n"
+            "  ]\n"
             "}\n",
             encoding="utf-8",
         )
@@ -231,7 +251,7 @@ class DebugOracleLiveCliTests(unittest.TestCase):
             '  "tasks": [\n'
             '    {"label": "DebugOracle: Prelaunch"},\n'
             '    {"label": "DebugOracle: Stop RTT run"}\n'
-            '  ]\n'
+            "  ]\n"
             "}\n",
             encoding="utf-8",
         )

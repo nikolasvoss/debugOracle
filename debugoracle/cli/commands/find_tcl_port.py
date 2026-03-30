@@ -62,7 +62,9 @@ def cmd_find_tcl_port(args: argparse.Namespace) -> int:
             "reachable": reachable,
             "svd_file": svd_file,
             "svd_notice": svd_notice,
-            "fetch_command": build_fetch_command(workspace_root, candidate.host, candidate.tcl_port, svd_file)
+            "fetch_command": build_fetch_command(
+                workspace_root, candidate.host, candidate.tcl_port, svd_file
+            )
             if args.print_fetch
             else None,
         }
@@ -93,7 +95,9 @@ def cmd_find_tcl_port(args: argparse.Namespace) -> int:
         )
 
     if args.print_fetch:
-        command = build_fetch_command(workspace_root, candidate.host, candidate.tcl_port, svd_file)
+        command = build_fetch_command(
+            workspace_root, candidate.host, candidate.tcl_port, svd_file
+        )
         if command is None:
             print(
                 "Fetch command: not available because no SVD file was resolved. "
@@ -111,7 +115,10 @@ def _candidate_error_message(result: OpenOcdDiscoveryResult) -> str:
     if result.status == DISCOVERY_PID_NOT_FOUND and result.requested_pid is not None:
         return f"No active OpenOCD session matched pid {result.requested_pid}."
     if result.status == DISCOVERY_MULTIPLE:
-        pids = ", ".join(str(candidate.pid) for candidate in sorted(result.candidates, key=lambda item: item.pid))
+        pids = ", ".join(
+            str(candidate.pid)
+            for candidate in sorted(result.candidates, key=lambda item: item.pid)
+        )
         return (
             "Multiple active OpenOCD sessions match this workspace selection while a debug session is running. "
             f"Re-run `dbgoracle find-tcl-port --pid <PID>` with one of: {pids}."
@@ -145,7 +152,9 @@ def _discover_workspace_session_for_cli(
         if not candidates:
             return OpenOcdDiscoveryResult(status=DISCOVERY_NO_SESSION)
         return OpenOcdDiscoveryResult(status=DISCOVERY_MULTIPLE, candidates=candidates)
-    if not is_tcp_endpoint_reachable(candidate.host, candidate.tcl_port, timeout_seconds=connect_timeout):
+    if not is_tcp_endpoint_reachable(
+        candidate.host, candidate.tcl_port, timeout_seconds=connect_timeout
+    ):
         return OpenOcdDiscoveryResult(
             status=DISCOVERY_UNREACHABLE,
             candidate=candidate,
@@ -178,7 +187,9 @@ def parse_ps_output(raw_text: str):
 
 
 def resolve_svd_file(workspace_root: Path) -> tuple[str | None, str | None]:
-    resolved, _, notice = resolve_fetch_svd_file(argparse.Namespace(svd_file=None), workspace_root)
+    resolved, _, notice = resolve_fetch_svd_file(
+        argparse.Namespace(svd_file=None), workspace_root
+    )
     return resolved, notice
 
 

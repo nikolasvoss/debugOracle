@@ -8,21 +8,28 @@ from debugoracle import openocd
 
 
 class FindTclPortHelperTests(unittest.TestCase):
-    def test_discover_openocd_candidates_falls_back_to_ps_when_proc_has_no_matches(self) -> None:
-        ps_text = " 1234 openocd -c \"gdb_port 50000\" -c \"tcl_port 50001\" -c \"telnet_port 50002\"\n"
-        with patch(
-            "debugoracle.openocd._discover_openocd_candidates_from_proc",
-            return_value=[],
-        ), patch(
-            "debugoracle.openocd._discover_openocd_candidates_from_ps",
-            return_value=list(helper.parse_ps_output(ps_text)),
+    def test_discover_openocd_candidates_falls_back_to_ps_when_proc_has_no_matches(
+        self,
+    ) -> None:
+        ps_text = ' 1234 openocd -c "gdb_port 50000" -c "tcl_port 50001" -c "telnet_port 50002"\n'
+        with (
+            patch(
+                "debugoracle.openocd._discover_openocd_candidates_from_proc",
+                return_value=[],
+            ),
+            patch(
+                "debugoracle.openocd._discover_openocd_candidates_from_ps",
+                return_value=list(helper.parse_ps_output(ps_text)),
+            ),
         ):
             candidates = list(helper.discover_openocd_candidates())
 
         self.assertEqual(len(candidates), 1)
         self.assertEqual(candidates[0].tcl_port, 50001)
 
-    def test_select_candidate_returns_none_for_ambiguous_unmatched_sessions(self) -> None:
+    def test_select_candidate_returns_none_for_ambiguous_unmatched_sessions(
+        self,
+    ) -> None:
         workspace_root = Path("/tmp/current-workspace")
         candidates = [
             helper.OpenOcdCandidate(
@@ -52,6 +59,7 @@ class FindTclPortHelperTests(unittest.TestCase):
         )
 
         self.assertIsNone(selected)
+
     def test_parse_openocd_ports_from_command_arguments(self) -> None:
         ports = helper.parse_openocd_ports(
             (
@@ -103,7 +111,9 @@ class FindTclPortHelperTests(unittest.TestCase):
 
         self.assertEqual(selected, current)
 
-    def test_resolve_svd_file_prefers_workspace_default_setting_with_jsonc(self) -> None:
+    def test_resolve_svd_file_prefers_workspace_default_setting_with_jsonc(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace_root = Path(tmpdir)
             (workspace_root / ".vscode").mkdir()
@@ -117,7 +127,9 @@ class FindTclPortHelperTests(unittest.TestCase):
                 encoding="utf-8",
             )
             (workspace_root / ".dbgoracle").mkdir()
-            (workspace_root / ".dbgoracle" / "board.svd").write_text("<device />\n", encoding="utf-8")
+            (workspace_root / ".dbgoracle" / "board.svd").write_text(
+                "<device />\n", encoding="utf-8"
+            )
 
             resolved, notice = helper.resolve_svd_file(workspace_root)
 
@@ -139,10 +151,7 @@ class FindTclPortHelperTests(unittest.TestCase):
         )
 
     def test_parse_ps_output_processes_extracts_openocd_processes(self) -> None:
-        raw = (
-            " 1234 openocd -c \"tcl_port 50001\"\n"
-            " 4567 python -m http.server\n"
-        )
+        raw = ' 1234 openocd -c "tcl_port 50001"\n 4567 python -m http.server\n'
 
         processes = list(openocd._parse_ps_output_processes(raw))
 
@@ -151,7 +160,9 @@ class FindTclPortHelperTests(unittest.TestCase):
         self.assertEqual(processes[0].argv, ("openocd", "-c", "tcl_port 50001"))
         self.assertIsNone(processes[0].cwd)
 
-    def test_find_workspace_openocd_process_matches_falls_back_to_command_text(self) -> None:
+    def test_find_workspace_openocd_process_matches_falls_back_to_command_text(
+        self,
+    ) -> None:
         workspace_root = Path("/tmp/current-workspace")
         processes = [
             openocd.OpenOcdProcess(
@@ -161,7 +172,13 @@ class FindTclPortHelperTests(unittest.TestCase):
             ),
             openocd.OpenOcdProcess(
                 pid=200,
-                argv=("openocd", "-s", str(workspace_root), "-f", "target/stm32l4x.cfg"),
+                argv=(
+                    "openocd",
+                    "-s",
+                    str(workspace_root),
+                    "-f",
+                    "target/stm32l4x.cfg",
+                ),
                 cwd=None,
             ),
         ]

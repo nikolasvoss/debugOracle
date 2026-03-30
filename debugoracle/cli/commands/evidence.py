@@ -46,11 +46,15 @@ def cmd_fetch(args: argparse.Namespace) -> int:
         gdb_mi=gdb_mi,
         rtt=rtt,
     )
-    resolved_svd_file, svd_discovered, svd_notice = resolve_fetch_svd_file(args, workspace_root)
-    resolved_openocd_tcl_host, resolved_openocd_tcl_port, tcl_discovered, tcl_notice = resolve_fetch_openocd_tcl_endpoint(
-        args,
-        gdb_mi=gdb_mi,
-        resolved_svd_file=resolved_svd_file,
+    resolved_svd_file, svd_discovered, svd_notice = resolve_fetch_svd_file(
+        args, workspace_root
+    )
+    resolved_openocd_tcl_host, resolved_openocd_tcl_port, tcl_discovered, tcl_notice = (
+        resolve_fetch_openocd_tcl_endpoint(
+            args,
+            gdb_mi=gdb_mi,
+            resolved_svd_file=resolved_svd_file,
+        )
     )
     _validate_fetch_live_capture_arguments(args, resolved_svd_file=resolved_svd_file)
     if svd_notice:
@@ -115,7 +119,9 @@ def cmd_fetch(args: argparse.Namespace) -> int:
                 )
             else:
                 save_artifact(bundle, state_out)
-                emit_fetch_summary(bundle, state_out, workspace_root=str(workspace_root))
+                emit_fetch_summary(
+                    bundle, state_out, workspace_root=str(workspace_root)
+                )
                 return 0
         try:
             bundle = attempt_fetch_openocd_recovery(
@@ -227,13 +233,16 @@ def cmd_fetch(args: argparse.Namespace) -> int:
     emit_fetch_summary(bundle, state_out, workspace_root=str(workspace_root))
     return 0
 
+
 def cmd_report(args: argparse.Namespace) -> int:
     bundle = resolve_required_snapshot(args, command_name="report")
     workspace_root = Path(args.workspace_root).resolve()
     if getattr(args, "snapshot_file", None):
         trust = derive_bundle_trust(bundle)
     else:
-        trust = collect_session_status(resolve_session_config(args, workspace_root)).trust
+        trust = collect_session_status(
+            resolve_session_config(args, workspace_root)
+        ).trust
     options = ReportRenderOptions(
         variable_names=list(args.vars or []) if args.vars is not None else None,
         include_gdb=bool(getattr(args, "gdb", False)),
@@ -271,11 +280,15 @@ def attempt_fetch_openocd_recovery(
     )
     candidate = discovery_result.candidate
     if candidate is None:
-        raise SystemExit(_format_fetch_recovery_unavailable(initial_error, discovery_result))
+        raise SystemExit(
+            _format_fetch_recovery_unavailable(initial_error, discovery_result)
+        )
     if _endpoint_matches_failure(candidate, initial_error):
         raise SystemExit(_format_fetch_same_endpoint(initial_error, candidate))
     if discovery_result.status != DISCOVERY_MATCHED:
-        raise SystemExit(_format_fetch_recovery_unavailable(initial_error, discovery_result))
+        raise SystemExit(
+            _format_fetch_recovery_unavailable(initial_error, discovery_result)
+        )
     print(
         f"Automatic Tcl recovery: retrying fetch with the live debug session at {candidate.host}:{candidate.tcl_port}.",
         file=sys.stderr,
@@ -296,13 +309,19 @@ def attempt_fetch_openocd_recovery(
             resolved_openocd_tcl_port=candidate.tcl_port,
         )
     except OpenOcdReachabilityError as retry_error:
-        raise SystemExit(_format_fetch_retry_failure(initial_error, candidate, str(retry_error))) from retry_error
+        raise SystemExit(
+            _format_fetch_retry_failure(initial_error, candidate, str(retry_error))
+        ) from retry_error
     except SystemExit as retry_error:
         reason = str(retry_error) or "register enrichment failed"
-        raise SystemExit(_format_fetch_retry_failure(initial_error, candidate, reason)) from retry_error
+        raise SystemExit(
+            _format_fetch_retry_failure(initial_error, candidate, reason)
+        ) from retry_error
 
 
-def _endpoint_matches_failure(candidate: OpenOcdCandidate, error: OpenOcdReachabilityError) -> bool:
+def _endpoint_matches_failure(
+    candidate: OpenOcdCandidate, error: OpenOcdReachabilityError
+) -> bool:
     return candidate.host == error.host and candidate.tcl_port == error.port
 
 
@@ -319,13 +338,21 @@ def _format_fetch_recovery_unavailable(
             + "Start the debug session first, then retry `dbgoracle fetch` or run `dbgoracle find-tcl-port --print-fetch`."
         )
     if discovery_result.status == DISCOVERY_MULTIPLE:
-        pids = ", ".join(str(candidate.pid) for candidate in sorted(discovery_result.candidates, key=lambda item: item.pid))
+        pids = ", ".join(
+            str(candidate.pid)
+            for candidate in sorted(
+                discovery_result.candidates, key=lambda item: item.pid
+            )
+        )
         return (
             base
             + "Automatic Tcl recovery found multiple running debug sessions that match this workspace. "
             + f"Re-run `dbgoracle find-tcl-port --pid <PID>` with one of: {pids}."
         )
-    if discovery_result.status == DISCOVERY_UNREACHABLE and discovery_result.candidate is not None:
+    if (
+        discovery_result.status == DISCOVERY_UNREACHABLE
+        and discovery_result.candidate is not None
+    ):
         candidate = discovery_result.candidate
         return (
             base
@@ -333,12 +360,23 @@ def _format_fetch_recovery_unavailable(
             + f"{candidate.host}:{candidate.tcl_port} is not reachable yet. "
             + "Keep the debug session running, then retry `dbgoracle fetch` or use `dbgoracle find-tcl-port --print-fetch`."
         )
-    if discovery_result.status == DISCOVERY_PID_NOT_FOUND and discovery_result.requested_pid is not None:
-        return base + f"Automatic Tcl recovery could not find the requested OpenOCD pid {discovery_result.requested_pid}."
-    return base + "Automatic Tcl recovery could not determine a usable OpenOCD Tcl endpoint."
+    if (
+        discovery_result.status == DISCOVERY_PID_NOT_FOUND
+        and discovery_result.requested_pid is not None
+    ):
+        return (
+            base
+            + f"Automatic Tcl recovery could not find the requested OpenOCD pid {discovery_result.requested_pid}."
+        )
+    return (
+        base
+        + "Automatic Tcl recovery could not determine a usable OpenOCD Tcl endpoint."
+    )
 
 
-def _format_fetch_same_endpoint(initial_error: OpenOcdReachabilityError, candidate: OpenOcdCandidate) -> str:
+def _format_fetch_same_endpoint(
+    initial_error: OpenOcdReachabilityError, candidate: OpenOcdCandidate
+) -> str:
     return (
         f"{initial_error}. "
         + "Automatic Tcl recovery found the same endpoint again "
@@ -378,7 +416,9 @@ def _validate_fetch_live_capture_arguments(
         )
 
 
-def emit_fetch_summary(bundle: InvestigationArtifact, output_path: str, *, workspace_root: str) -> None:
+def emit_fetch_summary(
+    bundle: InvestigationArtifact, output_path: str, *, workspace_root: str
+) -> None:
     gdb_source = bundle.sources.gdb
     rtt_source = bundle.sources.rtt
     workspace_arg = f"--workspace-root {workspace_root}"
@@ -454,7 +494,9 @@ def resolve_bundle(
     explicit_rtt = explicit_rtt or (getattr(args, "rtt", None) is not None)
 
     if requested_snapshot_file:
-        resolved_snapshot = resolve_workspace_path(requested_snapshot_file, workspace_root)
+        resolved_snapshot = resolve_workspace_path(
+            requested_snapshot_file, workspace_root
+        )
         emit_discovery_summary(
             command_name,
             {
@@ -515,7 +557,9 @@ def resolve_bundle(
     gdb_mi = resolved_gdb
     rtt = resolved_rtt
 
-    rtt_window = FULL_RTT_WINDOW if full else getattr(args, "rtt_window", DEFAULT_RTT_WINDOW)
+    rtt_window = (
+        FULL_RTT_WINDOW if full else getattr(args, "rtt_window", DEFAULT_RTT_WINDOW)
+    )
     discovered_inputs = {
         "snapshot-file": False,
         "gdb-mi": gdb_discovered,
@@ -538,7 +582,9 @@ def resolve_bundle(
     if rtt:
         require_readable_file(rtt, "RTT")
     if resolved_svd_file is None:
-        resolved_svd_file = resolve_workspace_path(getattr(args, "svd_file", None), workspace_root)
+        resolved_svd_file = resolve_workspace_path(
+            getattr(args, "svd_file", None), workspace_root
+        )
 
     try:
         return build_bundle_from_files(
@@ -548,14 +594,18 @@ def resolve_bundle(
             export_raw=getattr(args, "export_raw", False),
             export_dir=export_dir or config.snapshot_file.parent,
             svd_file_path=resolved_svd_file,
-            enable_live_peripheral_capture=bool(resolved_svd_file and command_name == "fetch"),
+            enable_live_peripheral_capture=bool(
+                resolved_svd_file and command_name == "fetch"
+            ),
             openocd_tcl_host=resolved_openocd_tcl_host,
             openocd_tcl_port=resolved_openocd_tcl_port,
         )
     except OpenOcdReachabilityError:
         raise
     except OSError as error:
-        raise SystemExit(f"Unable to read one of the required input files: {error}") from error
+        raise SystemExit(
+            f"Unable to read one of the required input files: {error}"
+        ) from error
     except ValueError as error:
         raise SystemExit(str(error)) from error
 
@@ -570,8 +620,12 @@ def resolve_required_snapshot(
     requested_snapshot_file = getattr(args, "snapshot_file", None)
 
     if requested_snapshot_file:
-        resolved_snapshot = resolve_workspace_path(requested_snapshot_file, workspace_root)
-        return load_snapshot(command_name=command_name, path=resolved_snapshot, strict=True)
+        resolved_snapshot = resolve_workspace_path(
+            requested_snapshot_file, workspace_root
+        )
+        return load_snapshot(
+            command_name=command_name, path=resolved_snapshot, strict=True
+        )
 
     if config.snapshot_file.exists():
         emit_discovery_summary(
@@ -579,7 +633,9 @@ def resolve_required_snapshot(
             {"snapshot-file": str(config.snapshot_file)},
             {"snapshot-file": True},
         )
-        return load_snapshot(command_name=command_name, path=str(config.snapshot_file), strict=True)
+        return load_snapshot(
+            command_name=command_name, path=str(config.snapshot_file), strict=True
+        )
 
     raise SystemExit(
         f"{command_name} requires a snapshot. run `fetch` first or pass --snapshot-file."
@@ -607,7 +663,9 @@ def resolve_session_config(
     snapshot_file = getattr(args, "snapshot_file", None)
     gdb_mi_file = getattr(args, "gdb_mi", None)
     rtt_file = getattr(args, "rtt", None)
-    rtt_state_file = getattr(args, "rtt_state", None) if hasattr(args, "rtt_state") else None
+    rtt_state_file = (
+        getattr(args, "rtt_state", None) if hasattr(args, "rtt_state") else None
+    )
     return SessionConfig.from_workspace(
         workspace_root=workspace_root,
         snapshot_file=snapshot_file if isinstance(snapshot_file, str) else None,
@@ -671,17 +729,20 @@ def resolve_fetch_svd_file(
 
     workspace_default_svd = resolve_workspace_default_svd_file(workspace_root)
     if workspace_default_svd:
-        return workspace_default_svd, False, f"Workspace default SVD for fetch: {workspace_default_svd}"
+        return (
+            workspace_default_svd,
+            False,
+            f"Workspace default SVD for fetch: {workspace_default_svd}",
+        )
 
     session_dir = workspace_root / DEFAULT_SESSION_DIR
     if not session_dir.is_dir():
         return None, False, None
 
-    candidates = [
-        session_dir / name
-        for name in sorted(os.listdir(session_dir))
+    candidates = [session_dir / name for name in sorted(os.listdir(session_dir))]
+    svd_candidates = [
+        path for path in candidates if path.is_file() and path.suffix.lower() == ".svd"
     ]
-    svd_candidates = [path for path in candidates if path.is_file() and path.suffix.lower() == ".svd"]
     if len(svd_candidates) == 1:
         resolved = str(svd_candidates[0])
         return resolved, True, f"Auto-discovered SVD for fetch: {resolved}"
@@ -693,7 +754,11 @@ def resolve_fetch_svd_file(
             "Multiple SVD candidates were found in .dbgoracle "
             f"({joined}). Continuing without register capture.",
         )
-    return None, False, "No SVD candidate was found in .dbgoracle. Continuing without register capture."
+    return (
+        None,
+        False,
+        "No SVD candidate was found in .dbgoracle. Continuing without register capture.",
+    )
 
 
 def resolve_fetch_openocd_tcl_endpoint(
@@ -711,7 +776,12 @@ def resolve_fetch_openocd_tcl_endpoint(
     discovered_port = discover_openocd_tcl_port_from_mi_log(gdb_mi)
     if discovered_port is None:
         return None, None, False, None
-    return None, discovered_port, True, f"Discovered OpenOCD Tcl port for fetch from GDB/MI log: {discovered_port}"
+    return (
+        None,
+        discovered_port,
+        True,
+        f"Discovered OpenOCD Tcl port for fetch from GDB/MI log: {discovered_port}",
+    )
 
 
 def discover_openocd_tcl_port_from_mi_log(gdb_mi_path: str) -> int | None:
@@ -720,9 +790,15 @@ def discover_openocd_tcl_port_from_mi_log(gdb_mi_path: str) -> int | None:
     except OSError:
         return None
     lines = raw_text.splitlines()
-    launch_indexes = [index for index, line in enumerate(lines) if "Launching gdb-server:" in line]
-    search_lines = lines[launch_indexes[-1]:] if launch_indexes else lines[-200:]
-    matches = [match.group(1) for line in search_lines for match in re.finditer(r'tcl_port\s+(\d+)', line)]
+    launch_indexes = [
+        index for index, line in enumerate(lines) if "Launching gdb-server:" in line
+    ]
+    search_lines = lines[launch_indexes[-1] :] if launch_indexes else lines[-200:]
+    matches = [
+        match.group(1)
+        for line in search_lines
+        for match in re.finditer(r"tcl_port\s+(\d+)", line)
+    ]
     if not matches:
         return None
     try:
@@ -745,7 +821,9 @@ def resolve_workspace_default_svd_file(workspace_root: Path) -> str | None:
     raw_value = payload.get("debugoracle.svdFile")
     if not isinstance(raw_value, str) or not raw_value.strip():
         return None
-    return resolve_workspace_path(expand_workspace_tokens(raw_value, workspace_root), workspace_root)
+    return resolve_workspace_path(
+        expand_workspace_tokens(raw_value, workspace_root), workspace_root
+    )
 
 
 def expand_workspace_tokens(value: str, workspace_root: Path) -> str:
@@ -792,7 +870,9 @@ def _strip_jsonc_comments(raw_text: str) -> str:
             continue
         if char == "/" and next_char == "*":
             index += 2
-            while index + 1 < length and not (raw_text[index] == "*" and raw_text[index + 1] == "/"):
+            while index + 1 < length and not (
+                raw_text[index] == "*" and raw_text[index + 1] == "/"
+            ):
                 index += 1
             index = min(index + 2, length)
             continue
@@ -857,24 +937,30 @@ def missing_inputs_error(
             workspace_root / DEFAULT_SNAPSHOT_FILENAME,
             workspace_root / DEFAULT_SESSION_DIR / DEFAULT_SNAPSHOT_FILENAME,
         ]
-        lines.extend([
-            "Either provide --snapshot-file, --gdb-mi, or --rtt, or run from a workspace with:",
-            "  - Snapshot:",
-            f"    - {snapshot_candidates[0]}",
-            f"    - {snapshot_candidates[1]}",
-        ])
+        lines.extend(
+            [
+                "Either provide --snapshot-file, --gdb-mi, or --rtt, or run from a workspace with:",
+                "  - Snapshot:",
+                f"    - {snapshot_candidates[0]}",
+                f"    - {snapshot_candidates[1]}",
+            ]
+        )
     else:
-        lines.append("Either provide --gdb-mi, --rtt, or both, or run from a workspace with:")
-    lines.extend([
-        "  - GDB/MI:",
-        f"    - {gdb_candidates[0]}",
-        f"    - {gdb_candidates[1]}",
-        "  - RTT:",
-        f"    - {rtt_candidates[0]}",
-        f"    - {rtt_candidates[1]}",
-        "  - At least one of GDB/MI or RTT must be available.",
-        f"Workspace root: {workspace_root}",
-    ])
+        lines.append(
+            "Either provide --gdb-mi, --rtt, or both, or run from a workspace with:"
+        )
+    lines.extend(
+        [
+            "  - GDB/MI:",
+            f"    - {gdb_candidates[0]}",
+            f"    - {gdb_candidates[1]}",
+            "  - RTT:",
+            f"    - {rtt_candidates[0]}",
+            f"    - {rtt_candidates[1]}",
+            "  - At least one of GDB/MI or RTT must be available.",
+            f"Workspace root: {workspace_root}",
+        ]
+    )
     if allow_snapshot_fallback:
         lines.append(
             "Tip: run from a folder with latest_snapshot.json (or .dbgoracle/latest_snapshot.json) "
@@ -961,8 +1047,8 @@ def derive_bundle_trust(bundle: InvestigationArtifact) -> dict[str, object]:
     critical_warnings = _critical_warnings(bundle, critical_warning_count)
     action_reason = (
         "A reusable snapshot is available for inspection."
-        if snapshot_usable else
-        "The requested snapshot is not usable for inspection."
+        if snapshot_usable
+        else "The requested snapshot is not usable for inspection."
     )
     return evaluate_artifact_trust(
         snapshot_exists=True,
@@ -979,7 +1065,9 @@ def derive_bundle_trust(bundle: InvestigationArtifact) -> dict[str, object]:
     ).to_dict()
 
 
-def _critical_warnings(bundle: InvestigationArtifact, critical_warning_count: int | None) -> list[str]:
+def _critical_warnings(
+    bundle: InvestigationArtifact, critical_warning_count: int | None
+) -> list[str]:
     if critical_warning_count is not None and critical_warning_count <= 0:
         return []
     raw = bundle.provenance.get("critical_warnings")
@@ -993,7 +1081,11 @@ def _critical_warnings(bundle: InvestigationArtifact, critical_warning_count: in
 
 
 def _as_int(value: object) -> int | None:
-    try:
-        return int(value)  # type: ignore[arg-type]
-    except (TypeError, ValueError):
-        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value, 10)
+        except ValueError:
+            return None
+    return None

@@ -63,13 +63,17 @@ def cmd_stop(args: argparse.Namespace) -> int:
     if runtime is None:
         print(f"No detached RTT run is active for workspace {workspace_root}.")
         return 0
-    pid = int(runtime.get("pid", 0))  # type: ignore[arg-type]
+    pid = parse_pid(runtime)
     if pid <= 0:
-        print(f"Warning: Invalid runtime metadata in {runtime_path}. Cleaning up stale file.")
+        print(
+            f"Warning: Invalid runtime metadata in {runtime_path}. Cleaning up stale file."
+        )
         safe_unlink(runtime_path)
         return 0
     if not is_pid_running(pid):
-        print(f"Warning: Detached RTT run pid {pid} is not running. Cleaning up stale metadata.")
+        print(
+            f"Warning: Detached RTT run pid {pid} is not running. Cleaning up stale metadata."
+        )
         safe_unlink(runtime_path)
         return 0
     if not is_owned_run_process(pid):
@@ -96,10 +100,15 @@ def cmd_stop(args: argparse.Namespace) -> int:
 
     if is_pid_running(pid):
         try:
-            kill_signal = signal.SIGKILL if hasattr(signal, "SIGKILL") else signal.SIGTERM
+            kill_signal = (
+                signal.SIGKILL if hasattr(signal, "SIGKILL") else signal.SIGTERM
+            )
             os.kill(pid, kill_signal)
         except OSError as error:
-            print(f"Failed to force-stop detached RTT run pid {pid}: {error}", file=sys.stderr)
+            print(
+                f"Failed to force-stop detached RTT run pid {pid}: {error}",
+                file=sys.stderr,
+            )
             return 1
         time.sleep(0.1)
     if is_pid_running(pid):
@@ -121,7 +130,7 @@ def _cmd_run_detach(
 ) -> int:
     existing_runtime = load_runtime_metadata(runtime_path)
     if existing_runtime is not None:
-        pid = int(existing_runtime.get("pid", 0))  # type: ignore[arg-type]
+        pid = parse_pid(existing_runtime)
         if pid > 0 and is_pid_running(pid):
             if is_owned_run_process(pid):
                 print(
@@ -291,6 +300,18 @@ def load_runtime_metadata(path: Path) -> dict[str, object] | None:
     return payload
 
 
+def parse_pid(metadata: dict[str, object]) -> int:
+    raw_pid = metadata.get("pid", 0)
+    if isinstance(raw_pid, int):
+        return raw_pid
+    if isinstance(raw_pid, str):
+        try:
+            return int(raw_pid, 10)
+        except ValueError:
+            return 0
+    return 0
+
+
 def is_owned_run_process(pid: int) -> bool:
     cmdline = read_process_cmdline(pid)
     if not cmdline:
@@ -330,7 +351,7 @@ def read_process_cmdline(pid: int) -> str:
     if platform.system().lower().startswith("win"):
         try:
             command = (
-                f"$p = Get-CimInstance Win32_Process -Filter \"ProcessId = {pid}\"; "
+                f'$p = Get-CimInstance Win32_Process -Filter "ProcessId = {pid}"; '
                 "if ($p -ne $null) { $p.CommandLine }"
             )
             result = subprocess.run(

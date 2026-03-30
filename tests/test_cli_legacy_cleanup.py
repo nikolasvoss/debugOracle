@@ -25,11 +25,15 @@ class CliLegacyCleanupTests(unittest.TestCase):
 
         with self.assertRaises(SystemExit) as error:
             with redirect_stderr(io.StringIO()) as stderr:
-                parser.parse_args(["prompt", "--goal", "Explain stop", "--var-scope", "all"])
+                parser.parse_args(
+                    ["prompt", "--goal", "Explain stop", "--var-scope", "all"]
+                )
         self.assertEqual(error.exception.code, 2)
         self.assertIn("invalid choice", stderr.getvalue())
 
-    def test_fetch_and_report_help_no_longer_advertise_raw_export_sidecars(self) -> None:
+    def test_fetch_and_report_help_no_longer_advertise_raw_export_sidecars(
+        self,
+    ) -> None:
         parser = build_parser()
 
         fetch_help = self._format_help(parser, ["fetch", "--help"])

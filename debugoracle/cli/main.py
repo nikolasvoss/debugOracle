@@ -13,7 +13,12 @@ from .commands.evidence import cmd_fetch, cmd_report
 from .commands.find_tcl_port import cmd_find_tcl_port
 from .commands.guard_openocd_launch import cmd_guard_openocd_launch
 from .commands.install_cli import cmd_install_cli
-from .commands.docs_cli import cmd_docs_doctor, cmd_docs_ingest, cmd_docs_search, cmd_docs_status
+from .commands.docs_cli import (
+    cmd_docs_doctor,
+    cmd_docs_ingest,
+    cmd_docs_search,
+    cmd_docs_status,
+)
 from .commands.init_workspace import (
     DEFAULT_MI_LOG_PATH,
     DEFAULT_RTT_LAUNCH_LOG_PATH,
@@ -614,22 +619,29 @@ def positive_int(value: str) -> int:
     return parsed
 
 
-def validate_report_arguments(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+def validate_report_arguments(
+    parser: argparse.ArgumentParser, args: argparse.Namespace
+) -> None:
     if getattr(args, "command", None) != "report":
         return
     if getattr(args, "tail", None) is not None and not (
-        getattr(args, "gdb", False) or getattr(args, "rtt", False) or getattr(args, "verbose", False)
+        getattr(args, "gdb", False)
+        or getattr(args, "rtt", False)
+        or getattr(args, "verbose", False)
     ):
         parser.error("--tail requires --gdb, --rtt, or --verbose")
-    if getattr(args, "regs_list", None) is not None and getattr(args, "regs", None) is not None:
+    if (
+        getattr(args, "regs_list", None) is not None
+        and getattr(args, "regs", None) is not None
+    ):
         parser.error("--regs-list and --regs cannot be used together")
-    if getattr(args, "regs_list", None) not in (None, "") and ":" in getattr(args, "regs_list", ""):
+    if getattr(args, "regs_list", None) not in (None, "") and ":" in getattr(
+        args, "regs_list", ""
+    ):
         parser.error("--regs-list accepts an optional peripheral name only")
     for selector in getattr(args, "regs", None) or []:
         if not _is_valid_register_selector(selector):
             parser.error(f"invalid register selector: {selector}")
-
-
 
 
 def add_session_arguments(parser: argparse.ArgumentParser) -> None:
@@ -696,6 +708,7 @@ def add_input_arguments(
         default=".",
         help="Workspace root used to resolve default file paths",
     )
+
 
 def _is_valid_register_selector(value: str) -> bool:
     if not value or value.count(":") > 1:

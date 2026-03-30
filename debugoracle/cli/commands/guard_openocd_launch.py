@@ -4,7 +4,11 @@ import argparse
 import sys
 from pathlib import Path
 
-from ...openocd import OpenOcdProcess, discover_openocd_processes, find_workspace_openocd_process_matches
+from ...openocd import (
+    OpenOcdProcess,
+    discover_openocd_processes,
+    find_workspace_openocd_process_matches,
+)
 from ...session import SessionConfig, collect_session_status
 
 
@@ -34,10 +38,14 @@ def cmd_guard_openocd_launch(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
             return 2
-        print("OpenOCD preflight: no conflicting workspace-matching OpenOCD session detected.")
+        print(
+            "OpenOCD preflight: no conflicting workspace-matching OpenOCD session detected."
+        )
         return 0
     if len(matches) > 1:
-        pids = ", ".join(str(match.pid) for match in sorted(matches, key=lambda item: item.pid))
+        pids = ", ".join(
+            str(match.pid) for match in sorted(matches, key=lambda item: item.pid)
+        )
         print(
             "Refusing to launch DebugOracle-owned OpenOCD because multiple workspace-matching "
             f"OpenOCD sessions are already running ({pids}). Stop the manual session(s) first "
@@ -46,7 +54,7 @@ def cmd_guard_openocd_launch(args: argparse.Namespace) -> int:
         )
         return 2
 
-    match = matches[0]  # type: ignore[index]
+    match = next(iter(matches))
     print(
         "Refusing to launch DebugOracle-owned OpenOCD because a workspace-matching OpenOCD "
         f"session is already running (pid {match.pid}). This usually means `make debug` is "

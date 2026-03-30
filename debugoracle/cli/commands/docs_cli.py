@@ -71,7 +71,9 @@ def cmd_docs_doctor(args: argparse.Namespace) -> int:
         ]
     }
     required_missing = [check for check in checks if check.required and not check.ready]
-    optional_missing = [check for check in checks if not check.required and not check.ready]
+    optional_missing = [
+        check for check in checks if not check.required and not check.ready
+    ]
     payload["summary"] = {
         "required_ready": not required_missing,
         "missing_required": [check.key for check in required_missing],
@@ -110,7 +112,9 @@ def _render_ingest(batch: DocsIngestBatch, *, fmt: str) -> str:
         lines.append("Discovered candidates:")
         lines.extend(f"- {item}" for item in batch.discovered_candidates)
     if batch.confirmation_required:
-        lines.append("Action: re-run with --yes to ingest the discovered PDFs, or pass --file/--folder.")
+        lines.append(
+            "Action: re-run with --yes to ingest the discovered PDFs, or pass --file/--folder."
+        )
     if batch.results:
         lines.append("Results:")
         for result in batch.results:
@@ -128,8 +132,12 @@ def _render_ingest(batch: DocsIngestBatch, *, fmt: str) -> str:
             ):
                 lines.append("  hint: extraction quality may improve with Docling")
                 lines.append("    pipx inject debugoracle docling")
-                lines.append("    # or in the active venv: pip install 'debugoracle[docling]'")
-                lines.append(f"    dbgoracle docs ingest {result.source_pdf} --parser=docling")
+                lines.append(
+                    "    # or in the active venv: pip install 'debugoracle[docling]'"
+                )
+                lines.append(
+                    f"    dbgoracle docs ingest {result.source_pdf} --parser=docling"
+                )
     if batch.warnings:
         lines.append("Warnings:")
         lines.extend(f"- {warning}" for warning in batch.warnings)
@@ -163,10 +171,13 @@ def _render_search(result: DocsSearchResult, *, fmt: str) -> str:
 
 def _render_status(statuses: list[DocsStatusEntry], *, fmt: str) -> str:
     if fmt == "json":
-        return json.dumps(
-            {"documents": [item.to_dict() for item in statuses]},
-            indent=2,
-        ) + "\n"
+        return (
+            json.dumps(
+                {"documents": [item.to_dict() for item in statuses]},
+                indent=2,
+            )
+            + "\n"
+        )
     lines = ["DebugOracle Docs Status"]
     if not statuses:
         lines.append("No ingested documents found.")
@@ -236,7 +247,11 @@ def _run_docs_ingest(
     if not batch.confirmation_required or not batch.discovered_candidates:
         return batch
     discovered_count = len(batch.discovered_candidates)
-    answer = input(f"Ingest {discovered_count} discovered PDF(s) now? [y/N] ").strip().lower()
+    answer = (
+        input(f"Ingest {discovered_count} discovered PDF(s) now? [y/N] ")
+        .strip()
+        .lower()
+    )
     if answer not in {"y", "yes"}:
         return batch
     return ingest_documents(
@@ -254,15 +269,22 @@ def _run_docs_ingest(
 def _interactive_enabled(args: argparse.Namespace) -> bool:
     if getattr(args, "no_interactive", False):
         return False
-    return bool(sys.stdin.isatty() and sys.stdout.isatty() and args.format == "text" and not args.output)
+    return bool(
+        sys.stdin.isatty()
+        and sys.stdout.isatty()
+        and args.format == "text"
+        and not args.output
+    )
 
 
 def _next_steps_lines(results: list[DocsIngestResult]) -> list[str]:
     lines = ["Next:"]
     first_source = results[0].source_pdf
-    lines.append(f"- Search now: dbgoracle docs search \"<query>\" --file {first_source}")
+    lines.append(f'- Search now: dbgoracle docs search "<query>" --file {first_source}')
     if any(result.ingest_state in {"partial", "warning"} for result in results):
-        lines.append("- If quality looks degraded, retry with: --parser docling --force")
+        lines.append(
+            "- If quality looks degraded, retry with: --parser docling --force"
+        )
     if any(result.ingest_state == "failed" for result in results):
         lines.append("- Run diagnostics: dbgoracle docs doctor")
     return lines

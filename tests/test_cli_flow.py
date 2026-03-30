@@ -34,7 +34,9 @@ class DebugOracleCliTests(unittest.TestCase):
 
     def test_find_tcl_port_command_parses(self) -> None:
         parser = build_parser()
-        parsed = parser.parse_args(["find-tcl-port", "--workspace-root", ".", "--print-fetch"])
+        parsed = parser.parse_args(
+            ["find-tcl-port", "--workspace-root", ".", "--print-fetch"]
+        )
 
         self.assertEqual(parsed.command, "find-tcl-port")
         self.assertTrue(parsed.print_fetch)
@@ -50,7 +52,8 @@ class DebugOracleCliTests(unittest.TestCase):
             workspace = Path(tmpdir)
             (workspace / ".vscode").mkdir()
             (workspace / ".vscode" / "settings.json").write_text(
-                json.dumps({"debugoracle.svdFile": "${workspaceFolder}/device.svd"}) + "\n",
+                json.dumps({"debugoracle.svdFile": "${workspaceFolder}/device.svd"})
+                + "\n",
                 encoding="utf-8",
             )
             (workspace / "device.svd").write_text("<device />\n", encoding="utf-8")
@@ -64,8 +67,15 @@ class DebugOracleCliTests(unittest.TestCase):
                 telnet_port=None,
             )
 
-            with patch("debugoracle.cli.commands.find_tcl_port.discover_openocd_candidates", return_value=[candidate]), patch(
-                "debugoracle.cli.commands.find_tcl_port.is_tcp_endpoint_reachable", return_value=True
+            with (
+                patch(
+                    "debugoracle.cli.commands.find_tcl_port.discover_openocd_candidates",
+                    return_value=[candidate],
+                ),
+                patch(
+                    "debugoracle.cli.commands.find_tcl_port.is_tcp_endpoint_reachable",
+                    return_value=True,
+                ),
             ):
                 stdout, stderr = self._run_cli_in_workspace(
                     workspace,
@@ -92,8 +102,15 @@ class DebugOracleCliTests(unittest.TestCase):
                 telnet_port=None,
             )
 
-            with patch("debugoracle.cli.commands.find_tcl_port.discover_openocd_candidates", return_value=[candidate]), patch(
-                "debugoracle.cli.commands.find_tcl_port.is_tcp_endpoint_reachable", return_value=True
+            with (
+                patch(
+                    "debugoracle.cli.commands.find_tcl_port.discover_openocd_candidates",
+                    return_value=[candidate],
+                ),
+                patch(
+                    "debugoracle.cli.commands.find_tcl_port.is_tcp_endpoint_reachable",
+                    return_value=True,
+                ),
             ):
                 stdout, stderr, exit_code = self._run_cli_capture_in_workspace(
                     workspace,
@@ -129,7 +146,10 @@ class DebugOracleCliTests(unittest.TestCase):
                 ),
             ]
 
-            with patch("debugoracle.cli.commands.find_tcl_port.discover_openocd_candidates", return_value=candidates):
+            with patch(
+                "debugoracle.cli.commands.find_tcl_port.discover_openocd_candidates",
+                return_value=candidates,
+            ):
                 stdout, stderr, exit_code = self._run_cli_capture_in_workspace(
                     workspace,
                     ["find-tcl-port", "--workspace-root", "."],
@@ -169,7 +189,9 @@ class DebugOracleCliTests(unittest.TestCase):
 
     def test_install_cli_command_parses(self) -> None:
         parser = build_parser()
-        parsed = parser.parse_args(["install-cli", "--manifest-url", "https://example.com/manifest.json"])
+        parsed = parser.parse_args(
+            ["install-cli", "--manifest-url", "https://example.com/manifest.json"]
+        )
 
         self.assertEqual(parsed.command, "install_cli")
         self.assertEqual(parsed.manifest_url, "https://example.com/manifest.json")
@@ -229,7 +251,10 @@ class DebugOracleCliTests(unittest.TestCase):
     def test_init_workspace_creates_fresh_workspace_scaffold(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
-            with patch("debugoracle.cli.commands.init_workspace.shutil.which", return_value="/usr/bin/openocd"):
+            with patch(
+                "debugoracle.cli.commands.init_workspace.shutil.which",
+                return_value="/usr/bin/openocd",
+            ):
                 stdout, stderr, exit_code = self._run_cli_capture(
                     [
                         "init-workspace",
@@ -257,7 +282,10 @@ class DebugOracleCliTests(unittest.TestCase):
 
             settings = json.loads(settings_path.read_text(encoding="utf-8"))
             self.assertEqual(settings["debugoracle.executable"], "build/app.elf")
-            self.assertEqual(settings["debugoracle.openocdConfigFiles"], ["interface/stlink.cfg", "target/stm32l4x.cfg"])
+            self.assertEqual(
+                settings["debugoracle.openocdConfigFiles"],
+                ["interface/stlink.cfg", "target/stm32l4x.cfg"],
+            )
             self.assertEqual(
                 settings["debugoracle.miLogPath"],
                 "${workspaceFolder}/.dbgoracle/cortex-debug-shared-mi.log",
@@ -267,14 +295,19 @@ class DebugOracleCliTests(unittest.TestCase):
             self.assertIn('"interface/stlink.cfg"', launch_text)
             self.assertIn('"target/stm32l4x.cfg"', launch_text)
             self.assertIn('"preLaunchTask": "Prepare debug logs"', launch_text)
-            self.assertNotIn('"postDebugTask": "DebugOracle: Stop RTT run"', launch_text)
+            self.assertNotIn(
+                '"postDebugTask": "DebugOracle: Stop RTT run"', launch_text
+            )
             self.assertIn("init-workspace", stdout)
             self.assertEqual(stderr, "")
 
     def test_init_workspace_with_rtt_enables_rtt_commands_in_launch(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
-            with patch("debugoracle.cli.commands.init_workspace.shutil.which", return_value="/usr/bin/openocd"):
+            with patch(
+                "debugoracle.cli.commands.init_workspace.shutil.which",
+                return_value="/usr/bin/openocd",
+            ):
                 stdout, stderr, exit_code = self._run_cli_capture(
                     [
                         "init-workspace",
@@ -290,22 +323,35 @@ class DebugOracleCliTests(unittest.TestCase):
                     ]
                 )
 
-            launch_text = (workspace / ".vscode" / "launch.json").read_text(encoding="utf-8")
+            launch_text = (workspace / ".vscode" / "launch.json").read_text(
+                encoding="utf-8"
+            )
 
         self.assertEqual(exit_code, 0)
         self.assertEqual(stderr, "")
         self.assertIn('"preLaunchTask": "DebugOracle: Prelaunch"', launch_text)
         self.assertIn('"postDebugTask": "DebugOracle: Stop RTT run"', launch_text)
-        self.assertIn('"monitor rtt setup 0x20000000 0x1000 \\\"SEGGER RTT\\\""', launch_text)
+        self.assertIn(
+            '"monitor rtt setup 0x20000000 0x1000 \\"SEGGER RTT\\""', launch_text
+        )
         self.assertIn('"monitor rtt start"', launch_text)
-        self.assertIn('"monitor rtt server start ${config:debugoracle.rttPort} 0"', launch_text)
-        self.assertNotIn('// "monitor rtt setup 0x20000000 0x1000 \\\"SEGGER RTT\\\""', launch_text)
+        self.assertIn(
+            '"monitor rtt server start ${config:debugoracle.rttPort} 0"', launch_text
+        )
+        self.assertNotIn(
+            '// "monitor rtt setup 0x20000000 0x1000 \\"SEGGER RTT\\""', launch_text
+        )
         self.assertIn("init-workspace", stdout)
 
-    def test_init_workspace_with_custom_rtt_port_keeps_tasks_and_launch_in_sync(self) -> None:
+    def test_init_workspace_with_custom_rtt_port_keeps_tasks_and_launch_in_sync(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
-            with patch("debugoracle.cli.commands.init_workspace.shutil.which", return_value="/usr/bin/openocd"):
+            with patch(
+                "debugoracle.cli.commands.init_workspace.shutil.which",
+                return_value="/usr/bin/openocd",
+            ):
                 stdout, stderr, exit_code = self._run_cli_capture(
                     [
                         "init-workspace",
@@ -323,9 +369,15 @@ class DebugOracleCliTests(unittest.TestCase):
                     ]
                 )
 
-            settings = json.loads((workspace / ".vscode" / "settings.json").read_text(encoding="utf-8"))
-            launch_text = (workspace / ".vscode" / "launch.json").read_text(encoding="utf-8")
-            tasks_text = (workspace / ".vscode" / "tasks.json").read_text(encoding="utf-8")
+            settings = json.loads(
+                (workspace / ".vscode" / "settings.json").read_text(encoding="utf-8")
+            )
+            launch_text = (workspace / ".vscode" / "launch.json").read_text(
+                encoding="utf-8"
+            )
+            tasks_text = (workspace / ".vscode" / "tasks.json").read_text(
+                encoding="utf-8"
+            )
 
         self.assertEqual(exit_code, 0)
         self.assertEqual(stderr, "")
@@ -335,15 +387,23 @@ class DebugOracleCliTests(unittest.TestCase):
         self.assertNotIn("monitor rtt server start 60001 0", launch_text)
         self.assertIn("init-workspace", stdout)
 
-    def test_init_workspace_resolves_executable_relative_to_workspace_root(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir, tempfile.TemporaryDirectory() as otherdir:
+    def test_init_workspace_resolves_executable_relative_to_workspace_root(
+        self,
+    ) -> None:
+        with (
+            tempfile.TemporaryDirectory() as tmpdir,
+            tempfile.TemporaryDirectory() as otherdir,
+        ):
             workspace = Path(tmpdir)
             (workspace / "build").mkdir()
             (workspace / "build" / "app.elf").write_text("elf", encoding="utf-8")
             previous = os.getcwd()
             try:
                 os.chdir(otherdir)
-                with patch("debugoracle.cli.commands.init_workspace.shutil.which", return_value="/usr/bin/openocd"):
+                with patch(
+                    "debugoracle.cli.commands.init_workspace.shutil.which",
+                    return_value="/usr/bin/openocd",
+                ):
                     stdout, stderr, exit_code = self._run_cli_capture(
                         [
                             "init-workspace",
@@ -363,13 +423,23 @@ class DebugOracleCliTests(unittest.TestCase):
             payload = json.loads(stdout)
 
         self.assertEqual(exit_code, 0)
-        executable = next(item for item in payload["dependency_checks"] if item["name"] == "executable")
+        executable = next(
+            item
+            for item in payload["dependency_checks"]
+            if item["name"] == "executable"
+        )
         self.assertEqual(executable["status"], "available")
-        cortex_debug = next(item for item in payload["dependency_checks"] if item["name"] == "cortex-debug")
+        cortex_debug = next(
+            item
+            for item in payload["dependency_checks"]
+            if item["name"] == "cortex-debug"
+        )
         self.assertIn("minimum supported version 1.12.1", cortex_debug["detail"])
         self.assertEqual(stderr, "")
 
-    def test_init_workspace_returns_failed_json_when_openocd_config_is_missing(self) -> None:
+    def test_init_workspace_returns_failed_json_when_openocd_config_is_missing(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
             stdout, stderr, exit_code = self._run_cli_capture(
@@ -392,11 +462,16 @@ class DebugOracleCliTests(unittest.TestCase):
         self.assertEqual(payload["created_files"], [])
         self.assertEqual(payload["blocked_files"], [])
         self.assertEqual(payload["required_actions"][0]["path"], "--openocd-config")
-        self.assertIn("cannot guess your OpenOCD setup", payload["required_actions"][0]["fragment"])
+        self.assertIn(
+            "cannot guess your OpenOCD setup",
+            payload["required_actions"][0]["fragment"],
+        )
         self.assertEqual(payload["dependency_checks"], [])
         self.assertEqual(stderr, "")
 
-    def test_init_workspace_returns_partial_json_when_existing_settings_block_automation(self) -> None:
+    def test_init_workspace_returns_partial_json_when_existing_settings_block_automation(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
             vscode_dir = workspace / ".vscode"
@@ -421,8 +496,13 @@ class DebugOracleCliTests(unittest.TestCase):
             self.assertEqual(exit_code, 2)
             self.assertEqual(payload["status"], "partial")
             self.assertIn(str(vscode_dir / "settings.json"), payload["blocked_files"])
-            self.assertEqual(payload["required_actions"][0]["path"], str(vscode_dir / "settings.json"))
-            self.assertIn("debugoracle.executable", payload["required_actions"][0]["fragment"])
+            self.assertEqual(
+                payload["required_actions"][0]["path"],
+                str(vscode_dir / "settings.json"),
+            )
+            self.assertIn(
+                "debugoracle.executable", payload["required_actions"][0]["fragment"]
+            )
             self.assertTrue((workspace / ".vscode" / "launch.json").is_file())
             self.assertTrue((workspace / ".vscode" / "tasks.json").is_file())
             self.assertTrue((workspace / ".dbgoracle").is_dir())
@@ -456,7 +536,9 @@ class DebugOracleCliTests(unittest.TestCase):
         self.assertEqual(payload["mode"], "attach")
         self.assertEqual(payload["merge_strategy"], "agent")
         self.assertEqual(payload["launch_config_name"], "DebugOracle: Attach STM32")
-        self.assertIn("Merge the DebugOracle attach fragments", payload["next_human_action"])
+        self.assertIn(
+            "Merge the DebugOracle attach fragments", payload["next_human_action"]
+        )
         self.assertEqual(
             payload["blocked_files"],
             [
@@ -467,14 +549,31 @@ class DebugOracleCliTests(unittest.TestCase):
         )
         self.assertEqual(payload["created_files"], [])
         self.assertEqual(stderr, "")
-        self.assertIn('"debugoracle.workspaceSetupMode": "attach"', payload["required_actions"][0]["fragment"])
-        self.assertIn('"name": "DebugOracle: Attach STM32"', payload["required_actions"][1]["fragment"])
-        self.assertIn('"debugoracleRole": "golden-path-attach"', payload["required_actions"][1]["fragment"])
-        self.assertIn('"label": "DebugOracle: Prelaunch"', payload["required_actions"][2]["fragment"])
-        self.assertIn('"label": "DebugOracle: Guard Attach Launch"', payload["required_actions"][2]["fragment"])
+        self.assertIn(
+            '"debugoracle.workspaceSetupMode": "attach"',
+            payload["required_actions"][0]["fragment"],
+        )
+        self.assertIn(
+            '"name": "DebugOracle: Attach STM32"',
+            payload["required_actions"][1]["fragment"],
+        )
+        self.assertIn(
+            '"debugoracleRole": "golden-path-attach"',
+            payload["required_actions"][1]["fragment"],
+        )
+        self.assertIn(
+            '"label": "DebugOracle: Prelaunch"',
+            payload["required_actions"][2]["fragment"],
+        )
+        self.assertIn(
+            '"label": "DebugOracle: Guard Attach Launch"',
+            payload["required_actions"][2]["fragment"],
+        )
         self.assertFalse((workspace / ".vscode").exists())
 
-    def test_init_workspace_attach_mode_without_rtt_still_wires_prelaunch_guard(self) -> None:
+    def test_init_workspace_attach_mode_without_rtt_still_wires_prelaunch_guard(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
             stdout, stderr, exit_code = self._run_cli_capture(
@@ -496,11 +595,21 @@ class DebugOracleCliTests(unittest.TestCase):
 
         self.assertEqual(exit_code, 2)
         self.assertEqual(stderr, "")
-        self.assertIn('"preLaunchTask": "DebugOracle: Prelaunch"', payload["required_actions"][1]["fragment"])
-        self.assertIn('"label": "DebugOracle: Guard Attach Launch"', payload["required_actions"][2]["fragment"])
-        self.assertNotIn("DebugOracle: Start RTT run", payload["required_actions"][2]["fragment"])
+        self.assertIn(
+            '"preLaunchTask": "DebugOracle: Prelaunch"',
+            payload["required_actions"][1]["fragment"],
+        )
+        self.assertIn(
+            '"label": "DebugOracle: Guard Attach Launch"',
+            payload["required_actions"][2]["fragment"],
+        )
+        self.assertNotIn(
+            "DebugOracle: Start RTT run", payload["required_actions"][2]["fragment"]
+        )
 
-    def test_init_workspace_attach_mode_keeps_existing_launch_file_untouched(self) -> None:
+    def test_init_workspace_attach_mode_keeps_existing_launch_file_untouched(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
             vscode_dir = workspace / ".vscode"
@@ -531,7 +640,9 @@ class DebugOracleCliTests(unittest.TestCase):
             self.assertIn(str(launch_path), payload["blocked_files"])
             self.assertEqual(stderr, "")
 
-    def test_init_workspace_text_output_includes_required_fragment_for_blocked_file(self) -> None:
+    def test_init_workspace_text_output_includes_required_fragment_for_blocked_file(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
             vscode_dir = workspace / ".vscode"
@@ -558,7 +669,10 @@ class DebugOracleCliTests(unittest.TestCase):
     def test_init_workspace_writes_workspace_default_svd_setting(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
-            with patch("debugoracle.cli.commands.init_workspace.shutil.which", return_value="/usr/bin/openocd"):
+            with patch(
+                "debugoracle.cli.commands.init_workspace.shutil.which",
+                return_value="/usr/bin/openocd",
+            ):
                 stdout, stderr, exit_code = self._run_cli_capture(
                     [
                         "init-workspace",
@@ -573,7 +687,9 @@ class DebugOracleCliTests(unittest.TestCase):
                     ]
                 )
 
-            settings = json.loads((workspace / ".vscode" / "settings.json").read_text(encoding="utf-8"))
+            settings = json.loads(
+                (workspace / ".vscode" / "settings.json").read_text(encoding="utf-8")
+            )
 
         self.assertEqual(exit_code, 0)
         self.assertEqual(settings["debugoracle.svdFile"], "boards/sample.svd")
@@ -583,7 +699,10 @@ class DebugOracleCliTests(unittest.TestCase):
     def test_init_workspace_reports_missing_openocd_as_partial(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
-            with patch("debugoracle.cli.commands.init_workspace.shutil.which", return_value=None):
+            with patch(
+                "debugoracle.cli.commands.init_workspace.shutil.which",
+                return_value=None,
+            ):
                 stdout, stderr, exit_code = self._run_cli_capture(
                     [
                         "init-workspace",
@@ -602,7 +721,9 @@ class DebugOracleCliTests(unittest.TestCase):
 
         self.assertEqual(exit_code, 2)
         self.assertEqual(payload["status"], "partial")
-        openocd = next(item for item in payload["dependency_checks"] if item["name"] == "openocd")
+        openocd = next(
+            item for item in payload["dependency_checks"] if item["name"] == "openocd"
+        )
         self.assertEqual(openocd["status"], "missing")
         self.assertEqual(stderr, "")
 
@@ -648,11 +769,16 @@ class DebugOracleCliTests(unittest.TestCase):
             self.assertIn("GDB: present", stdout)
             self.assertIn("RTT: present", stdout)
             self.assertIn("Registers: absent", stdout)
-            self.assertIn(f"dbgoracle report --workspace-root {workspace.resolve()}", stdout)
+            self.assertIn(
+                f"dbgoracle report --workspace-root {workspace.resolve()}", stdout
+            )
             self.assertIn("Auto-discovered input paths for fetch:", stderr)
 
     def test_fetch_next_commands_use_resolved_workspace_root(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir, tempfile.TemporaryDirectory() as otherdir:
+        with (
+            tempfile.TemporaryDirectory() as tmpdir,
+            tempfile.TemporaryDirectory() as otherdir,
+        ):
             workspace = Path(tmpdir)
             (workspace / "cortex-debug-shared-mi.log").write_text(
                 (FIXTURES / "sample.mi").read_text(encoding="utf-8"),
@@ -666,11 +792,15 @@ class DebugOracleCliTests(unittest.TestCase):
             previous = os.getcwd()
             try:
                 os.chdir(otherdir)
-                stdout, _ = self._run_cli(["fetch", "--workspace-root", tmpdir], capture_stderr=True)
+                stdout, _ = self._run_cli(
+                    ["fetch", "--workspace-root", tmpdir], capture_stderr=True
+                )
             finally:
                 os.chdir(previous)
 
-        self.assertIn(f"dbgoracle report --workspace-root {workspace.resolve()}", stdout)
+        self.assertIn(
+            f"dbgoracle report --workspace-root {workspace.resolve()}", stdout
+        )
         self.assertNotIn("dbgoracle report --workspace-root .", stdout)
 
     def test_report_notes_when_svd_register_data_is_unavailable(self) -> None:
@@ -699,7 +829,9 @@ class DebugOracleCliTests(unittest.TestCase):
     def test_report_vars_outputs_grouped_json_object(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             snapshot_path = self._write_snapshot(Path(tmpdir) / "latest_snapshot.json")
-            output = self._run_cli(["report", "--snapshot-file", str(snapshot_path), "--vars"])
+            output = self._run_cli(
+                ["report", "--snapshot-file", str(snapshot_path), "--vars"]
+            )
 
         payload = json.loads(output)
         self.assertEqual(set(payload.keys()), {"trust", "variables"})
@@ -712,7 +844,9 @@ class DebugOracleCliTests(unittest.TestCase):
     def test_report_gdb_outputs_gdb_object(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             snapshot_path = self._write_snapshot(Path(tmpdir) / "latest_snapshot.json")
-            output = self._run_cli(["report", "--snapshot-file", str(snapshot_path), "--gdb"])
+            output = self._run_cli(
+                ["report", "--snapshot-file", str(snapshot_path), "--gdb"]
+            )
 
         payload = json.loads(output)
         self.assertEqual(set(payload.keys()), {"trust", "metadata", "gdb"})
@@ -723,7 +857,9 @@ class DebugOracleCliTests(unittest.TestCase):
     def test_report_rtt_outputs_rtt_object(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             snapshot_path = self._write_snapshot(Path(tmpdir) / "latest_snapshot.json")
-            output = self._run_cli(["report", "--snapshot-file", str(snapshot_path), "--rtt"])
+            output = self._run_cli(
+                ["report", "--snapshot-file", str(snapshot_path), "--rtt"]
+            )
 
         payload = json.loads(output)
         self.assertEqual(set(payload.keys()), {"trust", "metadata", "rtt"})
@@ -733,7 +869,9 @@ class DebugOracleCliTests(unittest.TestCase):
     def test_report_verbose_outputs_composite_json_object(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             snapshot_path = self._write_snapshot(Path(tmpdir) / "latest_snapshot.json")
-            output = self._run_cli(["report", "--snapshot-file", str(snapshot_path), "--verbose"])
+            output = self._run_cli(
+                ["report", "--snapshot-file", str(snapshot_path), "--verbose"]
+            )
 
         payload = json.loads(output)
         self.assertIn("summary", payload)
@@ -755,7 +893,8 @@ class DebugOracleCliTests(unittest.TestCase):
             )
             (workspace / ".vscode").mkdir()
             (workspace / ".vscode" / "settings.json").write_text(
-                json.dumps({"debugoracle.svdFile": str(FIXTURES / "sample.svd")}) + "\n",
+                json.dumps({"debugoracle.svdFile": str(FIXTURES / "sample.svd")})
+                + "\n",
                 encoding="utf-8",
             )
 
@@ -770,11 +909,15 @@ class DebugOracleCliTests(unittest.TestCase):
                     capture_stderr=True,
                 )
 
-            payload = json.loads((workspace / "latest_snapshot.json").read_text(encoding="utf-8"))
+            payload = json.loads(
+                (workspace / "latest_snapshot.json").read_text(encoding="utf-8")
+            )
 
         self.assertIn("Registers: present", stdout)
         self.assertIn("Workspace default SVD for fetch:", stderr)
-        self.assertEqual(payload["sources"]["registers"]["device_name"], "STM32L432KCTest")
+        self.assertEqual(
+            payload["sources"]["registers"]["device_name"], "STM32L432KCTest"
+        )
 
     def test_fetch_reads_workspace_default_svd_from_jsonc_with_url_string(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -789,11 +932,11 @@ class DebugOracleCliTests(unittest.TestCase):
             )
             (workspace / ".vscode").mkdir()
             (workspace / ".vscode" / "settings.json").write_text(
-                '{\n'
-                '  // workspace metadata\n'
+                "{\n"
+                "  // workspace metadata\n"
                 '  "debugoracle.svdFile": "' + str(FIXTURES / "sample.svd") + '",\n'
                 '  "test.url": "https://example.com/debug",\n'
-                '}\n',
+                "}\n",
                 encoding="utf-8",
             )
 
@@ -808,13 +951,19 @@ class DebugOracleCliTests(unittest.TestCase):
                     capture_stderr=True,
                 )
 
-            payload = json.loads((workspace / "latest_snapshot.json").read_text(encoding="utf-8"))
+            payload = json.loads(
+                (workspace / "latest_snapshot.json").read_text(encoding="utf-8")
+            )
 
         self.assertIn("Registers: present", stdout)
         self.assertIn("Workspace default SVD for fetch:", stderr)
-        self.assertEqual(payload["sources"]["registers"]["device_name"], "STM32L432KCTest")
+        self.assertEqual(
+            payload["sources"]["registers"]["device_name"], "STM32L432KCTest"
+        )
 
-    def test_fetch_expands_workspace_folder_token_for_workspace_default_svd(self) -> None:
+    def test_fetch_expands_workspace_folder_token_for_workspace_default_svd(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
             (workspace / "cortex-debug-shared-mi.log").write_text(
@@ -831,7 +980,8 @@ class DebugOracleCliTests(unittest.TestCase):
                 encoding="utf-8",
             )
             (workspace / ".vscode" / "settings.json").write_text(
-                json.dumps({"debugoracle.svdFile": "${workspaceFolder}/STM32L432.svd"}) + "\n",
+                json.dumps({"debugoracle.svdFile": "${workspaceFolder}/STM32L432.svd"})
+                + "\n",
                 encoding="utf-8",
             )
 
@@ -846,13 +996,19 @@ class DebugOracleCliTests(unittest.TestCase):
                     capture_stderr=True,
                 )
 
-            payload = json.loads((workspace / "latest_snapshot.json").read_text(encoding="utf-8"))
+            payload = json.loads(
+                (workspace / "latest_snapshot.json").read_text(encoding="utf-8")
+            )
 
         self.assertIn("Registers: present", stdout)
         self.assertIn(str(workspace / "STM32L432.svd"), stderr)
-        self.assertEqual(payload["sources"]["registers"]["device_name"], "STM32L432KCTest")
+        self.assertEqual(
+            payload["sources"]["registers"]["device_name"], "STM32L432KCTest"
+        )
 
-    def test_fetch_with_svd_captures_register_values_and_prints_register_guidance(self) -> None:
+    def test_fetch_with_svd_captures_register_values_and_prints_register_guidance(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
             (workspace / "cortex-debug-shared-mi.log").write_text(
@@ -875,11 +1031,18 @@ class DebugOracleCliTests(unittest.TestCase):
                     capture_stderr=True,
                 )
 
-            payload = json.loads((workspace / "latest_snapshot.json").read_text(encoding="utf-8"))
+            payload = json.loads(
+                (workspace / "latest_snapshot.json").read_text(encoding="utf-8")
+            )
 
         self.assertIn("Registers: present", stdout)
-        self.assertIn(f"dbgoracle report --workspace-root {workspace.resolve()} --regs-list", stdout)
-        self.assertEqual(payload["sources"]["registers"]["device_name"], "STM32L432KCTest")
+        self.assertIn(
+            f"dbgoracle report --workspace-root {workspace.resolve()} --regs-list",
+            stdout,
+        )
+        self.assertEqual(
+            payload["sources"]["registers"]["device_name"], "STM32L432KCTest"
+        )
         self.assertEqual(payload["sources"]["registers"]["register_count"], 4)
         self.assertEqual(payload["sources"]["registers"]["success_count"], 2)
         self.assertEqual(payload["sources"]["registers"]["skipped_count"], 2)
@@ -887,48 +1050,106 @@ class DebugOracleCliTests(unittest.TestCase):
 
     def test_report_regs_list_outputs_captured_peripherals(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
-            snapshot_path = self._write_snapshot(Path(tmpdir) / "latest_snapshot.json", svd_file=FIXTURES / "sample.svd")
-            output = self._run_cli(["report", "--snapshot-file", str(snapshot_path), "--regs-list"])
+            snapshot_path = self._write_snapshot(
+                Path(tmpdir) / "latest_snapshot.json", svd_file=FIXTURES / "sample.svd"
+            )
+            output = self._run_cli(
+                ["report", "--snapshot-file", str(snapshot_path), "--regs-list"]
+            )
 
         payload = json.loads(output)
         self.assertEqual(payload["registers_list"]["device_name"], "STM32L432KCTest")
-        self.assertEqual([item["name"] for item in payload["registers_list"]["peripherals"]], ["GPIOA", "RCC"])
-        self.assertEqual(payload["registers_list"]["peripherals"][0]["success_count"], 2)
-        self.assertEqual(payload["registers_list"]["peripherals"][0]["failure_count"], 0)
-        self.assertEqual(payload["registers_list"]["peripherals"][1]["skipped_count"], 2)
+        self.assertEqual(
+            [item["name"] for item in payload["registers_list"]["peripherals"]],
+            ["GPIOA", "RCC"],
+        )
+        self.assertEqual(
+            payload["registers_list"]["peripherals"][0]["success_count"], 2
+        )
+        self.assertEqual(
+            payload["registers_list"]["peripherals"][0]["failure_count"], 0
+        )
+        self.assertEqual(
+            payload["registers_list"]["peripherals"][1]["skipped_count"], 2
+        )
 
     def test_report_regs_list_peripheral_outputs_registers(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
-            snapshot_path = self._write_snapshot(Path(tmpdir) / "latest_snapshot.json", svd_file=FIXTURES / "sample.svd")
-            output = self._run_cli(["report", "--snapshot-file", str(snapshot_path), "--regs-list", "GPIOA"])
+            snapshot_path = self._write_snapshot(
+                Path(tmpdir) / "latest_snapshot.json", svd_file=FIXTURES / "sample.svd"
+            )
+            output = self._run_cli(
+                [
+                    "report",
+                    "--snapshot-file",
+                    str(snapshot_path),
+                    "--regs-list",
+                    "GPIOA",
+                ]
+            )
 
         payload = json.loads(output)
         self.assertEqual(payload["registers_list"]["peripheral"], "GPIOA")
-        self.assertEqual([item["name"] for item in payload["registers_list"]["registers"]], ["MODER", "IDR"])
-        self.assertEqual([item["read_status"] for item in payload["registers_list"]["registers"]], ["success", "success"])
+        self.assertEqual(
+            [item["name"] for item in payload["registers_list"]["registers"]],
+            ["MODER", "IDR"],
+        )
+        self.assertEqual(
+            [item["read_status"] for item in payload["registers_list"]["registers"]],
+            ["success", "success"],
+        )
 
     def test_report_regs_outputs_filtered_register_values(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
-            snapshot_path = self._write_snapshot(Path(tmpdir) / "latest_snapshot.json", svd_file=FIXTURES / "sample.svd")
-            output = self._run_cli(["report", "--snapshot-file", str(snapshot_path), "--regs", "GPIOA:MODER", "RCC"])
+            snapshot_path = self._write_snapshot(
+                Path(tmpdir) / "latest_snapshot.json", svd_file=FIXTURES / "sample.svd"
+            )
+            output = self._run_cli(
+                [
+                    "report",
+                    "--snapshot-file",
+                    str(snapshot_path),
+                    "--regs",
+                    "GPIOA:MODER",
+                    "RCC",
+                ]
+            )
 
         payload = json.loads(output)
-        self.assertEqual([item["name"] for item in payload["registers"]["peripherals"]], ["GPIOA", "RCC"])
-        self.assertEqual(payload["registers"]["peripherals"][0]["registers"][0]["name"], "MODER")
-        self.assertEqual(payload["registers"]["peripherals"][0]["registers"][0]["read_status"], "success")
-        self.assertEqual(payload["registers"]["peripherals"][0]["registers"][0]["value_hex"], "0xaaaaaaaa")
-        self.assertEqual(payload["registers"]["peripherals"][1]["registers"][0]["read_status"], "skipped")
+        self.assertEqual(
+            [item["name"] for item in payload["registers"]["peripherals"]],
+            ["GPIOA", "RCC"],
+        )
+        self.assertEqual(
+            payload["registers"]["peripherals"][0]["registers"][0]["name"], "MODER"
+        )
+        self.assertEqual(
+            payload["registers"]["peripherals"][0]["registers"][0]["read_status"],
+            "success",
+        )
+        self.assertEqual(
+            payload["registers"]["peripherals"][0]["registers"][0]["value_hex"],
+            "0xaaaaaaaa",
+        )
+        self.assertEqual(
+            payload["registers"]["peripherals"][1]["registers"][0]["read_status"],
+            "skipped",
+        )
 
     def test_report_regs_list_fails_when_register_data_is_unavailable(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             snapshot_path = self._write_snapshot(Path(tmpdir) / "latest_snapshot.json")
-            code, stdout, stderr = self._run_cli_expect_system_exit(["report", "--snapshot-file", str(snapshot_path), "--regs-list"])
+            code, stdout, stderr = self._run_cli_expect_system_exit(
+                ["report", "--snapshot-file", str(snapshot_path), "--regs-list"]
+            )
 
         self.assertNotEqual(code, 0)
         self.assertIn("embedded register source", stdout + stderr)
 
     def test_report_rejects_invalid_register_selector(self) -> None:
-        code, stdout, stderr = self._run_cli_expect_system_exit(["report", "--regs", "GPIOA:"])
+        code, stdout, stderr = self._run_cli_expect_system_exit(
+            ["report", "--regs", "GPIOA:"]
+        )
         self.assertNotEqual(code, 0)
         self.assertIn("invalid register selector", stdout + stderr)
 
@@ -936,7 +1157,14 @@ class DebugOracleCliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             snapshot_path = self._write_snapshot(Path(tmpdir) / "latest_snapshot.json")
             code, stdout, stderr = self._run_cli_expect_system_exit(
-                ["report", "--snapshot-file", str(snapshot_path), "--gdb", "--tail", "0"]
+                [
+                    "report",
+                    "--snapshot-file",
+                    str(snapshot_path),
+                    "--gdb",
+                    "--tail",
+                    "0",
+                ]
             )
 
         self.assertNotEqual(code, 0)
@@ -947,7 +1175,13 @@ class DebugOracleCliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             snapshot_path = self._write_snapshot(Path(tmpdir) / "latest_snapshot.json")
             code, stdout, stderr = self._run_cli_expect_system_exit(
-                ["report", "--snapshot-file", str(snapshot_path), "--vars", "definitely_missing"]
+                [
+                    "report",
+                    "--snapshot-file",
+                    str(snapshot_path),
+                    "--vars",
+                    "definitely_missing",
+                ]
             )
 
         self.assertNotEqual(code, 0)
