@@ -100,45 +100,27 @@ def capture_rtt_impl(
     target.parent.mkdir(parents=True, exist_ok=True)
     state_target.parent.mkdir(parents=True, exist_ok=True)
 
-    started = time_module.monotonic()
-    waiting_state = RttCaptureState(
-        source=STATE_SOURCE,
-        host=host,
-        port=port,
-        status=STATE_STATUS_WAITING,
-    )
+    waiting_state = _build_state(host=host, port=port, status=STATE_STATUS_WAITING)
     _write_capture_state(state_target, waiting_state)
 
     active_state = waiting_state
     connected_state = waiting_state
-    connection: socket.socket | None = None
     try:
-        while connection is None:
-            try:
-                connection = socket_module.create_connection((host, port), timeout=poll_interval)
-            except OSError:
-                if time_module.monotonic() - started >= max(0.0, connect_timeout):
-                    error_state = RttCaptureState(
-                        source=STATE_SOURCE,
-                        host=host,
-                        port=port,
-                        status=STATE_STATUS_ERROR,
-                        error="connect_timeout",
-                    )
-                    _write_capture_state(state_target, error_state)
-                    raise RttCaptureTimeoutError(
-                        f"Timed out waiting for RTT server at {host}:{port}"
-                    ) from None
-                _write_capture_state(state_target, waiting_state)
-                time_module.sleep(max(0.0, poll_interval))
-
-        connected_at = _utc_now()
-        connected_state = RttCaptureState(
-            source=STATE_SOURCE,
+        connection = _wait_for_connection(
+            host=host,
+            port=port,
+            connect_timeout=connect_timeout,
+            poll_interval=poll_interval,
+            waiting_state=waiting_state,
+            state_target=state_target,
+            socket_module=socket_module,
+            time_module=time_module,
+        )
+        connected_state = _build_state(
             host=host,
             port=port,
             status=STATE_STATUS_CONNECTED,
-            connected_at=connected_at,
+            connected_at=_utc_now(),
         )
         active_state = connected_state
         _write_capture_state(state_target, connected_state)
@@ -146,63 +128,21 @@ def capture_rtt_impl(
             on_connect(connected_state)
         connection.settimeout(max(0.05, poll_interval))
 
-        last_activity = time_module.monotonic()
-        write_mode = "ab" if append else "wb"
-        with connection, target.open(write_mode) as handle:
-            while True:
-                try:
-                    chunk = connection.recv(4096)
-                except socket_module.timeout:
-                    if idle_timeout is not None and time_module.monotonic() - last_activity >= idle_timeout:
-                        idle_state = RttCaptureState(
-                            source=STATE_SOURCE,
-                            host=host,
-                            port=port,
-                            status=STATE_STATUS_IDLE,
-                            connected_at=connected_state.connected_at,
-                            last_byte_at=connected_state.last_byte_at,
-                            bytes_captured=connected_state.bytes_captured,
-                        )
-                        _write_capture_state(state_target, idle_state)
-                        return idle_state
-                    continue
-
-                if not chunk:
-                    eof_state = RttCaptureState(
-                        source=STATE_SOURCE,
-                        host=host,
-                        port=port,
-                        status=STATE_STATUS_EOF,
-                        connected_at=connected_state.connected_at,
-                        last_byte_at=connected_state.last_byte_at,
-                        bytes_captured=connected_state.bytes_captured,
-                    )
-                    _write_capture_state(state_target, eof_state)
-                    return eof_state
-
-                handle.write(chunk)
-                handle.flush()
-                last_activity = time_module.monotonic()
-                connected_state = RttCaptureState(
-                    source=STATE_SOURCE,
-                    host=host,
-                    port=port,
-                    status=STATE_STATUS_CONNECTED,
-                    connected_at=connected_state.connected_at,
-                    last_byte_at=_utc_now(),
-                    bytes_captured=connected_state.bytes_captured + len(chunk),
-                )
-                active_state = connected_state
-                _write_capture_state(state_target, connected_state)
+        final_state, active_state = _capture_stream_loop(
+            connection=connection,
+            target=target,
+            state_target=state_target,
+            initial_state=connected_state,
+            idle_timeout=idle_timeout,
+            append=append,
+            socket_module=socket_module,
+            time_module=time_module,
+        )
+        return final_state
     except KeyboardInterrupt:
-        interrupted_state = RttCaptureState(
-            source=STATE_SOURCE,
-            host=host,
-            port=port,
+        interrupted_state = _state_from(
+            active_state,
             status=STATE_STATUS_INTERRUPTED,
-            connected_at=active_state.connected_at,
-            last_byte_at=active_state.last_byte_at,
-            bytes_captured=active_state.bytes_captured,
             error="interrupted",
         )
         try:
@@ -211,14 +151,9 @@ def capture_rtt_impl(
             pass
         return interrupted_state
     except OSError as error:
-        error_state = RttCaptureState(
-            source=STATE_SOURCE,
-            host=host,
-            port=port,
+        error_state = _state_from(
+            connected_state,
             status=STATE_STATUS_ERROR,
-            connected_at=connected_state.connected_at,
-            last_byte_at=connected_state.last_byte_at,
-            bytes_captured=connected_state.bytes_captured,
             error=f"{error.__class__.__name__}: {error}",
         )
         try:
@@ -226,6 +161,118 @@ def capture_rtt_impl(
         except OSError:
             pass
         raise
+
+
+def _wait_for_connection(
+    *,
+    host: str,
+    port: int,
+    connect_timeout: float,
+    poll_interval: float,
+    waiting_state: RttCaptureState,
+    state_target: Path,
+    socket_module: Any,
+    time_module: Any,
+) -> socket.socket:
+    started = time_module.monotonic()
+    while True:
+        try:
+            return socket_module.create_connection((host, port), timeout=poll_interval)
+        except OSError:
+            if time_module.monotonic() - started >= max(0.0, connect_timeout):
+                error_state = _build_state(
+                    host=host,
+                    port=port,
+                    status=STATE_STATUS_ERROR,
+                    error="connect_timeout",
+                )
+                _write_capture_state(state_target, error_state)
+                raise RttCaptureTimeoutError(f"Timed out waiting for RTT server at {host}:{port}") from None
+            _write_capture_state(state_target, waiting_state)
+            time_module.sleep(max(0.0, poll_interval))
+
+
+def _capture_stream_loop(
+    *,
+    connection: socket.socket,
+    target: Path,
+    state_target: Path,
+    initial_state: RttCaptureState,
+    idle_timeout: float | None,
+    append: bool,
+    socket_module: Any,
+    time_module: Any,
+) -> tuple[RttCaptureState, RttCaptureState]:
+    current_state = initial_state
+    last_activity = time_module.monotonic()
+    write_mode = "ab" if append else "wb"
+    with connection, target.open(write_mode) as handle:
+        while True:
+            try:
+                chunk = connection.recv(4096)
+            except socket_module.timeout:
+                if idle_timeout is not None and time_module.monotonic() - last_activity >= idle_timeout:
+                    idle_state = _state_from(current_state, status=STATE_STATUS_IDLE)
+                    _write_capture_state(state_target, idle_state)
+                    return idle_state, current_state
+                continue
+
+            if not chunk:
+                eof_state = _state_from(current_state, status=STATE_STATUS_EOF)
+                _write_capture_state(state_target, eof_state)
+                return eof_state, current_state
+
+            handle.write(chunk)
+            handle.flush()
+            last_activity = time_module.monotonic()
+            current_state = _state_from(
+                current_state,
+                status=STATE_STATUS_CONNECTED,
+                last_byte_at=_utc_now(),
+                bytes_captured=current_state.bytes_captured + len(chunk),
+            )
+            _write_capture_state(state_target, current_state)
+
+
+def _build_state(
+    *,
+    host: str,
+    port: int,
+    status: str,
+    connected_at: str | None = None,
+    last_byte_at: str | None = None,
+    bytes_captured: int = 0,
+    error: str | None = None,
+) -> RttCaptureState:
+    return RttCaptureState(
+        source=STATE_SOURCE,
+        host=host,
+        port=port,
+        status=status,
+        connected_at=connected_at,
+        last_byte_at=last_byte_at,
+        bytes_captured=bytes_captured,
+        error=error,
+    )
+
+
+def _state_from(
+    current: RttCaptureState,
+    *,
+    status: str,
+    last_byte_at: str | None = None,
+    bytes_captured: int | None = None,
+    error: str | None = None,
+) -> RttCaptureState:
+    return _build_state(
+        host=current.host,
+        port=current.port,
+        status=status,
+        connected_at=current.connected_at,
+        last_byte_at=current.last_byte_at if last_byte_at is None else last_byte_at,
+        bytes_captured=current.bytes_captured if bytes_captured is None else bytes_captured,
+        error=error,
+    )
 
 
 def default_state_path(output_path: str | Path) -> Path:

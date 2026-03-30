@@ -154,52 +154,8 @@ def parse_svd_definition(svd_file: str) -> SvdDeviceDefinition:
         raise ValueError(f"Could not read SVD file '{svd_file}': {error}") from error
 
     device_name = _text(root.find("name")) or path.stem
-    peripherals_node = root.find("peripherals")
-    if peripherals_node is None:
-        raise ValueError("SVD file did not contain any peripherals")
-
-    peripheral_lookup: dict[str, ET.Element] = {}
-    for peripheral_node in peripherals_node.findall("peripheral"):
-        peripheral_name = _text(peripheral_node.find("name"))
-        if peripheral_name:
-            peripheral_lookup[peripheral_name] = peripheral_node
-
-    peripherals: list[PeripheralRegisterSet] = []
-    for peripheral_node in peripherals_node.findall("peripheral"):
-        resolved_peripheral = _resolve_peripheral_node(peripheral_node, peripheral_lookup, seen=set())
-        peripheral_name = _text(resolved_peripheral.find("name"))
-        base_address_text = _text(resolved_peripheral.find("baseAddress"))
-        if peripheral_name is None or base_address_text is None:
-            continue
-        registers_node = resolved_peripheral.find("registers")
-        registers: list[RegisterEntry] = []
-        if registers_node is not None:
-            for register_node in registers_node.findall("register"):
-                register_name = _text(register_node.find("name"))
-                offset_text = _text(register_node.find("addressOffset"))
-                size_text = _text(register_node.find("size"))
-                if register_name is None or offset_text is None:
-                    continue
-                offset = _parse_int(offset_text)
-                base_address = _parse_int(base_address_text)
-                width_bits = _parse_int(size_text) if size_text is not None else 32
-                registers.append(
-                    RegisterEntry(
-                        name=register_name,
-                        address=_hex(base_address + offset),
-                        width_bits=width_bits,
-                        read_status="skipped",
-                        skip_reason="Peripheral register capture is unavailable for this register.",
-                        access=_text(register_node.find("access")),
-                    )
-                )
-        peripherals.append(
-            PeripheralRegisterSet(
-                name=peripheral_name,
-                base_address=_hex(_parse_int(base_address_text)),
-                registers=registers,
-            )
-        )
+    peripheral_lookup, peripheral_nodes = _load_peripheral_index(root)
+    peripherals = _collect_peripheral_sets(peripheral_nodes, peripheral_lookup)
 
     if not peripherals:
         raise ValueError("SVD file did not contain any usable peripheral definitions")
@@ -207,6 +163,76 @@ def parse_svd_definition(svd_file: str) -> SvdDeviceDefinition:
         device_name=device_name,
         svd_source=str(path.resolve()),
         peripherals=peripherals,
+    )
+
+
+def _load_peripheral_index(root: ET.Element) -> tuple[dict[str, ET.Element], list[ET.Element]]:
+    peripherals_node = root.find("peripherals")
+    if peripherals_node is None:
+        raise ValueError("SVD file did not contain any peripherals")
+    peripheral_nodes = peripherals_node.findall("peripheral")
+    peripheral_lookup: dict[str, ET.Element] = {}
+    for peripheral_node in peripheral_nodes:
+        peripheral_name = _text(peripheral_node.find("name"))
+        if peripheral_name:
+            peripheral_lookup[peripheral_name] = peripheral_node
+    return peripheral_lookup, peripheral_nodes
+
+
+def _collect_peripheral_sets(
+    peripheral_nodes: list[ET.Element],
+    peripheral_lookup: dict[str, ET.Element],
+) -> list[PeripheralRegisterSet]:
+    peripherals: list[PeripheralRegisterSet] = []
+    for peripheral_node in peripheral_nodes:
+        resolved_peripheral = _resolve_peripheral_node(peripheral_node, peripheral_lookup, seen=set())
+        peripheral = _build_peripheral_register_set(resolved_peripheral)
+        if peripheral is not None:
+            peripherals.append(peripheral)
+    return peripherals
+
+
+def _build_peripheral_register_set(resolved_peripheral: ET.Element) -> PeripheralRegisterSet | None:
+    peripheral_name = _text(resolved_peripheral.find("name"))
+    base_address_text = _text(resolved_peripheral.find("baseAddress"))
+    if peripheral_name is None or base_address_text is None:
+        return None
+    base_address = _parse_int(base_address_text)
+    registers_node = resolved_peripheral.find("registers")
+    registers = _build_register_entries(registers_node, base_address)
+    return PeripheralRegisterSet(
+        name=peripheral_name,
+        base_address=_hex(base_address),
+        registers=registers,
+    )
+
+
+def _build_register_entries(registers_node: ET.Element | None, base_address: int) -> list[RegisterEntry]:
+    if registers_node is None:
+        return []
+    registers: list[RegisterEntry] = []
+    for register_node in registers_node.findall("register"):
+        register = _build_register_entry(register_node, base_address)
+        if register is not None:
+            registers.append(register)
+    return registers
+
+
+def _build_register_entry(register_node: ET.Element, base_address: int) -> RegisterEntry | None:
+    register_name = _text(register_node.find("name"))
+    offset_text = _text(register_node.find("addressOffset"))
+    size_text = _text(register_node.find("size"))
+    if register_name is None or offset_text is None:
+        return None
+    offset = _parse_int(offset_text)
+    width_bits = _parse_int(size_text) if size_text is not None else 32
+    return RegisterEntry(
+        name=register_name,
+        address=_hex(base_address + offset),
+        width_bits=width_bits,
+        read_status="skipped",
+        skip_reason="Peripheral register capture is unavailable for this register.",
+        access=_text(register_node.find("access")),
     )
 
 

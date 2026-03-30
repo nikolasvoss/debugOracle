@@ -69,141 +69,100 @@ def parse_gdb_transcript(gdb_text: str, *, now_text: Callable[[], str]) -> GdbTr
     for line_number, raw_line in enumerate(gdb_text.splitlines(), start=1):
         timestamp = now_text()
         stripped = raw_line.strip()
-        if stripped.startswith("(gdb)") and stripped == "(gdb)":
-            parse_event_counts["prompt-marker"] += 1
-            parse_event_severity["info"] += 1
-            non_mi_line_count += 1
-            noise_line_counts["prompt-marker"] += 1
-            session_events.append(
-                SessionEvent(
-                    source="gdb_mi",
-                    timestamp=timestamp,
-                    kind="prompt-marker",
-                    payload={
-                        "line": line_number,
-                        "raw": stripped,
-                        "normalized": stripped,
-                        "dedupe_key": stripped,
-                        "severity": "info",
-                    },
-                )
+
+        if stripped == "(gdb)":
+            _record_noise_event(
+                kind="prompt-marker",
+                raw=stripped,
+                normalized=stripped,
+                dedupe_key=stripped,
+                pattern_key=stripped,
+                line_number=line_number,
+                timestamp=timestamp,
+                parse_event_counts=parse_event_counts,
+                parse_event_severity=parse_event_severity,
+                noise_line_counts=noise_line_counts,
+                noise_pattern_counts=noise_pattern_counts,
+                session_events=session_events,
             )
-            noise_pattern_counts[stripped] += 1
+            non_mi_line_count += 1
             continue
 
         if stripped.startswith("@\"") or stripped.startswith("~\""):
-            parse_event_counts["console-output"] += 1
-            parse_event_severity["info"] += 1
-            non_mi_line_count += 1
             normalized = strip_console_output(stripped)
-            noise_line_counts["console-output"] += 1
-            session_events.append(
-                SessionEvent(
-                    source="gdb_mi",
-                    timestamp=timestamp,
-                    kind="console-output",
-                    payload={
-                        "line": line_number,
-                        "raw": stripped,
-                        "normalized": normalized,
-                        "dedupe_key": normalized,
-                        "severity": "info",
-                    },
-                )
+            _record_noise_event(
+                kind="console-output",
+                raw=stripped,
+                normalized=normalized,
+                dedupe_key=normalized,
+                pattern_key=normalized[:64],
+                line_number=line_number,
+                timestamp=timestamp,
+                parse_event_counts=parse_event_counts,
+                parse_event_severity=parse_event_severity,
+                noise_line_counts=noise_line_counts,
+                noise_pattern_counts=noise_pattern_counts,
+                session_events=session_events,
             )
-            noise_pattern_counts[normalized[:64]] += 1
+            non_mi_line_count += 1
             continue
 
         try:
             record = parse_mi_record(raw_line)
         except MIParseError as error:
             mi_parse_error_count += 1
-            kind = "mi-parse-error-unhandled"
-            severity = "warn"
-            if is_likely_mi_line(raw_line):
-                kind = "mi-parse-error-known"
-            parse_event_counts[kind] += 1
-            parse_event_severity[severity] += 1
-            parse_warnings.append(f"Line {line_number}: unable to parse MI record: {error}")
-            session_events.append(
-                SessionEvent(
-                    source="gdb_mi",
-                    timestamp=timestamp,
-                    kind=kind,
-                    payload={
-                        "line": line_number,
-                        "raw": raw_line,
-                        "error": str(error),
-                        "severity": severity,
-                    },
-                )
+            _record_parse_error_event(
+                raw_line=raw_line,
+                error=error,
+                line_number=line_number,
+                timestamp=timestamp,
+                parse_event_counts=parse_event_counts,
+                parse_event_severity=parse_event_severity,
+                session_events=session_events,
+                parse_warnings=parse_warnings,
             )
             continue
 
         if record is None:
             if stripped:
-                parse_event_counts["non_mi_line"] += 1
-                parse_event_severity["info"] += 1
                 non_mi_line_count += 1
-                noise_line_counts["non_mi_line"] += 1
-                session_events.append(
-                    SessionEvent(
-                        source="gdb_mi",
-                        timestamp=timestamp,
-                        kind="non_mi_line",
-                        payload={
-                            "line": line_number,
-                            "raw": stripped,
-                            "normalized": stripped,
-                            "dedupe_key": stripped,
-                            "severity": "info",
-                        },
-                    )
+                _record_noise_event(
+                    kind="non_mi_line",
+                    raw=stripped,
+                    normalized=stripped,
+                    dedupe_key=stripped,
+                    pattern_key=stripped[:64],
+                    line_number=line_number,
+                    timestamp=timestamp,
+                    parse_event_counts=parse_event_counts,
+                    parse_event_severity=parse_event_severity,
+                    noise_line_counts=noise_line_counts,
+                    noise_pattern_counts=noise_pattern_counts,
+                    session_events=session_events,
                 )
-                noise_pattern_counts[stripped[:64]] += 1
             continue
 
         mi_record_count += 1
-        parse_event_counts[f"{record.prefix}{record.kind}"] += 1
-        parse_event_severity["info"] += 1
-        session_events.append(
-            SessionEvent(
-                source="gdb_mi",
-                timestamp=timestamp,
-                kind=f"{record.prefix}{record.kind}",
-                payload={"line": line_number, "severity": "info", **record.data},
-            )
+        _record_mi_event(
+            record=record,
+            line_number=line_number,
+            timestamp=timestamp,
+            parse_event_counts=parse_event_counts,
+            parse_event_severity=parse_event_severity,
+            session_events=session_events,
         )
-
-        if record.prefix == "*" and record.kind == "stopped":
-            latest_stop = dict(record.data)
-            frame = record.data.get("frame")
-            if isinstance(frame, dict):
-                latest_stack = [normalize_frame(frame, default_level=0)]
-
-        if record.prefix == "^" and record.kind == "done":
-            if "stack" in record.data:
-                latest_stack = extract_stack(record.data["stack"])
-            if "register-values" in record.data:
-                latest_registers = extract_registers(record.data["register-values"])
-            if "locals" in record.data:
-                entries = extract_variable_entries(
-                    record.data["locals"],
-                    bucket=VARIABLE_BUCKET_LOCALS,
-                    origin="gdb-mi-locals",
-                    start_order=variable_order,
-                )
-                variable_evidence.locals.extend(entries)
-                variable_order += len(entries)
-            if "variables" in record.data:
-                entries = extract_variable_entries(
-                    record.data["variables"],
-                    bucket=VARIABLE_BUCKET_UNKNOWN,
-                    origin="gdb-mi-variables",
-                    start_order=variable_order,
-                )
-                variable_evidence.unknown.extend(entries)
-                variable_order += len(entries)
+        latest_stop, latest_stack = _update_stop_context(
+            record=record,
+            latest_stop=latest_stop,
+            latest_stack=latest_stack,
+        )
+        latest_stack, latest_registers, variable_order = _update_done_context(
+            record=record,
+            latest_stack=latest_stack,
+            latest_registers=latest_registers,
+            variable_evidence=variable_evidence,
+            variable_order=variable_order,
+        )
 
     if latest_stop:
         watchpoint_entries = extract_watchpoint_entries(latest_stop, start_order=variable_order)
@@ -225,6 +184,144 @@ def parse_gdb_transcript(gdb_text: str, *, now_text: Callable[[], str]) -> GdbTr
         noise_line_counts={key: int(value) for key, value in noise_line_counts.items()},
         noise_pattern_counts=noise_pattern_counts,
     )
+
+
+def _record_noise_event(
+    *,
+    kind: str,
+    raw: str,
+    normalized: str,
+    dedupe_key: str,
+    pattern_key: str,
+    line_number: int,
+    timestamp: str,
+    parse_event_counts: Counter[str],
+    parse_event_severity: Counter[str],
+    noise_line_counts: Counter[str],
+    noise_pattern_counts: Counter[str],
+    session_events: list[SessionEvent],
+) -> None:
+    parse_event_counts[kind] += 1
+    parse_event_severity["info"] += 1
+    noise_line_counts[kind] += 1
+    session_events.append(
+        SessionEvent(
+            source="gdb_mi",
+            timestamp=timestamp,
+            kind=kind,
+            payload={
+                "line": line_number,
+                "raw": raw,
+                "normalized": normalized,
+                "dedupe_key": dedupe_key,
+                "severity": "info",
+            },
+        )
+    )
+    noise_pattern_counts[pattern_key] += 1
+
+
+def _record_parse_error_event(
+    *,
+    raw_line: str,
+    error: MIParseError,
+    line_number: int,
+    timestamp: str,
+    parse_event_counts: Counter[str],
+    parse_event_severity: Counter[str],
+    session_events: list[SessionEvent],
+    parse_warnings: list[str],
+) -> None:
+    kind = "mi-parse-error-known" if is_likely_mi_line(raw_line) else "mi-parse-error-unhandled"
+    parse_event_counts[kind] += 1
+    parse_event_severity["warn"] += 1
+    parse_warnings.append(f"Line {line_number}: unable to parse MI record: {error}")
+    session_events.append(
+        SessionEvent(
+            source="gdb_mi",
+            timestamp=timestamp,
+            kind=kind,
+            payload={
+                "line": line_number,
+                "raw": raw_line,
+                "error": str(error),
+                "severity": "warn",
+            },
+        )
+    )
+
+
+def _record_mi_event(
+    *,
+    record: Any,
+    line_number: int,
+    timestamp: str,
+    parse_event_counts: Counter[str],
+    parse_event_severity: Counter[str],
+    session_events: list[SessionEvent],
+) -> None:
+    kind = f"{record.prefix}{record.kind}"
+    parse_event_counts[kind] += 1
+    parse_event_severity["info"] += 1
+    session_events.append(
+        SessionEvent(
+            source="gdb_mi",
+            timestamp=timestamp,
+            kind=kind,
+            payload={"line": line_number, "severity": "info", **record.data},
+        )
+    )
+
+
+def _update_stop_context(
+    *,
+    record: Any,
+    latest_stop: dict[str, Any] | None,
+    latest_stack: list[StackFrame],
+) -> tuple[dict[str, Any] | None, list[StackFrame]]:
+    if record.prefix != "*" or record.kind != "stopped":
+        return latest_stop, latest_stack
+    latest_stop = dict(record.data)
+    frame = record.data.get("frame")
+    if isinstance(frame, dict):
+        latest_stack = [normalize_frame(frame, default_level=0)]
+    return latest_stop, latest_stack
+
+
+def _update_done_context(
+    *,
+    record: Any,
+    latest_stack: list[StackFrame],
+    latest_registers: dict[str, str],
+    variable_evidence: VariableEvidence,
+    variable_order: int,
+) -> tuple[list[StackFrame], dict[str, str], int]:
+    if record.prefix != "^" or record.kind != "done":
+        return latest_stack, latest_registers, variable_order
+    data = record.data
+    if "stack" in data:
+        latest_stack = extract_stack(data["stack"])
+    if "register-values" in data:
+        latest_registers = extract_registers(data["register-values"])
+    if "locals" in data:
+        entries = extract_variable_entries(
+            data["locals"],
+            bucket=VARIABLE_BUCKET_LOCALS,
+            origin="gdb-mi-locals",
+            start_order=variable_order,
+        )
+        variable_evidence.locals.extend(entries)
+        variable_order += len(entries)
+    if "variables" in data:
+        entries = extract_variable_entries(
+            data["variables"],
+            bucket=VARIABLE_BUCKET_UNKNOWN,
+            origin="gdb-mi-variables",
+            start_order=variable_order,
+        )
+        variable_evidence.unknown.extend(entries)
+        variable_order += len(entries)
+    return latest_stack, latest_registers, variable_order
 
 
 def extract_stack(raw_stack: object) -> list[StackFrame]:
