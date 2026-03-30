@@ -12,7 +12,8 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
-from debugoracle.builder import build_bundle_from_files, save_bundle
+from debugoracle.artifacts.repository import save_artifact
+from debugoracle.builder import build_bundle_from_files
 from debugoracle.cli import main
 from debugoracle.cli.commands.find_tcl_port import OpenOcdCandidate
 from debugoracle.cli.main import build_parser
@@ -1226,7 +1227,7 @@ class DebugOracleCliTests(unittest.TestCase):
                         svd_file_path=str(svd_file),
                         enable_live_peripheral_capture=True,
                     )
-        save_bundle(bundle, str(path))
+        save_artifact(bundle, str(path))
         return path
 
     def _run_cli(

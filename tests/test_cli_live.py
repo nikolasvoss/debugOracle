@@ -8,7 +8,8 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
-from debugoracle.builder import build_bundle_from_files, save_bundle
+from debugoracle.artifacts.repository import save_artifact
+from debugoracle.builder import build_bundle_from_files
 from debugoracle.cli import main
 from debugoracle.openocd import (
     DISCOVERY_MATCHED,
@@ -64,7 +65,7 @@ class DebugOracleLiveCliTests(unittest.TestCase):
                 str(FIXTURES / "sample.mi"),
                 str(FIXTURES / "sample.rtt"),
             )
-            save_bundle(bundle, str(workspace / "latest_snapshot.json"))
+            save_artifact(bundle, str(workspace / "latest_snapshot.json"))
             (workspace / "cortex-debug-shared-mi.log").write_text(
                 (FIXTURES / "sample.mi").read_text(encoding="utf-8"),
                 encoding="utf-8",
@@ -188,7 +189,7 @@ class DebugOracleLiveCliTests(unittest.TestCase):
             str(FIXTURES / "sample.mi"),
             str(FIXTURES / "sample.rtt") if include_rtt else None,
         )
-        save_bundle(bundle, str(session_dir / "latest_snapshot.json"))
+        save_artifact(bundle, str(session_dir / "latest_snapshot.json"))
         (session_dir / "cortex-debug-shared-mi.log").write_text(
             (FIXTURES / "sample.mi").read_text(encoding="utf-8"),
             encoding="utf-8",

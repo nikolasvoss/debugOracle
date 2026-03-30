@@ -9,7 +9,8 @@ from contextlib import redirect_stderr
 from contextlib import redirect_stdout
 from pathlib import Path
 
-from debugoracle.builder import build_bundle_from_files, save_bundle
+from debugoracle.artifacts.repository import save_artifact
+from debugoracle.builder import build_bundle_from_files
 from debugoracle.cli import main
 
 
@@ -17,25 +18,37 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 
 class ReportModesTests(unittest.TestCase):
-    def test_default_report_surfaces_unsafe_trust_header_for_running_target_snapshot(self) -> None:
+    def test_default_report_surfaces_unsafe_trust_header_for_running_target_snapshot(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             snapshot_path = self._write_snapshot(
                 Path(tmpdir) / "latest_snapshot.json",
-                live_state={"backend": "demo", "target_state": "running", "warnings": []},
+                live_state={
+                    "backend": "demo",
+                    "target_state": "running",
+                    "warnings": [],
+                },
             )
             output = self._run_cli(["report", "--snapshot-file", str(snapshot_path)])
 
         self.assertIn("Trust:", output)
         self.assertIn("UNSAFE", output)
         self.assertIn("not safe for grounded reasoning", output)
-        self.assertIn("Target state 'running' is not safe for correlated live reads.", output)
+        self.assertIn(
+            "Target state 'running' is not safe for correlated live reads.", output
+        )
         self.assertNotIn("Session Summary:", output)
 
     def test_report_allow_unsafe_restores_full_report_body(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             snapshot_path = self._write_snapshot(
                 Path(tmpdir) / "latest_snapshot.json",
-                live_state={"backend": "demo", "target_state": "running", "warnings": []},
+                live_state={
+                    "backend": "demo",
+                    "target_state": "running",
+                    "warnings": [],
+                },
             )
             output = self._run_cli(
                 ["report", "--snapshot-file", str(snapshot_path), "--allow-unsafe"]
@@ -45,7 +58,9 @@ class ReportModesTests(unittest.TestCase):
         self.assertIn("UNSAFE", output)
         self.assertIn("Session Summary:", output)
 
-    def test_explicit_snapshot_ignores_unrelated_newer_workspace_raw_evidence(self) -> None:
+    def test_explicit_snapshot_ignores_unrelated_newer_workspace_raw_evidence(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             snapshot_dir = root / "snapshot"
@@ -80,12 +95,16 @@ class ReportModesTests(unittest.TestCase):
 
         payload = json.loads(output)
         self.assertEqual(payload["trust"]["verdict"], "safe")
-        self.assertNotIn("Raw evidence is newer than the snapshot.", payload["trust"]["reasons"])
+        self.assertNotIn(
+            "Raw evidence is newer than the snapshot.", payload["trust"]["reasons"]
+        )
 
     def test_report_vars_outputs_grouped_json_object(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             snapshot_path = self._write_snapshot(Path(tmpdir) / "latest_snapshot.json")
-            output = self._run_cli(["report", "--snapshot-file", str(snapshot_path), "--vars"])
+            output = self._run_cli(
+                ["report", "--snapshot-file", str(snapshot_path), "--vars"]
+            )
 
         payload = json.loads(output)
         self.assertEqual(set(payload.keys()), {"trust", "variables"})
@@ -98,16 +117,29 @@ class ReportModesTests(unittest.TestCase):
     def test_report_vars_filters_case_insensitively(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             snapshot_path = self._write_snapshot(Path(tmpdir) / "latest_snapshot.json")
-            output = self._run_cli(["report", "--snapshot-file", str(snapshot_path), "--vars", "SYSTEM_STATE"])
+            output = self._run_cli(
+                [
+                    "report",
+                    "--snapshot-file",
+                    str(snapshot_path),
+                    "--vars",
+                    "SYSTEM_STATE",
+                ]
+            )
 
         payload = json.loads(output)
-        self.assertEqual([entry["name"] for entry in payload["variables"]["locals"]], ["system_state"])
+        self.assertEqual(
+            [entry["name"] for entry in payload["variables"]["locals"]],
+            ["system_state"],
+        )
         self.assertEqual(payload["variables"]["globals"], [])
 
     def test_report_gdb_outputs_embedded_event_stream(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             snapshot_path = self._write_snapshot(Path(tmpdir) / "latest_snapshot.json")
-            output = self._run_cli(["report", "--snapshot-file", str(snapshot_path), "--gdb"])
+            output = self._run_cli(
+                ["report", "--snapshot-file", str(snapshot_path), "--gdb"]
+            )
 
         payload = json.loads(output)
         self.assertEqual(set(payload.keys()), {"trust", "metadata", "gdb"})
@@ -119,7 +151,9 @@ class ReportModesTests(unittest.TestCase):
     def test_report_rtt_outputs_embedded_lines(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             snapshot_path = self._write_snapshot(Path(tmpdir) / "latest_snapshot.json")
-            output = self._run_cli(["report", "--snapshot-file", str(snapshot_path), "--rtt"])
+            output = self._run_cli(
+                ["report", "--snapshot-file", str(snapshot_path), "--rtt"]
+            )
 
         payload = json.loads(output)
         self.assertEqual(set(payload.keys()), {"trust", "metadata", "rtt"})
@@ -129,7 +163,9 @@ class ReportModesTests(unittest.TestCase):
     def test_report_verbose_outputs_composite_json_object(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             snapshot_path = self._write_snapshot(Path(tmpdir) / "latest_snapshot.json")
-            output = self._run_cli(["report", "--snapshot-file", str(snapshot_path), "--verbose"])
+            output = self._run_cli(
+                ["report", "--snapshot-file", str(snapshot_path), "--verbose"]
+            )
 
         payload = json.loads(output)
         self.assertIn("trust", payload)
@@ -142,7 +178,9 @@ class ReportModesTests(unittest.TestCase):
     def test_report_combines_requested_inspect_sections(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             snapshot_path = self._write_snapshot(Path(tmpdir) / "latest_snapshot.json")
-            output = self._run_cli(["report", "--snapshot-file", str(snapshot_path), "--vars", "--gdb"])
+            output = self._run_cli(
+                ["report", "--snapshot-file", str(snapshot_path), "--vars", "--gdb"]
+            )
 
         payload = json.loads(output)
         self.assertEqual(set(payload.keys()), {"trust", "metadata", "variables", "gdb"})
@@ -150,7 +188,16 @@ class ReportModesTests(unittest.TestCase):
     def test_report_tail_applies_to_stream_sections_only(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             snapshot_path = self._write_snapshot(Path(tmpdir) / "latest_snapshot.json")
-            output = self._run_cli(["report", "--snapshot-file", str(snapshot_path), "--gdb", "--tail", "2"])
+            output = self._run_cli(
+                [
+                    "report",
+                    "--snapshot-file",
+                    str(snapshot_path),
+                    "--gdb",
+                    "--tail",
+                    "2",
+                ]
+            )
 
         payload = json.loads(output)
         self.assertEqual(payload["gdb"]["event_count"], 2)
@@ -158,12 +205,23 @@ class ReportModesTests(unittest.TestCase):
     def test_report_tail_requires_stream_section(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             snapshot_path = self._write_snapshot(Path(tmpdir) / "latest_snapshot.json")
-            code, stdout, stderr = self._run_cli_expect_system_exit(["report", "--snapshot-file", str(snapshot_path), "--vars", "--tail", "1"])
+            code, stdout, stderr = self._run_cli_expect_system_exit(
+                [
+                    "report",
+                    "--snapshot-file",
+                    str(snapshot_path),
+                    "--vars",
+                    "--tail",
+                    "1",
+                ]
+            )
 
         self.assertNotEqual(code, 0)
         self.assertIn("--tail requires", stdout + stderr)
 
-    def test_default_report_is_plain_text_with_decision_block_and_source_aware_guidance(self) -> None:
+    def test_default_report_is_plain_text_with_decision_block_and_source_aware_guidance(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             snapshot_path = self._write_snapshot(Path(tmpdir) / "latest_snapshot.json")
             output = self._run_cli(["report", "--snapshot-file", str(snapshot_path)])
@@ -186,7 +244,7 @@ class ReportModesTests(unittest.TestCase):
         )
         if live_state is not None:
             bundle.live_state = live_state
-        save_bundle(bundle, str(path))
+        save_artifact(bundle, str(path))
         return path
 
     def _run_cli(self, argv: list[str]) -> str:
@@ -209,8 +267,16 @@ class ReportModesTests(unittest.TestCase):
         if not isinstance(exit_payload, int) and exit_payload is not None:
             exit_text = str(exit_payload)
             if exit_text:
-                stderr_text = (f"{stderr_text.rstrip()}\n{exit_text}\n" if stderr_text else f"{exit_text}\n")
-        return (exit_payload if isinstance(exit_payload, int) else 1, stdout.getvalue(), stderr_text)
+                stderr_text = (
+                    f"{stderr_text.rstrip()}\n{exit_text}\n"
+                    if stderr_text
+                    else f"{exit_text}\n"
+                )
+        return (
+            exit_payload if isinstance(exit_payload, int) else 1,
+            stdout.getvalue(),
+            stderr_text,
+        )
 
 
 if __name__ == "__main__":

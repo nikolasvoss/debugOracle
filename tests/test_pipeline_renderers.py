@@ -19,7 +19,9 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 
 class PipelineAndRendererTests(unittest.TestCase):
-    def test_transcript_accumulates_variable_entries_across_multiple_result_records(self) -> None:
+    def test_transcript_accumulates_variable_entries_across_multiple_result_records(
+        self,
+    ) -> None:
         transcript = parse_gdb_transcript(
             "\n".join(
                 [
@@ -32,8 +34,12 @@ class PipelineAndRendererTests(unittest.TestCase):
             now_text=lambda: "2026-03-18T10:00:00+00:00",
         )
 
-        self.assertEqual([entry.name for entry in transcript.variable_evidence.locals], ["a", "b"])
-        self.assertEqual([entry.name for entry in transcript.variable_evidence.unknown], ["x", "y"])
+        self.assertEqual(
+            [entry.name for entry in transcript.variable_evidence.locals], ["a", "b"]
+        )
+        self.assertEqual(
+            [entry.name for entry in transcript.variable_evidence.unknown], ["x", "y"]
+        )
 
     def test_transcript_and_report_preserve_array_and_struct_values(self) -> None:
         from debugoracle.renderers.report import render_report
@@ -42,12 +48,12 @@ class PipelineAndRendererTests(unittest.TestCase):
             "\n".join(
                 [
                     '*stopped,reason="breakpoint-hit",frame={addr="0x08000100",func="main",file="main.c",fullname="/workspace/src/main.c",line="42"}',
-                    '^done,locals=['
+                    "^done,locals=["
                     '{name="arr",value="{1, 2, 3, 4}"},'
                     '{name="point",value="{x = 1, y = 2}"},'
                     '{name="matrix",value="{{1, 2}, {3, 4}}"},'
                     '{name="message",value="[72, 101, 108, 108, 111]"}'
-                    ']',
+                    "]",
                 ]
             ),
             now_text=lambda: "2026-03-18T10:00:00+00:00",
@@ -83,7 +89,9 @@ class PipelineAndRendererTests(unittest.TestCase):
     def test_pipeline_storage_shapes_artifact_from_source_outputs(self) -> None:
         gdb_text = (FIXTURES / "sample.mi").read_text(encoding="utf-8")
         rtt_text = (FIXTURES / "sample.rtt").read_text(encoding="utf-8")
-        transcript = parse_gdb_transcript(gdb_text, now_text=lambda: "2026-03-18T10:00:00+00:00")
+        transcript = parse_gdb_transcript(
+            gdb_text, now_text=lambda: "2026-03-18T10:00:00+00:00"
+        )
         halt_snapshot = build_halt_snapshot(
             latest_stop=transcript.latest_stop,
             latest_stack=transcript.latest_stack,
@@ -106,14 +114,17 @@ class PipelineAndRendererTests(unittest.TestCase):
         self.assertEqual(artifact.pc, "0x08000100")
         self.assertEqual(artifact.variable_evidence.locals[0].name, "system_state")
         self.assertEqual(artifact.variable_evidence.locals[0].value, "READY")
-        self.assertEqual(len(artifact.recent_rtt), 3)
+        self.assertEqual(artifact.provenance["rtt_line_count"], 3)
+        self.assertEqual(len(artifact.sources.rtt.lines), 4)
 
     def test_canonical_renderers_produce_expected_outputs(self) -> None:
         from debugoracle.renderers.report import render_report
         from debugoracle.renderers.snapshot import render_snapshot
 
         gdb_text = (FIXTURES / "sample.mi").read_text(encoding="utf-8")
-        transcript = parse_gdb_transcript(gdb_text, now_text=lambda: "2026-03-18T10:00:00+00:00")
+        transcript = parse_gdb_transcript(
+            gdb_text, now_text=lambda: "2026-03-18T10:00:00+00:00"
+        )
         halt_snapshot = build_halt_snapshot(
             latest_stop=transcript.latest_stop,
             latest_stack=transcript.latest_stack,
@@ -136,20 +147,28 @@ class PipelineAndRendererTests(unittest.TestCase):
         self.assertIn("Current State:", rendered_report)
         self.assertIn('"snapshot_id"', render_snapshot(artifact, fmt="json"))
 
-    def test_partial_snapshot_marks_missing_rtt_source_absent_and_report_rtt_fails(self) -> None:
+    def test_partial_snapshot_marks_missing_rtt_source_absent_and_report_rtt_fails(
+        self,
+    ) -> None:
         from debugoracle.renderers.report import ReportRenderOptions, render_report
 
-        bundle = build_bundle_from_text((FIXTURES / "sample.mi").read_text(encoding="utf-8"), "")
+        bundle = build_bundle_from_text(
+            (FIXTURES / "sample.mi").read_text(encoding="utf-8"), ""
+        )
 
         self.assertTrue(bundle.has_embedded_gdb_source)
         self.assertFalse(bundle.has_embedded_rtt_source)
         with self.assertRaisesRegex(RuntimeError, "embedded rtt source"):
             render_report(bundle, options=ReportRenderOptions(include_rtt=True))
 
-    def test_partial_snapshot_marks_missing_gdb_source_absent_and_report_gdb_fails(self) -> None:
+    def test_partial_snapshot_marks_missing_gdb_source_absent_and_report_gdb_fails(
+        self,
+    ) -> None:
         from debugoracle.renderers.report import ReportRenderOptions, render_report
 
-        bundle = build_bundle_from_text("", (FIXTURES / "sample.rtt").read_text(encoding="utf-8"))
+        bundle = build_bundle_from_text(
+            "", (FIXTURES / "sample.rtt").read_text(encoding="utf-8")
+        )
 
         self.assertFalse(bundle.has_embedded_gdb_source)
         self.assertTrue(bundle.has_embedded_rtt_source)
@@ -171,7 +190,9 @@ class PipelineAndRendererTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "only supports"):
             render_snapshot(artifact, fmt="text")
 
-    def test_report_renders_bucketed_variable_summary_with_caps_and_unknowns(self) -> None:
+    def test_report_renders_bucketed_variable_summary_with_caps_and_unknowns(
+        self,
+    ) -> None:
         from debugoracle.renderers.report import render_report
 
         artifact = InvestigationArtifact(
@@ -183,17 +204,28 @@ class PipelineAndRendererTests(unittest.TestCase):
             sp="0x20002000",
             variable_evidence=VariableEvidence(
                 locals=[
-                    VariableEntry(name=f"local_{index}", value=str(index), bucket="locals", order=index)
+                    VariableEntry(
+                        name=f"local_{index}",
+                        value=str(index),
+                        bucket="locals",
+                        order=index,
+                    )
                     for index in range(6)
                 ],
                 globals=[
-                    VariableEntry(name="system_state", value="READY", bucket="globals", order=10),
+                    VariableEntry(
+                        name="system_state", value="READY", bucket="globals", order=10
+                    ),
                 ],
                 watchpoints=[
-                    VariableEntry(name="watch_counter", value="9", bucket="watchpoints", order=11),
+                    VariableEntry(
+                        name="watch_counter", value="9", bucket="watchpoints", order=11
+                    ),
                 ],
                 unknown=[
-                    VariableEntry(name="mystery", value="??", bucket="unknown", order=12),
+                    VariableEntry(
+                        name="mystery", value="??", bucket="unknown", order=12
+                    ),
                 ],
             ),
         )

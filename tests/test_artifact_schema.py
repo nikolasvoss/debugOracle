@@ -9,19 +9,26 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from debugoracle.artifacts.models import CURRENT_BUNDLE_SCHEMA_VERSION, EvidenceBundle, VariableEntry
-from debugoracle.renderers.report import ReportRenderOptions, render_report
-from debugoracle.builder import SnapshotLoadError, build_bundle_from_text, load_bundle, save_bundle
+from debugoracle.artifacts.models import (
+    CURRENT_BUNDLE_SCHEMA_VERSION,
+    InvestigationArtifact,
+    VariableEntry,
+)
+from debugoracle.artifacts.repository import (
+    ArtifactLoadError,
+    load_artifact,
+    save_artifact,
+)
+from debugoracle.builder import build_bundle_from_text
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
 class ArtifactSchemaTests(unittest.TestCase):
-    def test_canonical_artifact_api_supports_round_trip_without_legacy_bundle_names(self) -> None:
-        from debugoracle.artifacts.models import InvestigationArtifact
-        from debugoracle.artifacts.repository import load_artifact, save_artifact
-
+    def test_canonical_artifact_api_supports_round_trip_without_legacy_bundle_names(
+        self,
+    ) -> None:
         artifact = build_bundle_from_text("", "")
         artifact.live_state = {"source": "canonical-artifact"}
 
@@ -34,28 +41,15 @@ class ArtifactSchemaTests(unittest.TestCase):
         self.assertIsInstance(loaded, InvestigationArtifact)
         self.assertEqual(loaded.live_state["source"], "canonical-artifact")
 
-    def test_builder_compatibility_exports_match_canonical_artifact_boundary(self) -> None:
-        from debugoracle.artifacts.bundle import load_bundle as canonical_load_bundle
-        from debugoracle.artifacts.bundle import save_bundle as canonical_save_bundle
-        from debugoracle.artifacts.models import (
-            CURRENT_BUNDLE_SCHEMA_VERSION as canonical_schema_version,
-        )
-        from debugoracle.artifacts.models import EvidenceBundle as CanonicalEvidenceBundle
-        from debugoracle.artifacts.models import InvestigationArtifact
+    def test_legacy_bundle_compatibility_surface_is_removed(self) -> None:
+        with self.assertRaises(ModuleNotFoundError):
+            __import__("debugoracle.artifacts.bundle")
 
-        bundle = build_bundle_from_text("", "")
+        import debugoracle.builder as builder
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            path = Path(tmpdir) / "snapshot.json"
-            save_bundle(bundle, str(path))
-            loaded = load_bundle(str(path))
-
-        self.assertIs(EvidenceBundle, CanonicalEvidenceBundle)
-        self.assertIs(CanonicalEvidenceBundle, InvestigationArtifact)
-        self.assertIs(load_bundle, canonical_load_bundle)
-        self.assertIs(save_bundle, canonical_save_bundle)
-        self.assertEqual(CURRENT_BUNDLE_SCHEMA_VERSION, canonical_schema_version)
-        self.assertIsInstance(loaded, CanonicalEvidenceBundle)
+        self.assertFalse(hasattr(builder, "load_bundle"))
+        self.assertFalse(hasattr(builder, "save_bundle"))
+        self.assertFalse(hasattr(builder, "SnapshotLoadError"))
 
     def test_save_bundle_writes_schema_version_and_live_state(self) -> None:
         bundle = build_bundle_from_text("", "")
@@ -66,7 +60,7 @@ class ArtifactSchemaTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "snapshot.json"
-            save_bundle(bundle, str(path))
+            save_artifact(bundle, str(path))
             payload = json.loads(path.read_text(encoding="utf-8"))
 
         self.assertEqual(payload["schema_version"], CURRENT_BUNDLE_SCHEMA_VERSION)
@@ -95,8 +89,8 @@ class ArtifactSchemaTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "snapshot.json"
-            save_bundle(bundle, str(path))
-            loaded = load_bundle(str(path))
+            save_artifact(bundle, str(path))
+            loaded = load_artifact(str(path))
 
         self.assertEqual(loaded.schema_version, CURRENT_BUNDLE_SCHEMA_VERSION)
         self.assertEqual(loaded.variable_evidence.locals[0].name, "system_state")
@@ -106,7 +100,7 @@ class ArtifactSchemaTests(unittest.TestCase):
     def test_builder_defaults_to_catalog_only_register_embedding(self) -> None:
         bundle = build_bundle_from_text(
             '*stopped,reason="breakpoint-hit"\n^done\n',
-            'line one\n',
+            "line one\n",
             svd_file_path=str(FIXTURES / "sample.svd"),
         )
 
@@ -116,30 +110,37 @@ class ArtifactSchemaTests(unittest.TestCase):
         self.assertEqual(bundle.provenance["register_capture_mode"], "catalog")
 
     def test_save_and_load_round_trip_embeds_register_sources_object(self) -> None:
-        with _FakeOpenOcdServer(values={0x48000000: "0xaaaaaaaa", 0x48000010: "0x00000001"}) as server:
-            with patch.dict(
-                os.environ,
-                {
-                    "DEBUGORACLE_OPENOCD_HOST": server.host,
-                    "DEBUGORACLE_OPENOCD_PORT": str(server.port),
-                },
-                clear=False,
-            ):
-                bundle = build_bundle_from_text(
-                    "*stopped,reason=\"breakpoint-hit\"\n^done\n",
-                    "line one\n",
-                    svd_file_path=str(FIXTURES / "sample.svd"),
-                    enable_live_peripheral_capture=True,
-                )
+        try:
+            with _FakeOpenOcdServer(
+                values={0x48000000: "0xaaaaaaaa", 0x48000010: "0x00000001"}
+            ) as server:
+                with patch.dict(
+                    os.environ,
+                    {
+                        "DEBUGORACLE_OPENOCD_HOST": server.host,
+                        "DEBUGORACLE_OPENOCD_PORT": str(server.port),
+                    },
+                    clear=False,
+                ):
+                    bundle = build_bundle_from_text(
+                        '*stopped,reason="breakpoint-hit"\n^done\n',
+                        "line one\n",
+                        svd_file_path=str(FIXTURES / "sample.svd"),
+                        enable_live_peripheral_capture=True,
+                    )
+        except PermissionError:
+            self.skipTest("sandbox blocks loopback socket creation")
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "snapshot.json"
-            save_bundle(bundle, str(path))
+            save_artifact(bundle, str(path))
             payload = json.loads(path.read_text(encoding="utf-8"))
-            loaded = load_bundle(str(path))
+            loaded = load_artifact(str(path))
 
         self.assertIn("registers", payload["sources"])
-        self.assertEqual(payload["sources"]["registers"]["device_name"], "STM32L432KCTest")
+        self.assertEqual(
+            payload["sources"]["registers"]["device_name"], "STM32L432KCTest"
+        )
         self.assertEqual(payload["sources"]["registers"]["register_count"], 4)
         self.assertEqual(payload["sources"]["registers"]["success_count"], 2)
         self.assertEqual(payload["sources"]["registers"]["skipped_count"], 2)
@@ -152,21 +153,24 @@ class ArtifactSchemaTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "snapshot.json"
-            save_bundle(bundle, str(path))
+            save_artifact(bundle, str(path))
             payload = json.loads(path.read_text(encoding="utf-8"))
-            loaded = load_bundle(str(path))
+            loaded = load_artifact(str(path))
 
         self.assertEqual(payload["schema_version"], CURRENT_BUNDLE_SCHEMA_VERSION)
         self.assertIn("sources", payload)
         self.assertEqual(payload["sources"]["gdb"]["raw_text"], "^done\n")
-        self.assertEqual(payload["sources"]["gdb"]["event_count"], len(payload["sources"]["gdb"]["events"]))
+        self.assertEqual(
+            payload["sources"]["gdb"]["event_count"],
+            len(payload["sources"]["gdb"]["events"]),
+        )
         self.assertEqual(payload["sources"]["rtt"]["raw_text"], "line one\nline two\n")
         self.assertEqual(payload["sources"]["rtt"]["lines"], ["line one", "line two"])
         self.assertEqual(payload["sources"]["rtt"]["line_count"], 2)
         self.assertEqual(loaded.sources.gdb.raw_text, "^done\n")
         self.assertEqual(loaded.sources.rtt.lines, ["line one", "line two"])
 
-    def test_load_bundle_legacy_snapshot_defaults_schema_version_and_renders(self) -> None:
+    def test_load_artifact_missing_schema_version_fails(self) -> None:
         bundle = build_bundle_from_text("", "")
         payload = bundle.to_dict()
         payload.pop("schema_version", None)
@@ -174,106 +178,21 @@ class ArtifactSchemaTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "legacy.json"
             path.write_text(json.dumps(payload), encoding="utf-8")
-            loaded = load_bundle(str(path))
-            report = render_report(loaded)
+            with self.assertRaises(ArtifactLoadError):
+                load_artifact(str(path))
 
-        self.assertEqual(loaded.schema_version, CURRENT_BUNDLE_SCHEMA_VERSION)
-        self.assertEqual(loaded.live_state, {})
-        self.assertIn("DebugOracle Evidence Report", report)
-
-    def test_load_bundle_legacy_snapshot_exposes_best_effort_sources_without_claiming_embedding(self) -> None:
+    def test_load_artifact_missing_sources_object_fails(self) -> None:
         bundle = build_bundle_from_text("", "")
         payload = bundle.to_dict()
-        payload.pop("schema_version", None)
         payload.pop("sources", None)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "legacy.json"
             path.write_text(json.dumps(payload), encoding="utf-8")
-            loaded = load_bundle(str(path))
+            with self.assertRaises(ArtifactLoadError):
+                load_artifact(str(path))
 
-        self.assertFalse(loaded.has_embedded_gdb_source)
-        self.assertFalse(loaded.has_embedded_rtt_source)
-        self.assertIsNone(loaded.sources.gdb.raw_text)
-        self.assertIsNone(loaded.sources.rtt.raw_text)
-        self.assertEqual(loaded.sources.gdb.event_count, len(loaded.session_events))
-        self.assertEqual(loaded.sources.rtt.lines, loaded.recent_rtt)
-
-    def test_legacy_snapshot_rejects_embedded_gdb_inspection_with_clear_error(self) -> None:
-        bundle = build_bundle_from_text("", "")
-        payload = bundle.to_dict()
-        payload.pop("schema_version", None)
-        payload.pop("sources", None)
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            path = Path(tmpdir) / "legacy.json"
-            path.write_text(json.dumps(payload), encoding="utf-8")
-            loaded = load_bundle(str(path))
-
-        with self.assertRaisesRegex(RuntimeError, "embedded gdb source"):
-            render_report(loaded, options=ReportRenderOptions(include_gdb=True))
-
-    def test_legacy_snapshot_rejects_embedded_register_inspection_with_clear_error(self) -> None:
-        bundle = build_bundle_from_text("", "")
-        payload = bundle.to_dict()
-        payload.pop("schema_version", None)
-        payload.pop("sources", None)
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            path = Path(tmpdir) / "legacy.json"
-            path.write_text(json.dumps(payload), encoding="utf-8")
-            loaded = load_bundle(str(path))
-
-        with self.assertRaisesRegex(RuntimeError, "embedded register source"):
-            render_report(loaded, options=ReportRenderOptions(regs_list_selector=""))
-
-    def test_legacy_snapshot_rejects_embedded_rtt_inspection_with_clear_error(self) -> None:
-        bundle = build_bundle_from_text("", "")
-        payload = bundle.to_dict()
-        payload.pop("schema_version", None)
-        payload.pop("sources", None)
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            path = Path(tmpdir) / "legacy.json"
-            path.write_text(json.dumps(payload), encoding="utf-8")
-            loaded = load_bundle(str(path))
-
-        with self.assertRaisesRegex(RuntimeError, "embedded rtt source"):
-            render_report(loaded, options=ReportRenderOptions(include_rtt=True))
-
-    def test_load_bundle_unknown_schema_version_warns_in_non_strict_mode(self) -> None:
-        bundle = build_bundle_from_text("", "")
-        payload = bundle.to_dict()
-        payload["schema_version"] = "99"
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            path = Path(tmpdir) / "future.json"
-            path.write_text(json.dumps(payload), encoding="utf-8")
-            loaded = load_bundle(str(path), strict=False)
-
-        self.assertEqual(loaded.schema_version, "99")
-        self.assertTrue(
-            any("schema version '99'" in warning for warning in loaded.parse_warnings)
-        )
-        self.assertEqual(
-            loaded.provenance["parse_warning_count"],
-            len(loaded.parse_warnings),
-        )
-
-    def test_load_bundle_unknown_schema_version_fails_in_strict_mode(self) -> None:
-        bundle = build_bundle_from_text("", "")
-        payload = bundle.to_dict()
-        payload["schema_version"] = "99"
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            path = Path(tmpdir) / "future.json"
-            path.write_text(json.dumps(payload), encoding="utf-8")
-            with self.assertRaises(SnapshotLoadError):
-                load_bundle(str(path), strict=True)
-
-    def test_canonical_repository_preserves_strict_schema_checks(self) -> None:
-        from debugoracle.artifacts.repository import ArtifactLoadError, load_artifact
-
+    def test_load_artifact_unknown_schema_version_fails(self) -> None:
         bundle = build_bundle_from_text("", "")
         payload = bundle.to_dict()
         payload["schema_version"] = "99"
@@ -282,7 +201,7 @@ class ArtifactSchemaTests(unittest.TestCase):
             path = Path(tmpdir) / "future.json"
             path.write_text(json.dumps(payload), encoding="utf-8")
             with self.assertRaises(ArtifactLoadError):
-                load_artifact(str(path), strict=True)
+                load_artifact(str(path))
 
     def test_round_trip_preserves_provenance_and_minimal_live_state(self) -> None:
         bundle = build_bundle_from_text("", "")
@@ -295,8 +214,8 @@ class ArtifactSchemaTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "snapshot.json"
-            save_bundle(bundle, str(path))
-            loaded = load_bundle(str(path))
+            save_artifact(bundle, str(path))
+            loaded = load_artifact(str(path))
 
         self.assertEqual(loaded.live_state["source"], "demo")
         self.assertEqual(loaded.provenance["custom_note"]["source"], "fixture")

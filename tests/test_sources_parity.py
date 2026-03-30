@@ -26,11 +26,23 @@ class TranscriptParityTests(unittest.TestCase):
         self.assertEqual(transcript.mi_record_count, 4)
         self.assertEqual(transcript.non_mi_line_count, 0)
         self.assertEqual(transcript.mi_parse_error_count, 0)
-        self.assertEqual([event.kind for event in transcript.session_events], ["*stopped", "^done", "^done", "^done"])
-        self.assertEqual(transcript.latest_stop and transcript.latest_stop.get("reason"), "breakpoint-hit")
-        self.assertEqual(transcript.latest_registers, {"15": "0x08000100", "14": "0x08000081", "13": "0x20002000"})
         self.assertEqual(
-            [(entry.name, entry.value, entry.order) for entry in transcript.variable_evidence.locals],
+            [event.kind for event in transcript.events],
+            ["*stopped", "^done", "^done", "^done"],
+        )
+        self.assertEqual(
+            transcript.latest_stop and transcript.latest_stop.get("reason"),
+            "breakpoint-hit",
+        )
+        self.assertEqual(
+            transcript.latest_registers,
+            {"15": "0x08000100", "14": "0x08000081", "13": "0x20002000"},
+        )
+        self.assertEqual(
+            [
+                (entry.name, entry.value, entry.order)
+                for entry in transcript.variable_evidence.locals
+            ],
             [("system_state", "READY", 0), ("boot_count", "3", 1)],
         )
         self.assertEqual(transcript.variable_evidence.unknown, [])
@@ -48,7 +60,9 @@ class TranscriptParityTests(unittest.TestCase):
                 '^done,register-values=[{number="13",value="0x200"},{number="14",value="0x81"},{number="15",value="0x100"}],variables=[{name="mystery"}],locals=[{name="l0",value="7"}]',
             ]
         )
-        transcript = parse_gdb_transcript(text, now_text=lambda: "2026-03-18T10:00:00+00:00")
+        transcript = parse_gdb_transcript(
+            text, now_text=lambda: "2026-03-18T10:00:00+00:00"
+        )
 
         self.assertEqual(
             transcript.parse_event_counts,
@@ -62,24 +76,42 @@ class TranscriptParityTests(unittest.TestCase):
             },
         )
         self.assertEqual(transcript.parse_event_severity_counts, {"info": 5, "warn": 1})
-        self.assertEqual(transcript.noise_line_counts, {"prompt-marker": 1, "console-output": 1, "non_mi_line": 1})
+        self.assertEqual(
+            transcript.noise_line_counts,
+            {"prompt-marker": 1, "console-output": 1, "non_mi_line": 1},
+        )
         self.assertEqual(transcript.mi_record_count, 2)
         self.assertEqual(transcript.non_mi_line_count, 3)
         self.assertEqual(transcript.mi_parse_error_count, 1)
         self.assertEqual(
-            [event.kind for event in transcript.session_events],
-            ["prompt-marker", "console-output", "non_mi_line", "mi-parse-error-known", "*stopped", "^done"],
+            [event.kind for event in transcript.events],
+            [
+                "prompt-marker",
+                "console-output",
+                "non_mi_line",
+                "mi-parse-error-known",
+                "*stopped",
+                "^done",
+            ],
         )
         self.assertEqual(
             transcript.parse_warnings,
-            ["Line 4: unable to parse MI record: Expected identifier at position 8: 'locals={'"],
+            [
+                "Line 4: unable to parse MI record: Expected identifier at position 8: 'locals={'"
+            ],
         )
         self.assertEqual(
-            [(entry.name, entry.value, entry.order, entry.availability) for entry in transcript.variable_evidence.locals],
+            [
+                (entry.name, entry.value, entry.order, entry.availability)
+                for entry in transcript.variable_evidence.locals
+            ],
             [("l0", "7", 0, "captured")],
         )
         self.assertEqual(
-            [(entry.name, entry.value, entry.order, entry.availability) for entry in transcript.variable_evidence.unknown],
+            [
+                (entry.name, entry.value, entry.order, entry.availability)
+                for entry in transcript.variable_evidence.unknown
+            ],
             [("mystery", "<unavailable>", 1, "value-unavailable")],
         )
         self.assertEqual(
@@ -95,11 +127,19 @@ class SvdParityTests(unittest.TestCase):
     def test_parse_svd_definition_sample_fixture_contract(self) -> None:
         definition = parse_svd_definition(str(FIXTURES / "sample.svd"))
         self.assertEqual(definition.device_name, "STM32L432KCTest")
-        self.assertEqual([peripheral.name for peripheral in definition.peripherals], ["GPIOA", "RCC"])
+        self.assertEqual(
+            [peripheral.name for peripheral in definition.peripherals], ["GPIOA", "RCC"]
+        )
         self.assertEqual(definition.peripherals[0].base_address, "0x48000000")
         self.assertEqual(
-            [(register.name, register.address, register.width_bits, register.access) for register in definition.peripherals[0].registers],
-            [("MODER", "0x48000000", 32, "read-write"), ("IDR", "0x48000010", 32, "read-only")],
+            [
+                (register.name, register.address, register.width_bits, register.access)
+                for register in definition.peripherals[0].registers
+            ],
+            [
+                ("MODER", "0x48000000", 32, "read-write"),
+                ("IDR", "0x48000010", 32, "read-only"),
+            ],
         )
 
     def test_parse_svd_definition_derived_from_overlay_contract(self) -> None:
@@ -149,8 +189,14 @@ class SvdParityTests(unittest.TestCase):
         self.assertEqual(child.name, "CHILD")
         self.assertEqual(child.base_address, "0x50000000")
         self.assertEqual(
-            [(register.name, register.address, register.width_bits, register.access) for register in child.registers],
-            [("REG_B", "0x50000004", 32, "write-only"), ("REG_A", "0x50000010", 16, "read-write")],
+            [
+                (register.name, register.address, register.width_bits, register.access)
+                for register in child.registers
+            ],
+            [
+                ("REG_B", "0x50000004", 32, "write-only"),
+                ("REG_A", "0x50000010", 16, "read-write"),
+            ],
         )
 
     def test_parse_svd_definition_derived_unknown_base_error_contract(self) -> None:
@@ -169,7 +215,9 @@ class SvdParityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "broken.svd"
             path.write_text(svd_text, encoding="utf-8")
-            with self.assertRaisesRegex(ValueError, "derives from unknown base 'MISSING_BASE'"):
+            with self.assertRaisesRegex(
+                ValueError, "derives from unknown base 'MISSING_BASE'"
+            ):
                 parse_svd_definition(str(path))
 
 
@@ -200,7 +248,9 @@ class RttParityTests(unittest.TestCase):
             timeout = TimeoutError
 
             @staticmethod
-            def create_connection(_addr: tuple[str, int], timeout: float) -> FakeConnection:
+            def create_connection(
+                _addr: tuple[str, int], timeout: float
+            ) -> FakeConnection:
                 return FakeConnection()
 
         class FakeTimeModule:
@@ -215,8 +265,18 @@ class RttParityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             out = Path(tmpdir) / "session.rtt"
             state_file = Path(tmpdir) / "session.rtt.state.json"
-            with patch("debugoracle.sources.streams.rtt._write_capture_state", side_effect=fake_write_state), patch(
-                "debugoracle.sources.streams.rtt._utc_now", side_effect=["2026-03-18T10:00:00+00:00", "2026-03-18T10:00:01+00:00"]
+            with (
+                patch(
+                    "debugoracle.sources.streams.rtt._write_capture_state",
+                    side_effect=fake_write_state,
+                ),
+                patch(
+                    "debugoracle.sources.streams.rtt._utc_now",
+                    side_effect=[
+                        "2026-03-18T10:00:00+00:00",
+                        "2026-03-18T10:00:01+00:00",
+                    ],
+                ),
             ):
                 state = rtt.capture_rtt_impl(
                     "127.0.0.1",
@@ -229,7 +289,9 @@ class RttParityTests(unittest.TestCase):
 
         self.assertEqual(state.status, rtt.STATE_STATUS_EOF)
         self.assertEqual(state.bytes_captured, 3)
-        self.assertEqual(observed_statuses, ["waiting", "connected", "connected", "eof"])
+        self.assertEqual(
+            observed_statuses, ["waiting", "connected", "connected", "eof"]
+        )
 
     def test_capture_rtt_impl_connect_timeout_sequence(self) -> None:
         observed_statuses: list[str] = []
@@ -258,7 +320,10 @@ class RttParityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             out = Path(tmpdir) / "session.rtt"
             state_file = Path(tmpdir) / "session.rtt.state.json"
-            with patch("debugoracle.sources.streams.rtt._write_capture_state", side_effect=fake_write_state):
+            with patch(
+                "debugoracle.sources.streams.rtt._write_capture_state",
+                side_effect=fake_write_state,
+            ):
                 with self.assertRaises(rtt.RttCaptureTimeoutError):
                     rtt.capture_rtt_impl(
                         "127.0.0.1",

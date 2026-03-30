@@ -16,8 +16,8 @@ from debugoracle.artifacts.models import (
     EvidenceAnswer,
     InvestigationArtifact,
 )
+from debugoracle.artifacts.repository import load_artifact, save_artifact
 from debugoracle.builder import build_bundle_from_text
-from debugoracle.artifacts.bundle import load_bundle, save_bundle
 
 FIXED_TIMESTAMP = "2024-01-01T00:00:00Z"
 
@@ -152,8 +152,8 @@ class ReproducibleContractTests(unittest.TestCase):
         artifact = self._build(mi=MINIMAL_MI, rtt="hello\n")
         with tempfile.TemporaryDirectory() as tmpdir:
             path = str(Path(tmpdir) / "artifact.json")
-            save_bundle(artifact, path)
-            loaded = load_bundle(path)
+            save_artifact(artifact, path)
+            loaded = load_artifact(path)
         self.assertEqual(artifact.stop_reason, loaded.stop_reason)
         self.assertEqual(artifact.pc, loaded.pc)
         self.assertEqual(artifact.schema_version, loaded.schema_version)
@@ -249,8 +249,7 @@ class UncertaintyContractTests(unittest.TestCase):
     def test_conflicting_stop_events_produce_one_of_the_observed_values(self) -> None:
         # Two *stopped events with different reasons — parser must pick one, not invent a third.
         mi = (
-            MINIMAL_MI
-            + '*stopped,reason="watchpoint-trigger",'
+            MINIMAL_MI + '*stopped,reason="watchpoint-trigger",'
             'frame={addr="0x0"},thread-id="1",stopped-threads="all"\n'
         )
         artifact = self._build(mi=mi)
@@ -275,7 +274,9 @@ class ArtifactImmutabilityContractTests(unittest.TestCase):
         before = dataclasses.asdict(artifact)
         render_report(artifact)
         after = dataclasses.asdict(artifact)
-        self.assertEqual(before, after, "render_report must not mutate the artifact in-place")
+        self.assertEqual(
+            before, after, "render_report must not mutate the artifact in-place"
+        )
 
 
 class RoundTripContractTests(unittest.TestCase):
@@ -284,19 +285,17 @@ class RoundTripContractTests(unittest.TestCase):
     Extends ReproducibleContractTests which only checked 3 fields.
     Corresponds to REQ-REPR-002.
 
-    Note: session_events[].payload is excluded — _as_str_dict() stringifies nested
-    values (ints, dicts) on load, which is a known serialisation limitation tracked
-    separately.  All other fields must survive the round-trip unchanged.
+    Note: sources.gdb.events[].payload values are stringified on load by the current
+    parser path; this is a known serialisation limitation tracked separately.
     """
 
     def _build(self, mi: str = "", rtt: str = "") -> InvestigationArtifact:
         with patch("debugoracle.builder.utc_now", return_value=FIXED_TIMESTAMP):
             return build_bundle_from_text(mi, rtt, export_raw=True)
 
-    def _strip_session_events(self, d: dict) -> dict:
-        """Remove session_events from an asdict() snapshot for comparison."""
+    def _strip_event_payloads(self, d: dict) -> dict:
+        """Remove event payload details from an asdict() snapshot for comparison."""
         d = dict(d)
-        d.pop("session_events", None)
         sources = dict(d.get("sources", {}))
         if "gdb" in sources:
             gdb = dict(sources["gdb"])
@@ -309,10 +308,10 @@ class RoundTripContractTests(unittest.TestCase):
         artifact = self._build(mi=MINIMAL_MI, rtt="hello\n")
         with tempfile.TemporaryDirectory() as tmpdir:
             path = str(Path(tmpdir) / "artifact.json")
-            save_bundle(artifact, path)
-            loaded = load_bundle(path)
-        orig = self._strip_session_events(dataclasses.asdict(artifact))
-        restored = self._strip_session_events(dataclasses.asdict(loaded))
+            save_artifact(artifact, path)
+            loaded = load_artifact(path)
+        orig = self._strip_event_payloads(dataclasses.asdict(artifact))
+        restored = self._strip_event_payloads(dataclasses.asdict(loaded))
         self.assertEqual(orig, restored)
 
 

@@ -6,7 +6,10 @@ from io import StringIO
 from contextlib import redirect_stdout, redirect_stderr
 from pathlib import Path
 
-from debugoracle.artifacts.models import CURRENT_BUNDLE_SCHEMA_VERSION, InvestigationArtifact
+from debugoracle.artifacts.models import (
+    CURRENT_BUNDLE_SCHEMA_VERSION,
+    InvestigationArtifact,
+)
 from debugoracle.cli import main as cli_main
 
 
@@ -19,10 +22,10 @@ STM32_WORKSPACES_ROOT = (
 
 # Each entry: (workspace_name, expected_stop_reason_or_none, has_halt_context)
 WORKSPACE_SAMPLES = [
-    ("hardfault",        "signal-received", True),
-    ("peripheral-miscfg","breakpoint-hit",  True),
-    ("watchdog-timeout", None,              False),
-    ("healthy",          "breakpoint-hit",  True),
+    ("hardfault", "signal-received", True),
+    ("peripheral-miscfg", "breakpoint-hit", True),
+    ("watchdog-timeout", None, False),
+    ("healthy", "breakpoint-hit", True),
 ]
 
 
@@ -89,7 +92,8 @@ class ReferenceWorkspaceSampleTests(unittest.TestCase):
             with self.subTest(workspace=ws):
                 code, stdout, stderr = self._run_report(path)
                 self.assertEqual(
-                    code, 0,
+                    code,
+                    0,
                     f"{ws}: report exited {code}\nstdout: {stdout}\nstderr: {stderr}",
                 )
 
@@ -124,10 +128,13 @@ class ReferenceWorkspaceSampleTests(unittest.TestCase):
         with open(path, encoding="utf-8") as f:
             data = json.load(f)
         artifact = InvestigationArtifact.from_dict(data)
-        self.assertGreater(len(artifact.recent_rtt), 0)
+        self.assertGreater(len(artifact.sources.rtt.lines), 0)
         # Last RTT line should reference the hang
         self.assertTrue(
-            any("hang" in line.lower() or "iwdg" in line.lower() for line in artifact.recent_rtt),
+            any(
+                "hang" in line.lower() or "iwdg" in line.lower()
+                for line in artifact.sources.rtt.lines
+            ),
             "watchdog RTT should contain hang/IWDG reference",
         )
 
@@ -137,8 +144,12 @@ class ReferenceWorkspaceSampleTests(unittest.TestCase):
         with open(path, encoding="utf-8") as f:
             data = json.load(f)
         artifact = InvestigationArtifact.from_dict(data)
-        self.assertIn("CFSR", artifact.registers, "hardfault snapshot must have CFSR register")
-        self.assertIn("BFAR", artifact.registers, "hardfault snapshot must have BFAR register")
+        self.assertIn(
+            "CFSR", artifact.registers, "hardfault snapshot must have CFSR register"
+        )
+        self.assertIn(
+            "BFAR", artifact.registers, "hardfault snapshot must have BFAR register"
+        )
 
     def test_peripheral_miscfg_snapshot_has_usart_brr(self):
         """peripheral-miscfg snapshot must have USART1_BRR in registers."""
@@ -147,11 +158,13 @@ class ReferenceWorkspaceSampleTests(unittest.TestCase):
             data = json.load(f)
         artifact = InvestigationArtifact.from_dict(data)
         self.assertIn(
-            "USART1_BRR", artifact.registers,
+            "USART1_BRR",
+            artifact.registers,
             "peripheral-miscfg snapshot must have USART1_BRR register",
         )
         self.assertEqual(
-            artifact.registers["USART1_BRR"].upper(), "0X208D",
+            artifact.registers["USART1_BRR"].upper(),
+            "0X208D",
             "USART1_BRR should be 0x208D (9600 baud at 80MHz)",
         )
 
@@ -163,6 +176,7 @@ class ReferenceWorkspaceSampleTests(unittest.TestCase):
         artifact = InvestigationArtifact.from_dict(data)
         local_names = [v.name for v in artifact.variable_evidence.locals]
         self.assertIn(
-            "gpio_test_pass_count", local_names,
+            "gpio_test_pass_count",
+            local_names,
             "healthy snapshot must have gpio_test_pass_count in locals",
         )
