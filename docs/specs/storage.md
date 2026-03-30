@@ -25,11 +25,10 @@ Assemble the canonical investigation artifact from parsed source inputs.
 - top-level summary fields for stop context, stack, registers, variables, warnings, and provenance
 - `sources.gdb.raw_text` and ordered `sources.gdb.events`
 - `sources.rtt.raw_text` and `sources.rtt.lines`
-- legacy top-level `session_events` and `recent_rtt` compatibility fields while migration is in progress
+- `sources.registers` for SVD-backed register evidence (embedded or absent)
 
 ## Compatibility Notes
 
-- Embedded source sections are canonical for new snapshots.
-- Legacy top-level stream fields remain available so older report flows can keep working during the redesign.
+- Embedded source sections are canonical for snapshots.
 - Raw sidecar export remains transitional and should not be treated as the primary completeness contract.
-- New snapshots remain self-contained even when no raw sidecars are exported.
+- Snapshots remain self-contained even when no raw sidecars are exported.

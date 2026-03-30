@@ -1,36 +1,30 @@
 # DebugOracle Artifact Schema
 
 ## Purpose
-This document defines the current internal schema contract for DebugOracle investigation artifacts.
-
-It exists to keep snapshot JSON stable enough for contributors, tests, and near-term product evolution. It is not a public compatibility promise.
-
-## Non-Goals
-- Defining a final long-term artifact model
-- Locking the product into a mandatory timeline engine or fixed correlation model
-- Replacing tolerant loading with rigid validation everywhere
-- Turning the artifact into a public standard for external integrations
+This document defines the canonical on-disk schema for DebugOracle investigation artifacts.
 
 ## Schema Version
-Current schema version: `1`
+Current schema version: `4`
 
-New snapshots written by DebugOracle should include:
+New snapshots written by DebugOracle include:
 
 ```json
 {
-  "schema_version": "1"
+  "schema_version": "4"
 }
 ```
 
-Snapshots without `schema_version` are treated as legacy artifacts and normalized to schema version `1` in memory.
+## Load Policy
+Artifact loading is strict:
+- Missing or invalid JSON payloads fail to load.
+- Missing `schema_version` fails to load.
+- Unsupported schema versions fail to load.
+- Missing canonical `sources` shape (`sources.gdb`, `sources.rtt`, `sources.registers`) fails to load.
 
-Unknown future schema versions:
-- warn in non-strict load mode
-- fail in strict load mode
+Best-effort legacy compatibility is intentionally not supported.
 
 ## Required Core Fields
-The current additive schema keeps the existing top-level bundle shape intact. These fields remain the canonical core of the investigation artifact:
-
+Canonical artifact fields:
 - `schema_version`
 - `snapshot_id`
 - `captured_at`
@@ -40,43 +34,34 @@ The current additive schema keeps the existing top-level bundle shape intact. Th
 - `sp`
 - `frames`
 - `registers`
-- `watched_values`
-- `recent_rtt`
+- `variable_evidence`
+- `sources`
 - `parse_warnings`
 - `provenance`
-- `session_events`
+
+## Required Embedded Sources
+- `sources.gdb.raw_text`
+- `sources.gdb.events`
+- `sources.gdb.event_count`
+- `sources.gdb.embedded`
+- `sources.rtt.raw_text`
+- `sources.rtt.lines`
+- `sources.rtt.line_count`
+- `sources.rtt.embedded`
+- `sources.registers.embedded`
+- `sources.registers.*` register payload (when embedded)
 
 ## Optional Fields
 - `live_state`
 - `source_context`
 
-Optional fields may be absent in legacy or partial artifacts.
-
-## Captured Evidence vs Live State
-Captured evidence remains in the existing top-level fields such as `frames`, `registers`, `recent_rtt`, and `session_events`.
-
-Live read-only evidence belongs only in `live_state`.
-
-The reserved `live_state` structure is intentionally light and may contain:
-- `captured_at`
-- `source`
-- `backend`
-- `status`
-- `registers`
-- `memory_reads`
-- `warnings`
-
-No fixed nested payload contract is required yet beyond `live_state` being a JSON object.
-
-## Flexible Metadata
-`provenance` remains a flexible metadata bucket for source paths, counts, quality signals, raw-export metadata, and other supporting fields that are still evolving.
-
-## Compatibility Policy
-- Backward compatibility with existing snapshot JSON is preferred over schema purity.
-- New additive fields are allowed when they do not rename or remove the current core fields.
-- Existing fields should not be moved into new nested structures in this schema version.
+## Removed Compatibility Fields
+These legacy top-level fields are not part of schema v4:
+- `recent_rtt`
+- `session_events`
+- `watched_values`
 
 ## Trust Boundary Notes
-- Snapshot JSON must be treated as untrusted input when loading.
+- Snapshot JSON is untrusted input when loading.
 - `provenance` may contain sensitive local paths or raw-export references.
-- `live_state` must stay distinct from captured evidence so current target state does not get confused with saved artifact state.
+- `live_state` remains distinct from captured evidence.

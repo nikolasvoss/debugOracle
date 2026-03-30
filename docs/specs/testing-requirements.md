@@ -41,7 +41,7 @@ These five invariants are the foundation of the system. No change may break them
 - `REQ-EVD-003`: `InvestigationArtifact.provenance` must be non-empty when sources are present.
 
 **What is NOT a violation:**
-- Default empty collections (`frames: []`, `recent_rtt: []`) when no data is available.
+- Default empty collections (`frames: []`, `sources.rtt.lines: []`) when no data is available.
 - Schema defaults for optional fields (`schema_version`, `parse_warnings`).
 
 ---
@@ -69,7 +69,7 @@ These five invariants are the foundation of the system. No change may break them
 **Testable definition:**
 - `REQ-REPR-001`: An artifact with `sources.gdb.embedded = True` must contain the full `raw_text` of the GDB MI log.
 - `REQ-REPR-002`: An artifact with `sources.rtt.embedded = True` must contain the full `raw_text` of the RTT log.
-- `REQ-REPR-003`: Core artifact fields must survive a save → load round-trip unchanged. (Known exception: `session_events[].payload` nested values are stringified on load — tracked as a serialisation limitation.)
+- `REQ-REPR-003`: Core artifact fields must survive a save → load round-trip unchanged. (Known exception: `sources.gdb.events[].payload` nested values are stringified on load — tracked as a serialisation limitation.)
 
 ---
 

@@ -2,7 +2,7 @@
 
 - Module: `models`
 - Code Path: `debugoracle/artifacts/models.py`
-- Public Entrypoints: `InvestigationArtifact`, `ArtifactSources`, `GdbSource`, `RttSource`, `VariableEvidence`, `VariableEntry`
+- Public Entrypoints: `InvestigationArtifact`, `ArtifactSources`, `GdbSource`, `RttSource`, `RegisterSource`, `VariableEvidence`, `VariableEntry`
 - Last Updated: `2026-03-22`
 
 # SPEC: Artifact Models
@@ -15,7 +15,7 @@ Define the canonical snapshot schema for DebugOracle artifacts.
 
 - Preserve cheap top-level summary fields for report and status flows.
 - Store embedded source payloads under a top-level `sources` object.
-- Support best-effort loading of older snapshots that still use legacy top-level stream fields.
+- Parse canonical snapshots only.
 
 ## Snapshot Schema Contract
 
@@ -43,6 +43,6 @@ Embedded source fields live under `sources`:
 ## Compatibility Contract
 
 - New snapshots mark embedded source sections explicitly.
-- Older snapshots may still load from `session_events` and `recent_rtt`.
-- Legacy snapshots must not claim to have embedded source payloads when those sections were not stored.
+- Snapshots without canonical `sources` payloads are rejected during load.
+- Unsupported schema versions are rejected during load.
 - GDB event order and variable entry order must remain stable through save/load.

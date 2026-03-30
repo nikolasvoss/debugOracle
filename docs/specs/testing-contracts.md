@@ -57,9 +57,9 @@ Fixtures do not require a metadata header in Phase 1. In Phase 3 (replay fixture
 
 ### Fixture versioning (`__version__` — Living)
 
-JSON artifact fixtures carry a `schema_version` field (currently `"3"`). Tests that load fixture JSON must:
+JSON artifact fixtures carry a `schema_version` field (currently `"4"`). Tests that load fixture JSON must:
 1. Check `schema_version` matches `CURRENT_BUNDLE_SCHEMA_VERSION`, or
-2. Explicitly document that they are testing migration/legacy behavior.
+2. Explicitly document that they are testing strict-load failure behavior for unsupported schemas.
 
 When `CURRENT_BUNDLE_SCHEMA_VERSION` is bumped, existing JSON fixtures must be either migrated or moved to a `tests/fixtures/legacy/` directory.
 
@@ -129,7 +129,7 @@ These oracles are used in Phase 5 adversarial tests. They are specified here so 
 ### Oracle 2: Reorder RTT Lines
 
 **Transformation:** Shuffle the order of RTT lines.
-**Property that must hold:** `recent_rtt` contains the same set of lines (order may differ). All other fields are unchanged.
+**Property that must hold:** `sources.rtt.lines` contains the same set of lines (order may differ). All other fields are unchanged.
 
 ### Oracle 3: Remove Evidence Class
 

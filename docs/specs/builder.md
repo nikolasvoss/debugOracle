@@ -2,7 +2,7 @@
 
 - Module: `builder`
 - Code Path: `debugoracle/builder.py`
-- Public Entrypoints: `build_bundle_from_files`, `build_bundle_from_stream`, `build_bundle_from_text`, `load_bundle`, `save_bundle`, `SnapshotLoadError`
+- Public Entrypoints: `build_bundle_from_files`, `build_bundle_from_stream`, `build_bundle_from_text`
 - Last Updated: `2026-03-20`
 
 # SPEC: DebugOracle Builder Compatibility Boundary
@@ -11,37 +11,26 @@
 
 `debugoracle.builder` still owns bundle construction from raw GDB/MI and RTT inputs.
 
-In Step 1 of the architecture refactor it no longer owns snapshot persistence as the canonical
-implementation. Instead, it preserves the existing test-facing import surface while delegating
-load/save behavior to the new artifact boundary.
+Builder owns snapshot construction from raw sources and delegates persistence to the canonical artifact repository.
 
 ## Canonical Homes
 
 - Raw-evidence parsing and bundle construction stay in `debugoracle/builder.py` for now.
 - Canonical artifact models live in `debugoracle/artifacts/models.py`.
 - Canonical artifact persistence lives in `debugoracle/artifacts/repository.py`.
-- `debugoracle/artifacts/bundle.py` remains the bundle-named compatibility shim.
 - Canonical source-descriptor contract lives in `debugoracle/sources/base.py`.
 - Canonical GDB source modules now live under `debugoracle/sources/debuggers/gdb/`.
 - Canonical shaping/storage assembly now lives in `debugoracle/pipeline/storage.py`.
 
-## Compatibility Contract
+## Boundary Contract
 
-The following builder imports must continue to work during migration:
+Builder exposes construction entrypoints only:
 
 - `from debugoracle.builder import build_bundle_from_files`
 - `from debugoracle.builder import build_bundle_from_stream`
 - `from debugoracle.builder import build_bundle_from_text`
-- `from debugoracle.builder import load_bundle`
-- `from debugoracle.builder import save_bundle`
-- `from debugoracle.builder import SnapshotLoadError`
 
-For Step 2:
-
-- `load_bundle`, `save_bundle`, and `SnapshotLoadError` are compatibility exports backed by
-  `debugoracle.artifacts.bundle`, which delegates to `debugoracle.artifacts.repository`
-- `build_bundle_from_*` remains implemented locally
-- callers and tests are allowed to stay on the old builder import path
+Artifact persistence must be accessed from `debugoracle.artifacts.repository`.
 
 For Step 6:
 
@@ -52,15 +41,13 @@ For Step 6:
 For Step 7:
 
 - Artifact creation now happens through `debugoracle.pipeline.storage.build_artifact_from_sources`
-- `debugoracle.builder` still owns the legacy `build_bundle_from_*` entrypoints, but it no longer owns the shared shaping logic directly
+- `debugoracle.builder` remains the orchestrator for `build_bundle_from_*` entrypoints.
 
 For Variable Evidence v1:
 
-- Builder now assembles snapshots with structured variable evidence instead of treating locals and
-  variables as a flat `watched_values` map.
-- The compatibility-facing `build_bundle_from_*` APIs remain unchanged, but their returned artifact
-  schema now centers variable evidence under bucketed entries (`locals`, `globals`,
-  `watchpoints`, `unknown`).
+- Builder assembles snapshots with structured variable evidence under bucketed entries
+  (`locals`, `globals`, `watchpoints`, `unknown`).
+- `build_bundle_from_*` APIs remain unchanged while returning canonical artifact schema data.
 
 ## Snapshot Embedding Contract
 
