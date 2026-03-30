@@ -19,6 +19,7 @@ from ...sources.streams.rtt import (
     capture_rtt,
     default_state_path,
 )
+from ._shared import resolve_workspace_path
 
 DEFAULT_RUN_PORT = 60001
 DEFAULT_RUN_OUTPUT = "session.rtt"
@@ -388,12 +389,3 @@ def safe_unlink(path: Path) -> None:
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-
-
-def resolve_workspace_path(value: str | None, workspace_root: Path) -> str | None:
-    if not value:
-        return None
-    path = Path(value).expanduser()
-    if path.is_absolute():
-        return str(path)
-    return str(workspace_root / path)

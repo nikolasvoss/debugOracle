@@ -8,6 +8,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import cast
 
+from ._shared import parse_jsonc
+
 DEFAULT_MI_LOG_PATH = "${workspaceFolder}/.dbgoracle/cortex-debug-shared-mi.log"
 DEFAULT_RTT_LOG_PATH = "${workspaceFolder}/.dbgoracle/session.rtt"
 DEFAULT_RTT_STATE_PATH = "${workspaceFolder}/.dbgoracle/session.rtt.state.json"
@@ -433,7 +435,7 @@ def _can_overwrite(path: Path, *, force: bool) -> bool:
         content = path.read_text(encoding="utf-8")
     except OSError:
         return False
-    payload = _parse_vscode_json(content)
+    payload = parse_jsonc(content)
     if not isinstance(payload, dict):
         return False
     if path.name == "settings.json":
@@ -452,54 +454,6 @@ def _can_overwrite(path: Path, *, force: bool) -> bool:
             and configuration.get("debugoracleManagedBy") == MANAGED_BY_VALUE
         )
     return False
-
-
-def _parse_vscode_json(raw_text: str) -> object | None:
-    result: list[str] = []
-    in_string = False
-    escape = False
-    index = 0
-    length = len(raw_text)
-    while index < length:
-        char = raw_text[index]
-        next_char = raw_text[index + 1] if index + 1 < length else ""
-        if in_string:
-            result.append(char)
-            if escape:
-                escape = False
-            elif char == "\\":
-                escape = True
-            elif char == '"':
-                in_string = False
-            index += 1
-            continue
-        if char == '"':
-            in_string = True
-            result.append(char)
-            index += 1
-            continue
-        if char == "/" and next_char == "/":
-            index += 2
-            while index < length and raw_text[index] not in "\r\n":
-                index += 1
-            continue
-        if char == "/" and next_char == "*":
-            index += 2
-            while index + 1 < length and not (
-                raw_text[index] == "*" and raw_text[index + 1] == "/"
-            ):
-                index += 1
-            index = min(length, index + 2)
-            continue
-        result.append(char)
-        index += 1
-    normalized = "".join(result)
-    normalized = normalized.replace(",\n]", "\n]").replace(",\n}", "\n}")
-    normalized = normalized.replace(",]", "]").replace(",}", "}")
-    try:
-        return json.loads(normalized)
-    except json.JSONDecodeError:
-        return None
 
 
 def _resolve_workspace_dependency_path(value: str, workspace_root: Path) -> Path:

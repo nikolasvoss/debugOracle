@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import re
 import sys
@@ -33,6 +32,7 @@ from ...session import (
     DEFAULT_SNAPSHOT_FILENAME,
     SessionConfig,
 )
+from ._shared import parse_jsonc, resolve_workspace_path
 
 
 def cmd_fetch(args: argparse.Namespace) -> int:
@@ -64,15 +64,12 @@ def cmd_fetch(args: argparse.Namespace) -> int:
     if resolved_svd_file:
         require_readable_file(resolved_svd_file, "SVD")
     try:
-        bundle = resolve_bundle(
+        bundle = _resolve_fetch_bundle(
             args,
             gdb_mi=gdb_mi,
             rtt=rtt,
-            allow_snapshot_fallback=False,
-            command_name="fetch",
-            explicit_gdb=discovery["gdb_mi_explicit"],
-            explicit_rtt=discovery["rtt_explicit"],
-            export_dir=Path(state_out).parent,
+            state_out=state_out,
+            discovery=discovery,
             resolved_svd_file=resolved_svd_file,
             svd_discovered=svd_discovered,
             resolved_openocd_tcl_host=resolved_openocd_tcl_host,
@@ -83,15 +80,12 @@ def cmd_fetch(args: argparse.Namespace) -> int:
         if resolved_svd_file and tcl_discovered:
             endpoint = f"{resolved_openocd_tcl_host or '127.0.0.1'}:{resolved_openocd_tcl_port}"
             try:
-                bundle = resolve_bundle(
+                bundle = _resolve_fetch_bundle(
                     args,
                     gdb_mi=gdb_mi,
                     rtt=rtt,
-                    allow_snapshot_fallback=False,
-                    command_name="fetch",
-                    explicit_gdb=discovery["gdb_mi_explicit"],
-                    explicit_rtt=discovery["rtt_explicit"],
-                    export_dir=Path(state_out).parent,
+                    state_out=state_out,
+                    discovery=discovery,
                     resolved_svd_file=resolved_svd_file,
                     svd_discovered=svd_discovered,
                     resolved_openocd_tcl_host=None,
@@ -105,17 +99,12 @@ def cmd_fetch(args: argparse.Namespace) -> int:
                     f"Auto-discovered OpenOCD Tcl endpoint '{endpoint}' could not be used ({reason}). Continuing without register capture.",
                     file=sys.stderr,
                 )
-                bundle = resolve_bundle(
+                bundle = _resolve_fetch_bundle_without_register_capture(
                     args,
                     gdb_mi=gdb_mi,
                     rtt=rtt,
-                    allow_snapshot_fallback=False,
-                    command_name="fetch",
-                    explicit_gdb=discovery["gdb_mi_explicit"],
-                    explicit_rtt=discovery["rtt_explicit"],
-                    export_dir=Path(state_out).parent,
-                    resolved_svd_file=None,
-                    svd_discovered=False,
+                    state_out=state_out,
+                    discovery=discovery,
                 )
             else:
                 save_artifact(bundle, state_out)
@@ -143,34 +132,24 @@ def cmd_fetch(args: argparse.Namespace) -> int:
                     f"Auto-discovered OpenOCD Tcl endpoint '{endpoint}' could not be used ({reason}). Continuing without register capture.",
                     file=sys.stderr,
                 )
-                bundle = resolve_bundle(
+                bundle = _resolve_fetch_bundle_without_register_capture(
                     args,
                     gdb_mi=gdb_mi,
                     rtt=rtt,
-                    allow_snapshot_fallback=False,
-                    command_name="fetch",
-                    explicit_gdb=discovery["gdb_mi_explicit"],
-                    explicit_rtt=discovery["rtt_explicit"],
-                    export_dir=Path(state_out).parent,
-                    resolved_svd_file=None,
-                    svd_discovered=False,
+                    state_out=state_out,
+                    discovery=discovery,
                 )
             elif resolved_svd_file and svd_discovered:
                 print(
                     f"Auto-discovered SVD '{resolved_svd_file}' could not be used ({reason}). Continuing without register capture.",
                     file=sys.stderr,
                 )
-                bundle = resolve_bundle(
+                bundle = _resolve_fetch_bundle_without_register_capture(
                     args,
                     gdb_mi=gdb_mi,
                     rtt=rtt,
-                    allow_snapshot_fallback=False,
-                    command_name="fetch",
-                    explicit_gdb=discovery["gdb_mi_explicit"],
-                    explicit_rtt=discovery["rtt_explicit"],
-                    export_dir=Path(state_out).parent,
-                    resolved_svd_file=None,
-                    svd_discovered=False,
+                    state_out=state_out,
+                    discovery=discovery,
                 )
             else:
                 raise
@@ -181,30 +160,22 @@ def cmd_fetch(args: argparse.Namespace) -> int:
                 f"Auto-discovered SVD '{resolved_svd_file}' could not be used ({reason}). Continuing without register capture.",
                 file=sys.stderr,
             )
-            bundle = resolve_bundle(
+            bundle = _resolve_fetch_bundle_without_register_capture(
                 args,
                 gdb_mi=gdb_mi,
                 rtt=rtt,
-                allow_snapshot_fallback=False,
-                command_name="fetch",
-                explicit_gdb=discovery["gdb_mi_explicit"],
-                explicit_rtt=discovery["rtt_explicit"],
-                export_dir=Path(state_out).parent,
-                resolved_svd_file=None,
-                svd_discovered=False,
+                state_out=state_out,
+                discovery=discovery,
             )
         elif resolved_svd_file and tcl_discovered:
             endpoint = f"{resolved_openocd_tcl_host or '127.0.0.1'}:{resolved_openocd_tcl_port}"
             try:
-                bundle = resolve_bundle(
+                bundle = _resolve_fetch_bundle(
                     args,
                     gdb_mi=gdb_mi,
                     rtt=rtt,
-                    allow_snapshot_fallback=False,
-                    command_name="fetch",
-                    explicit_gdb=discovery["gdb_mi_explicit"],
-                    explicit_rtt=discovery["rtt_explicit"],
-                    export_dir=Path(state_out).parent,
+                    state_out=state_out,
+                    discovery=discovery,
                     resolved_svd_file=resolved_svd_file,
                     svd_discovered=svd_discovered,
                     resolved_openocd_tcl_host=None,
@@ -215,17 +186,12 @@ def cmd_fetch(args: argparse.Namespace) -> int:
                     f"Auto-discovered OpenOCD Tcl endpoint '{endpoint}' could not be used ({reason}). Continuing without register capture.",
                     file=sys.stderr,
                 )
-                bundle = resolve_bundle(
+                bundle = _resolve_fetch_bundle_without_register_capture(
                     args,
                     gdb_mi=gdb_mi,
                     rtt=rtt,
-                    allow_snapshot_fallback=False,
-                    command_name="fetch",
-                    explicit_gdb=discovery["gdb_mi_explicit"],
-                    explicit_rtt=discovery["rtt_explicit"],
-                    export_dir=Path(state_out).parent,
-                    resolved_svd_file=None,
-                    svd_discovered=False,
+                    state_out=state_out,
+                    discovery=discovery,
                 )
         else:
             raise
@@ -493,69 +459,29 @@ def resolve_bundle(
     explicit_gdb = explicit_gdb or (getattr(args, "gdb_mi", None) is not None)
     explicit_rtt = explicit_rtt or (getattr(args, "rtt", None) is not None)
 
-    if requested_snapshot_file:
-        resolved_snapshot = resolve_workspace_path(
-            requested_snapshot_file, workspace_root
-        )
-        emit_discovery_summary(
-            command_name,
-            {
-                "snapshot-file": resolved_snapshot,
-            },
-            {
-                "snapshot-file": False,
-            },
-        )
-        return load_snapshot(
-            command_name=command_name,
-            path=resolved_snapshot,
-            strict=strict_snapshot,
-        )
+    snapshot = _resolve_snapshot_from_request_or_fallback(
+        command_name=command_name,
+        strict_snapshot=strict_snapshot,
+        requested_snapshot_file=requested_snapshot_file,
+        workspace_root=workspace_root,
+        config=config,
+        allow_snapshot_fallback=allow_snapshot_fallback,
+        explicit_gdb=explicit_gdb,
+        explicit_rtt=explicit_rtt,
+    )
+    if snapshot is not None:
+        return snapshot
 
-    if allow_snapshot_fallback and not explicit_gdb and not explicit_rtt:
-        if config.snapshot_file.exists():
-            emit_discovery_summary(
-                command_name,
-                {
-                    "snapshot-file": str(config.snapshot_file),
-                },
-                {
-                    "snapshot-file": True,
-                },
-            )
-            return load_snapshot(
-                command_name=command_name,
-                path=str(config.snapshot_file),
-                strict=strict_snapshot,
-            )
-
-    resolved_gdb = None
-    resolved_rtt = None
-    gdb_discovered = False
-    rtt_discovered = False
-
-    if explicit_gdb:
-        resolved_gdb = resolve_workspace_path(requested_gdb, workspace_root)
-    elif config.gdb_mi_file.is_file():
-        resolved_gdb = str(config.gdb_mi_file)
-        gdb_discovered = True
-    if explicit_rtt:
-        resolved_rtt = resolve_workspace_path(requested_rtt, workspace_root)
-    elif config.rtt_file.is_file():
-        resolved_rtt = str(config.rtt_file)
-        rtt_discovered = True
-
-    if resolved_gdb is None and resolved_rtt is None:
-        raise SystemExit(
-            missing_inputs_error(
-                command_name,
-                workspace_root,
-                allow_snapshot_fallback,
-            )
-        )
-
-    gdb_mi = resolved_gdb
-    rtt = resolved_rtt
+    gdb_mi, rtt, gdb_discovered, rtt_discovered = _resolve_bundle_inputs(
+        command_name=command_name,
+        workspace_root=workspace_root,
+        config=config,
+        requested_gdb=requested_gdb,
+        requested_rtt=requested_rtt,
+        explicit_gdb=explicit_gdb,
+        explicit_rtt=explicit_rtt,
+        allow_snapshot_fallback=allow_snapshot_fallback,
+    )
 
     rtt_window = (
         FULL_RTT_WINDOW if full else getattr(args, "rtt_window", DEFAULT_RTT_WINDOW)
@@ -586,6 +512,116 @@ def resolve_bundle(
             getattr(args, "svd_file", None), workspace_root
         )
 
+    return _build_bundle_from_resolved_inputs(
+        args=args,
+        config=config,
+        gdb_mi=gdb_mi,
+        rtt=rtt,
+        rtt_window=rtt_window,
+        export_dir=export_dir,
+        resolved_svd_file=resolved_svd_file,
+        command_name=command_name,
+        resolved_openocd_tcl_host=resolved_openocd_tcl_host,
+        resolved_openocd_tcl_port=resolved_openocd_tcl_port,
+    )
+
+
+def _resolve_snapshot_from_request_or_fallback(
+    *,
+    command_name: str,
+    strict_snapshot: bool,
+    requested_snapshot_file: str | None,
+    workspace_root: Path,
+    config: SessionConfig,
+    allow_snapshot_fallback: bool,
+    explicit_gdb: bool,
+    explicit_rtt: bool,
+) -> InvestigationArtifact | None:
+    if requested_snapshot_file:
+        resolved_snapshot = resolve_workspace_path(
+            requested_snapshot_file, workspace_root
+        )
+        emit_discovery_summary(
+            command_name,
+            {"snapshot-file": resolved_snapshot},
+            {"snapshot-file": False},
+        )
+        return load_snapshot(
+            command_name=command_name,
+            path=resolved_snapshot,
+            strict=strict_snapshot,
+        )
+    if (
+        allow_snapshot_fallback
+        and not explicit_gdb
+        and not explicit_rtt
+        and config.snapshot_file.exists()
+    ):
+        emit_discovery_summary(
+            command_name,
+            {"snapshot-file": str(config.snapshot_file)},
+            {"snapshot-file": True},
+        )
+        return load_snapshot(
+            command_name=command_name,
+            path=str(config.snapshot_file),
+            strict=strict_snapshot,
+        )
+    return None
+
+
+def _resolve_bundle_inputs(
+    *,
+    command_name: str,
+    workspace_root: Path,
+    config: SessionConfig,
+    requested_gdb: str | None,
+    requested_rtt: str | None,
+    explicit_gdb: bool,
+    explicit_rtt: bool,
+    allow_snapshot_fallback: bool,
+) -> tuple[str | None, str | None, bool, bool]:
+    resolved_gdb = (
+        resolve_workspace_path(requested_gdb, workspace_root) if explicit_gdb else None
+    )
+    resolved_rtt = (
+        resolve_workspace_path(requested_rtt, workspace_root) if explicit_rtt else None
+    )
+    gdb_discovered = False
+    rtt_discovered = False
+
+    if resolved_gdb is None and config.gdb_mi_file.is_file():
+        resolved_gdb = str(config.gdb_mi_file)
+        gdb_discovered = True
+    if resolved_rtt is None and config.rtt_file.is_file():
+        resolved_rtt = str(config.rtt_file)
+        rtt_discovered = True
+
+    if resolved_gdb is None and resolved_rtt is None:
+        raise SystemExit(
+            missing_inputs_error(
+                command_name,
+                workspace_root,
+                allow_snapshot_fallback,
+            )
+        )
+
+    return resolved_gdb, resolved_rtt, gdb_discovered, rtt_discovered
+
+
+def _build_bundle_from_resolved_inputs(
+    *,
+    args: argparse.Namespace,
+    config: SessionConfig,
+    gdb_mi: str | None,
+    rtt: str | None,
+    rtt_window: int,
+    export_dir: Path | None,
+    resolved_svd_file: str | None,
+    command_name: str,
+    resolved_openocd_tcl_host: str | None,
+    resolved_openocd_tcl_port: int | None,
+) -> InvestigationArtifact:
     try:
         return build_bundle_from_files(
             gdb_mi,
@@ -719,6 +755,53 @@ def resolve_fetch_inputs(
     }
 
 
+def _resolve_fetch_bundle(
+    args: argparse.Namespace,
+    *,
+    gdb_mi: str | None,
+    rtt: str | None,
+    state_out: str,
+    discovery: _FetchInputs,
+    resolved_svd_file: str | None,
+    svd_discovered: bool,
+    resolved_openocd_tcl_host: str | None = None,
+    resolved_openocd_tcl_port: int | None = None,
+) -> InvestigationArtifact:
+    return resolve_bundle(
+        args,
+        gdb_mi=gdb_mi,
+        rtt=rtt,
+        allow_snapshot_fallback=False,
+        command_name="fetch",
+        explicit_gdb=discovery["gdb_mi_explicit"],
+        explicit_rtt=discovery["rtt_explicit"],
+        export_dir=Path(state_out).parent,
+        resolved_svd_file=resolved_svd_file,
+        svd_discovered=svd_discovered,
+        resolved_openocd_tcl_host=resolved_openocd_tcl_host,
+        resolved_openocd_tcl_port=resolved_openocd_tcl_port,
+    )
+
+
+def _resolve_fetch_bundle_without_register_capture(
+    args: argparse.Namespace,
+    *,
+    gdb_mi: str | None,
+    rtt: str | None,
+    state_out: str,
+    discovery: _FetchInputs,
+) -> InvestigationArtifact:
+    return _resolve_fetch_bundle(
+        args,
+        gdb_mi=gdb_mi,
+        rtt=rtt,
+        state_out=state_out,
+        discovery=discovery,
+        resolved_svd_file=None,
+        svd_discovered=False,
+    )
+
+
 def resolve_fetch_svd_file(
     args: argparse.Namespace,
     workspace_root: Path,
@@ -815,7 +898,7 @@ def resolve_workspace_default_svd_file(workspace_root: Path) -> str | None:
         raw_text = settings_path.read_text(encoding="utf-8")
     except OSError:
         return None
-    payload = parse_vscode_json(raw_text)
+    payload = parse_jsonc(raw_text)
     if not isinstance(payload, dict):
         return None
     raw_value = payload.get("debugoracle.svdFile")
@@ -828,92 +911,6 @@ def resolve_workspace_default_svd_file(workspace_root: Path) -> str | None:
 
 def expand_workspace_tokens(value: str, workspace_root: Path) -> str:
     return value.replace("${workspaceFolder}", str(workspace_root))
-
-
-def parse_vscode_json(raw_text: str) -> object | None:
-    without_comments = _strip_jsonc_comments(raw_text)
-    normalized = _strip_trailing_commas(without_comments)
-    try:
-        return json.loads(normalized)
-    except json.JSONDecodeError:
-        return None
-
-
-def _strip_jsonc_comments(raw_text: str) -> str:
-    result: list[str] = []
-    in_string = False
-    escape = False
-    index = 0
-    length = len(raw_text)
-    while index < length:
-        char = raw_text[index]
-        next_char = raw_text[index + 1] if index + 1 < length else ""
-        if in_string:
-            result.append(char)
-            if escape:
-                escape = False
-            elif char == "\\":
-                escape = True
-            elif char == '"':
-                in_string = False
-            index += 1
-            continue
-        if char == '"':
-            in_string = True
-            result.append(char)
-            index += 1
-            continue
-        if char == "/" and next_char == "/":
-            index += 2
-            while index < length and raw_text[index] not in "\r\n":
-                index += 1
-            continue
-        if char == "/" and next_char == "*":
-            index += 2
-            while index + 1 < length and not (
-                raw_text[index] == "*" and raw_text[index + 1] == "/"
-            ):
-                index += 1
-            index = min(index + 2, length)
-            continue
-        result.append(char)
-        index += 1
-    return "".join(result)
-
-
-def _strip_trailing_commas(raw_text: str) -> str:
-    result: list[str] = []
-    in_string = False
-    escape = False
-    index = 0
-    length = len(raw_text)
-    while index < length:
-        char = raw_text[index]
-        if in_string:
-            result.append(char)
-            if escape:
-                escape = False
-            elif char == "\\":
-                escape = True
-            elif char == '"':
-                in_string = False
-            index += 1
-            continue
-        if char == '"':
-            in_string = True
-            result.append(char)
-            index += 1
-            continue
-        if char == ",":
-            lookahead = index + 1
-            while lookahead < length and raw_text[lookahead] in " \t\r\n":
-                lookahead += 1
-            if lookahead < length and raw_text[lookahead] in "]}":
-                index += 1
-                continue
-        result.append(char)
-        index += 1
-    return "".join(result)
 
 
 def missing_inputs_error(
@@ -1001,15 +998,6 @@ def require_readable_file(path: str, label: str) -> None:
         raise SystemExit(f"{label} path is not a file: {path}")
     if not os.access(path, os.R_OK):
         raise SystemExit(f"{label} file is not readable: {path}")
-
-
-def resolve_workspace_path(value: str | None, workspace_root: Path) -> str | None:
-    if not value:
-        return None
-    path = Path(value).expanduser()
-    if path.is_absolute():
-        return str(path)
-    return str(workspace_root / path)
 
 
 def resolve_state_out_path(

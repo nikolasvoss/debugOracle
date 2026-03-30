@@ -265,6 +265,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     guard_openocd_launch.set_defaults(func=cmd_guard_openocd_launch)
 
+    _add_docs_parser(subparsers)
+    _add_fetch_parser(subparsers)
+    _add_report_parser(subparsers)
+    _add_install_cli_parser(subparsers)
+    _add_init_workspace_parser(subparsers)
+
+    return parser
+
+
+def _add_docs_parser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
     docs = subparsers.add_parser(
         "docs",
         help="Manage locally ingested reference manuals and datasheets",
@@ -400,6 +412,10 @@ def build_parser() -> argparse.ArgumentParser:
     docs_doctor.add_argument("--output", help="Optional output file path")
     docs_doctor.set_defaults(command="docs", func=cmd_docs_doctor)
 
+
+def _add_fetch_parser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
     fetch = subparsers.add_parser(
         "fetch",
         help="Resolve raw evidence inputs and build the latest reusable snapshot",
@@ -442,6 +458,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     fetch.set_defaults(func=cmd_fetch)
 
+
+def _add_report_parser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
     report = subparsers.add_parser(
         "report",
         help="Render a human-readable evidence report or compact inspection JSON from a saved snapshot",
@@ -498,6 +518,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     report.set_defaults(func=cmd_report)
 
+
+def _add_install_cli_parser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
     install_cli = subparsers.add_parser(
         "install-cli",
         help=argparse.SUPPRESS,
@@ -534,6 +558,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     install_cli.set_defaults(command="install_cli", func=cmd_install_cli)
 
+
+def _add_init_workspace_parser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
     init_workspace = subparsers.add_parser(
         "init-workspace",
         help="Create a DebugOracle workspace scaffold for a fresh project",
@@ -608,8 +636,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Output format",
     )
     init_workspace.set_defaults(command="init_workspace", func=cmd_init_workspace)
-
-    return parser
 
 
 def positive_int(value: str) -> int:
