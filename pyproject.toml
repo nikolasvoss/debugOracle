@@ -19,3 +19,6 @@ dev = ["pyright", "pytest"]
 
 [project.scripts]
 dbgoracle = "debugoracle:main"
+
+[tool.setuptools.packages.find]
+include = ["debugoracle*"]
