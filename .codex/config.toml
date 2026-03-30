@@ -1,4 +1,4 @@
-model = "gpt-5.4"
+model = "gpt-5.3-codex"
 model_reasoning_effort = "medium"
 approval_policy = "on-request"
 sandbox_mode = "workspace-write"
@@ -6,7 +6,7 @@ apps.filesystem.default_tools_approval_mode = "approve"
 
 [features]
 multi_agent = true
-use_linux_sandbox_bwrap = false
+use_linux_sandbox_bwrap = true
 
 [mcp_servers.filesystem]
 command = "npx"
@@ -48,6 +48,8 @@ args = ["-y", "mcp-server-tree-sitter"]
 [mcp_servers.cmake]
 command = "npx"
 args = ["-y", "mcp-server-cmake"]
+enabled = false
+
 
 [mcp_servers.embedded-debugger-mcp]
 command = "embedded-debugger-mcp"
