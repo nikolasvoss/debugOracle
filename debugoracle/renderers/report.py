@@ -155,16 +155,16 @@ def grouped_variables_payload(
     bundle: EvidenceBundle,
     names: list[str] | None,
 ) -> dict[str, list[dict[str, object]]]:
-    wanted = {name.lower() for name in (names or [])}
+    wanted = {name.lower() for name in names} if names else None
     grouped: dict[str, list[dict[str, object]]] = {}
     matched = 0
     for bucket in VARIABLE_BUCKETS:
-        entries = list(bundle.variable_evidence.bucket(bucket))
-        if wanted:
+        entries = bundle.variable_evidence.bucket(bucket)
+        if wanted is not None:
             entries = [entry for entry in entries if entry.name.lower() in wanted]
         matched += len(entries)
         grouped[bucket] = [variable_entry_payload(entry) for entry in entries]
-    if wanted and matched == 0:
+    if wanted is not None and matched == 0:
         requested = ", ".join(names or [])
         raise RuntimeError(f"No matches found for requested variables: {requested}")
     return grouped
@@ -176,7 +176,7 @@ def variable_entry_payload(entry: VariableEntry) -> dict[str, object]:
 
 def gdb_payload(bundle: EvidenceBundle, *, tail: int | None) -> dict[str, object]:
     source = bundle.require_embedded_gdb_source()
-    events = list(source.events)
+    events = source.events
     if tail is not None:
         events = events[-tail:]
     return {
@@ -190,7 +190,7 @@ def gdb_payload(bundle: EvidenceBundle, *, tail: int | None) -> dict[str, object
 
 def rtt_payload(bundle: EvidenceBundle, *, tail: int | None) -> dict[str, object]:
     source = bundle.require_embedded_rtt_source()
-    lines = list(source.lines)
+    lines = source.lines
     if tail is not None:
         lines = lines[-tail:]
     return {
@@ -205,26 +205,23 @@ def rtt_payload(bundle: EvidenceBundle, *, tail: int | None) -> dict[str, object
 def regs_list_payload(bundle: EvidenceBundle, *, selector: str | None) -> dict[str, object]:
     source = bundle.require_embedded_register_source()
     if selector in (None, ""):
-        return {
-            "device_name": source.device_name,
-            "svd_source": source.svd_source,
-            "peripherals": [
+        peripherals: list[dict[str, object]] = []
+        for peripheral in source.peripherals:
+            success_count, failure_count, skipped_count = _peripheral_status_counts(peripheral)
+            peripherals.append(
                 {
                     "name": peripheral.name,
                     "base_address": peripheral.base_address,
                     "register_count": len(peripheral.registers),
-                    "success_count": sum(
-                        1 for register in peripheral.registers if register.read_status == "success"
-                    ),
-                    "failure_count": sum(
-                        1 for register in peripheral.registers if register.read_status == "failure"
-                    ),
-                    "skipped_count": sum(
-                        1 for register in peripheral.registers if register.read_status == "skipped"
-                    ),
+                    "success_count": success_count,
+                    "failure_count": failure_count,
+                    "skipped_count": skipped_count,
                 }
-                for peripheral in source.peripherals
-            ],
+            )
+        return {
+            "device_name": source.device_name,
+            "svd_source": source.svd_source,
+            "peripherals": peripherals,
         }
     peripheral = _match_peripheral(source.peripherals, selector)
     if peripheral is None:
@@ -266,7 +263,7 @@ def regs_payload(bundle: EvidenceBundle, *, selectors: list[str]) -> dict[str, o
     for peripheral in source.peripherals:
         peripheral_key = peripheral.name.lower()
         include_peripheral = peripheral_key in wanted_peripherals
-        requested_registers = wanted_registers.get(peripheral_key, set())
+        requested_registers = wanted_registers.get(peripheral_key)
         if include_peripheral:
             matched_any = True
             matched_peripherals.append(_peripheral_payload(peripheral))
@@ -308,6 +305,20 @@ def _peripheral_payload(peripheral: PeripheralRegisterSet) -> dict[str, object]:
 
 def _register_payload(register: RegisterEntry) -> dict[str, object]:
     return asdict(register)
+
+
+def _peripheral_status_counts(peripheral: PeripheralRegisterSet) -> tuple[int, int, int]:
+    success_count = 0
+    failure_count = 0
+    skipped_count = 0
+    for register in peripheral.registers:
+        if register.read_status == "success":
+            success_count += 1
+        elif register.read_status == "failure":
+            failure_count += 1
+        elif register.read_status == "skipped":
+            skipped_count += 1
+    return success_count, failure_count, skipped_count
 
 
 def _match_peripheral(

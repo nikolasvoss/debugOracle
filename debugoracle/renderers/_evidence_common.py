@@ -33,11 +33,11 @@ def unknowns(bundle: EvidenceBundle) -> list[str]:
         unknowns_list.append("No variable evidence was captured in the parsed transcript.")
     if not bundle.recent_rtt:
         unknowns_list.append("No RTT lines were available for this snapshot.")
-    if evidence_quality := evidence_quality_score(bundle):
-        if evidence_quality < 60:
-            unknowns_list.append(
-                f"Evidence quality is reduced ({evidence_quality}/100), which may hide state transitions."
-            )
+    evidence_quality = evidence_quality_score(bundle)
+    if evidence_quality is not None and evidence_quality < 60:
+        unknowns_list.append(
+            f"Evidence quality is reduced ({evidence_quality}/100), which may hide state transitions."
+        )
     if mi_parse_error_count:
         unknowns_list.append(f"MI parse errors detected: {mi_parse_error_count} (see Parsing Summary).")
     for warning in critical_warnings(bundle):
@@ -48,13 +48,13 @@ def unknowns(bundle: EvidenceBundle) -> list[str]:
 def session_summary(bundle: EvidenceBundle, plain: bool = False) -> str:
     top = bundle.frames[0] if bundle.frames else None
     location = frame_label(top) if top else "No stack frame available"
-    prefix = "" if plain else ""
+    _ = plain
     lines = [
-        f"{prefix}- Snapshot ID: {bundle.snapshot_id}",
-        f"{prefix}- Captured At: {bundle.captured_at}",
-        f"{prefix}- Stop Reason: {bundle.stop_reason or 'unknown'}",
-        f"{prefix}- Current Location: {location}",
-        f"{prefix}- PC/LR/SP: {bundle.pc or 'unknown'} / {bundle.lr or 'unknown'} / {bundle.sp or 'unknown'}",
+        f"- Snapshot ID: {bundle.snapshot_id}",
+        f"- Captured At: {bundle.captured_at}",
+        f"- Stop Reason: {bundle.stop_reason or 'unknown'}",
+        f"- Current Location: {location}",
+        f"- PC/LR/SP: {bundle.pc or 'unknown'} / {bundle.lr or 'unknown'} / {bundle.sp or 'unknown'}",
     ]
     return "\n".join(lines)
 
@@ -95,15 +95,24 @@ def lines_section(lines: Iterable[str], plain: bool = False) -> str:
 def render_bullets(items: Iterable[str], bullet: str = "- ") -> str:
     return "\n".join(f"{bullet}{item}" for item in items)
 
+
 def variable_section(
     evidence: VariableEvidence,
     options: VariableRenderOptions,
     *,
     plain: bool = False,
 ) -> str:
+    normalized_scope = normalize_scope(options.scope)
+    wanted_names = {name.lower() for name in options.names} if options.names else None
     sections: list[str] = []
     for bucket in VARIABLE_BUCKETS:
-        entries = list(filtered_variable_entries(evidence.bucket(bucket), options, bucket))
+        entries = filtered_variable_entries(
+            evidence.bucket(bucket),
+            options,
+            bucket,
+            normalized_scope=normalized_scope,
+            wanted_names=wanted_names,
+        )
         title = bucket_heading(bucket)
         sections.append(f"- {title}: {len(entries)} total")
         if not entries:
@@ -122,13 +131,17 @@ def filtered_variable_entries(
     entries: list[VariableEntry],
     options: VariableRenderOptions,
     bucket: str,
+    *,
+    normalized_scope: str | None = None,
+    wanted_names: set[str] | None = None,
 ) -> list[VariableEntry]:
-    if options.scope != "all" and normalize_scope(options.scope) != bucket:
+    if options.scope != "all" and (normalized_scope or normalize_scope(options.scope)) != bucket:
         return []
-    if not options.names:
+    if options.names and wanted_names is None:
+        wanted_names = {name.lower() for name in options.names}
+    if wanted_names is None:
         return entries
-    wanted = {name.lower() for name in options.names}
-    return [entry for entry in entries if entry.name.lower() in wanted]
+    return [entry for entry in entries if entry.name.lower() in wanted_names]
 
 
 def normalize_scope(scope: str) -> str:
@@ -289,8 +302,10 @@ def coerce_pattern_counts(value: object) -> list[dict[str, int | str]]:
         count = item.get("count")
         if not isinstance(pattern, str):
             continue
+        if not isinstance(count, (int, float, str)):
+            continue
         try:
-            parsed_count = int(count)  # type: ignore[arg-type]
+            parsed_count = int(count)
         except (TypeError, ValueError):
             continue
         if parsed_count <= 0:

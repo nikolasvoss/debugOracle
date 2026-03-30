@@ -894,6 +894,7 @@ class DebugOracleCliTests(unittest.TestCase):
         self.assertEqual(payload["registers_list"]["device_name"], "STM32L432KCTest")
         self.assertEqual([item["name"] for item in payload["registers_list"]["peripherals"]], ["GPIOA", "RCC"])
         self.assertEqual(payload["registers_list"]["peripherals"][0]["success_count"], 2)
+        self.assertEqual(payload["registers_list"]["peripherals"][0]["failure_count"], 0)
         self.assertEqual(payload["registers_list"]["peripherals"][1]["skipped_count"], 2)
 
     def test_report_regs_list_peripheral_outputs_registers(self) -> None:

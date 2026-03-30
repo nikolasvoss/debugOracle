@@ -213,6 +213,22 @@ class PipelineAndRendererTests(unittest.TestCase):
         self.assertIn("- Unknown Classification: 1 total", report)
         self.assertIn("mystery: ??", report)
 
+    def test_report_unknowns_include_zero_quality_score(self) -> None:
+        from debugoracle.renderers.report import render_report
+
+        artifact = InvestigationArtifact(
+            snapshot_id="snap-quality-zero",
+            captured_at="2026-03-18T10:00:00+00:00",
+            stop_reason="breakpoint-hit",
+            pc="0x08000100",
+            lr="0x08000081",
+            sp="0x20002000",
+            provenance={"evidence_quality_score": 0},
+        )
+
+        report = render_report(artifact)
+        self.assertIn("Evidence quality is reduced (0/100)", report)
+
     def test_canonical_status_renderer_surfaces_action_first_output(self) -> None:
         from debugoracle.renderers.status import render_session_status
         from debugoracle.session import SessionConfig, collect_session_status
