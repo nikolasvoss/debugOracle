@@ -26,6 +26,7 @@ Own the top-level CLI parser, shared argument groups, and command dispatch wirin
 - `docs ingest`, `docs search`, `docs status` -> `debugoracle/cli/commands/docs_cli.py`
 - `fetch`, `report` -> `debugoracle/cli/commands/evidence.py`
 - `install-cli` -> `debugoracle/cli/commands/install_cli.py`
+- `uninstall-cli` -> `debugoracle/cli/commands/uninstall_cli.py`
 - `init-workspace` -> `debugoracle/cli/commands/init_workspace.py`
 - `observe`, `snapshot`, and `prompt` are not exposed on the public CLI surface.
 
@@ -40,7 +41,7 @@ Own the top-level CLI parser, shared argument groups, and command dispatch wirin
 
 - Preserve the compatibility entrypoint exported by `debugoracle/cli/__init__.py`.
 - Keep parser-only concerns here; avoid moving evidence shaping or policy logic back into dispatch.
-- `install-cli` is an internal launcher hook. It may exist on the parser surface while staying out of normal help text and user-facing runbooks.
+- `install-cli` and `uninstall-cli` are internal launcher hooks. They may exist on the parser surface while staying out of normal help text and user-facing runbooks.
 
 ## Report Inspect Flags
 

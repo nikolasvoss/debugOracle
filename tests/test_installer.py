@@ -159,7 +159,69 @@ class InstallerCoreTests(unittest.TestCase):
 
         self.assertEqual(outcome.code, InstallerOutcomeCode.SUCCESS_NEEDS_PATH_STEP)
         self.assertTrue(outcome.path_action.applied)
+        self.assertIn("# debugoracle-managed-path", content)
         self.assertIn('export PATH="' + str(home / '.local' / 'bin') + ':$PATH"', content)
+
+    def test_existing_legacy_path_line_is_not_rewritten_with_marker(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            home = Path(tmpdir)
+            bashrc = home / ".bashrc"
+            legacy_line = f'export PATH="{home / ".local" / "bin"}:$PATH"'
+            bashrc.write_text(f"{legacy_line}\n", encoding="utf-8")
+            backend = _FakeBackend(
+                statuses=[
+                    _status(InstallState.NOT_INSTALLED, binary_path=str(home / ".local" / "bin" / "dbgoracle")),
+                    _status(InstallState.INSTALLED_SAME_VERSION, "0.1.0", binary_path=str(home / ".local" / "bin" / "dbgoracle")),
+                ],
+                bin_dir=str(home / ".local" / "bin"),
+            )
+            installer = InstallerCore(
+                backend=backend,
+                fetcher=_FakeFetcher(_manifest()),
+                env=_env(home),
+                sleep=lambda _seconds: None,
+                input_func=lambda _prompt: "yes",
+            )
+            with patch("debugoracle.installer.core.sys.stdin.isatty", return_value=True):
+                outcome = installer.run(InstallerOptions(package_source_override=str(home), doctor=False))
+
+            content = bashrc.read_text(encoding="utf-8")
+
+        self.assertEqual(outcome.code, InstallerOutcomeCode.SUCCESS_NEEDS_PATH_STEP)
+        self.assertTrue(outcome.path_action.applied)
+        self.assertIn(legacy_line, content)
+        self.assertNotIn("# debugoracle-managed-path", content)
+
+    def test_commented_export_line_does_not_block_managed_path_append(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            home = Path(tmpdir)
+            bashrc = home / ".bashrc"
+            legacy_line = f'export PATH="{home / ".local" / "bin"}:$PATH"'
+            bashrc.write_text(f"# {legacy_line}\n", encoding="utf-8")
+            backend = _FakeBackend(
+                statuses=[
+                    _status(InstallState.NOT_INSTALLED, binary_path=str(home / ".local" / "bin" / "dbgoracle")),
+                    _status(InstallState.INSTALLED_SAME_VERSION, "0.1.0", binary_path=str(home / ".local" / "bin" / "dbgoracle")),
+                ],
+                bin_dir=str(home / ".local" / "bin"),
+            )
+            installer = InstallerCore(
+                backend=backend,
+                fetcher=_FakeFetcher(_manifest()),
+                env=_env(home),
+                sleep=lambda _seconds: None,
+                input_func=lambda _prompt: "yes",
+            )
+            with patch("debugoracle.installer.core.sys.stdin.isatty", return_value=True):
+                outcome = installer.run(InstallerOptions(package_source_override=str(home), doctor=False))
+
+            content = bashrc.read_text(encoding="utf-8")
+
+        self.assertEqual(outcome.code, InstallerOutcomeCode.SUCCESS_NEEDS_PATH_STEP)
+        self.assertTrue(outcome.path_action.applied)
+        self.assertIn(f"# {legacy_line}", content)
+        self.assertIn("# debugoracle-managed-path", content)
+        self.assertIn(legacy_line, content)
 
     def test_optional_doctor_warns_without_blocking_install(self) -> None:
         backend = _FakeBackend(statuses=[_status(InstallState.NOT_INSTALLED), _status(InstallState.INSTALLED_SAME_VERSION, "0.1.0")])

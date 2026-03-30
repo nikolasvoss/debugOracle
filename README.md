@@ -49,6 +49,28 @@ If the installer succeeds but `dbgoracle` is not immediately on `PATH`, it offer
 
 Embedded toolchain checks happen later during workspace setup and capture flows, not during install success.
 
+### Uninstall the CLI
+
+Linux uninstall path from a checkout:
+
+```bash
+./scripts/install/uninstall.sh
+```
+
+Optional flags:
+
+```bash
+./scripts/install/uninstall.sh --format json
+./scripts/install/uninstall.sh --keep-path
+./scripts/install/uninstall.sh --force-legacy-path-cleanup
+```
+
+Uninstall scope is intentionally narrow:
+
+- removes the `debugoracle` pipx package
+- removes installer-managed PATH profile lines when they are marker-owned
+- leaves workspace artifacts (for example `.dbgoracle/` and docs sidecars) untouched
+
 ## Default workflow
 
 DebugOracle does not drive the probe or debugger. The primary near-term workflow is:

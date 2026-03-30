@@ -197,6 +197,13 @@ class DebugOracleCliTests(unittest.TestCase):
         self.assertEqual(parsed.command, "install_cli")
         self.assertEqual(parsed.manifest_url, "https://example.com/manifest.json")
 
+    def test_uninstall_cli_command_parses(self) -> None:
+        parser = build_parser()
+        parsed = parser.parse_args(["uninstall-cli", "--force-legacy-path-cleanup"])
+
+        self.assertEqual(parsed.command, "uninstall_cli")
+        self.assertTrue(parsed.force_legacy_path_cleanup)
+
     def test_init_workspace_command_parses(self) -> None:
         parser = build_parser()
         parsed = parser.parse_args(

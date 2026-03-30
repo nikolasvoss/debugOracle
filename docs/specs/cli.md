@@ -47,12 +47,13 @@ implementation lives in:
 - `debugoracle/cli/commands/docs_cli.py` for `docs ingest`, `docs search`, and `docs status`
 - `debugoracle/cli/commands/evidence.py` for `fetch` and `report`
 - `debugoracle/cli/commands/install_cli.py` for the internal Linux installer hook
+- `debugoracle/cli/commands/uninstall_cli.py` for the internal Linux uninstall hook
 - `debugoracle/cli/commands/init_workspace.py` for `init-workspace`
 
 The CLI has six behavioral layers:
 
-1. CLI installation
-   Command: internal `install-cli` entrypoint used by the Linux launcher
+1. CLI lifecycle
+   Commands: internal `install-cli` and `uninstall-cli` entrypoints used by Linux launchers
 2. Workspace bootstrap
    Command: `init-workspace`
 3. Local reference-manual sidecar
@@ -223,6 +224,23 @@ Outputs:
 Meaning:
 - `install-cli` is intentionally narrow and hidden from everyday CLI help.
 - It exists so the Linux launcher can reuse package-owned installer logic instead of embedding install policy in shell.
+
+### `uninstall-cli`
+
+Purpose:
+- Drive Linux uninstall as a thin launcher hook over existing installer backend and platform helpers.
+
+Inputs:
+- Optional `--keep-path` to skip shell profile edits
+- Optional `--force-legacy-path-cleanup` to remove unmarked matching PATH lines
+- `--format` (`text` or `json`)
+
+Outputs:
+- Structured uninstall outcome with explicit success, blocked, failure, and PATH-cleanup metadata
+
+Meaning:
+- `uninstall-cli` is intentionally narrow and hidden from everyday CLI help.
+- It removes the pipx package and only cleans installer-managed PATH lines by default.
 
 ### `init-workspace`
 

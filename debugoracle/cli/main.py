@@ -13,6 +13,7 @@ from .commands.evidence import cmd_fetch, cmd_report
 from .commands.find_tcl_port import cmd_find_tcl_port
 from .commands.guard_openocd_launch import cmd_guard_openocd_launch
 from .commands.install_cli import cmd_install_cli
+from .commands.uninstall_cli import cmd_uninstall_cli
 from .commands.docs_cli import (
     cmd_docs_doctor,
     cmd_docs_ingest,
@@ -269,6 +270,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_fetch_parser(subparsers)
     _add_report_parser(subparsers)
     _add_install_cli_parser(subparsers)
+    _add_uninstall_cli_parser(subparsers)
     _add_init_workspace_parser(subparsers)
 
     return parser
@@ -636,6 +638,33 @@ def _add_init_workspace_parser(
         help="Output format",
     )
     init_workspace.set_defaults(command="init_workspace", func=cmd_init_workspace)
+
+
+def _add_uninstall_cli_parser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    uninstall_cli = subparsers.add_parser(
+        "uninstall-cli",
+        help=argparse.SUPPRESS,
+        description="Internal uninstall entrypoint used by the Linux launcher.",
+    )
+    uninstall_cli.add_argument(
+        "--keep-path",
+        action="store_true",
+        help="Skip PATH profile cleanup",
+    )
+    uninstall_cli.add_argument(
+        "--force-legacy-path-cleanup",
+        action="store_true",
+        help="Remove matching legacy PATH lines even when they are not installer-marked",
+    )
+    uninstall_cli.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="Output format",
+    )
+    uninstall_cli.set_defaults(command="uninstall_cli", func=cmd_uninstall_cli)
 
 
 def positive_int(value: str) -> int:
