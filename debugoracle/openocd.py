@@ -6,7 +6,7 @@ from pathlib import Path
 import re
 import shlex
 import socket
-import subprocess
+import subprocess  # nosec B404
 from typing import Iterable, TypeVar
 
 DEFAULT_OPENOCD_HOST = "127.0.0.1"
@@ -259,7 +259,7 @@ def _discover_openocd_processes_from_ps() -> Iterable[OpenOcdProcess]:
     )
     for command in commands:
         try:
-            completed = subprocess.run(
+            completed = subprocess.run(  # nosec B603
                 command, capture_output=True, text=True, check=True
             )
         except (FileNotFoundError, subprocess.CalledProcessError):

@@ -231,6 +231,7 @@ def _export_raw_inputs(
 
 def _make_snapshot_id(gdb_text: str, rtt_text: str, captured_at: str) -> str:
     digest = hashlib.sha1(
-        f"{captured_at}\n{gdb_text}\n{rtt_text}".encode("utf-8")
+        f"{captured_at}\n{gdb_text}\n{rtt_text}".encode("utf-8"),
+        usedforsecurity=False,
     ).hexdigest()
     return f"snap-{digest[:12]}"

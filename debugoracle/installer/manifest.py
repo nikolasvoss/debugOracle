@@ -75,11 +75,13 @@ class ManifestFetcher:
 
     def fetch_payload(self, manifest_url: str) -> dict[str, object]:
         parsed = urlparse(manifest_url)
+        if parsed.scheme and parsed.scheme not in {"file", "http", "https"}:
+            raise ManifestError(f"Unsupported manifest URL scheme '{parsed.scheme}'.")
         try:
             if parsed.scheme in {"", "file"}:
                 path = Path(parsed.path if parsed.scheme == "file" else manifest_url)
                 return json.loads(path.read_text(encoding="utf-8"))
-            with urlopen(manifest_url, timeout=5.0) as response:
+            with urlopen(manifest_url, timeout=5.0) as response:  # nosec B310
                 return json.loads(response.read().decode("utf-8"))
         except ManifestError:
             raise

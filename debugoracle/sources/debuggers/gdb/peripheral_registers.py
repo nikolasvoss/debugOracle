@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import os
 from pathlib import Path
 import socket
-import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as ET  # nosec B405
 
 from ....artifacts.models import PeripheralRegisterSet, RegisterEntry, RegisterSource
 from ....openocd import OpenOcdReachabilityError
@@ -161,7 +161,7 @@ def capture_peripheral_registers_from_svd(
 def parse_svd_definition(svd_file: str) -> SvdDeviceDefinition:
     path = Path(svd_file)
     try:
-        root = ET.fromstring(path.read_text(encoding="utf-8"))
+        root = ET.fromstring(path.read_text(encoding="utf-8"))  # nosec B314
     except ET.ParseError as error:
         raise ValueError(f"Could not parse SVD XML: {error}") from error
     except OSError as error:

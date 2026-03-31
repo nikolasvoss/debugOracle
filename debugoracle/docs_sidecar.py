@@ -821,7 +821,7 @@ def save_embeddings(sidecar_dir: str | Path, embeddings: Any) -> None:
     sidecar = Path(sidecar_dir).expanduser().resolve()
     sidecar.mkdir(parents=True, exist_ok=True)
     try:
-        import numpy as np
+        import numpy as np  # pyright: ignore[reportMissingImports]
     except ImportError as error:
         raise RuntimeError(
             "Install with: pip install 'debugoracle[semantic]'"
@@ -1122,8 +1122,8 @@ class PyMuPDFParser:
         progress_cb: ProgressCallback | None = None,
     ) -> DocsParseResult:
         try:
-            import fitz
-            import pymupdf4llm
+            import fitz  # pyright: ignore[reportMissingImports]
+            import pymupdf4llm  # pyright: ignore[reportMissingImports]
         except ImportError as error:
             raise RuntimeError(
                 "Install PyMuPDF deps in your tool environment "
@@ -1173,7 +1173,9 @@ class DoclingParser:
         progress_cb: ProgressCallback | None = None,
     ) -> DocsParseResult:
         try:
-            from docling.document_converter import DocumentConverter
+            from docling.document_converter import (  # pyright: ignore[reportMissingImports]
+                DocumentConverter,
+            )
         except ModuleNotFoundError as error:
             if error.name == "docling":
                 quoted_executable = shlex.quote(sys.executable)
@@ -1377,8 +1379,10 @@ def parse_markdown_table(text: str) -> list[list[str]] | None:
 
 def encode_embeddings(chunks: list[DocsChunk]) -> Any:
     try:
-        from sentence_transformers import SentenceTransformer
-        import numpy as np
+        from sentence_transformers import (  # pyright: ignore[reportMissingImports]
+            SentenceTransformer,
+        )
+        import numpy as np  # pyright: ignore[reportMissingImports]
     except ImportError as error:
         raise RuntimeError(
             "Install with: pip install 'debugoracle[semantic]'"
@@ -1396,8 +1400,10 @@ def _semantic_scores_for_entries(
     query: str,
 ) -> tuple[list[float] | None, list[str]]:
     try:
-        from sentence_transformers import SentenceTransformer
-        import numpy as np
+        from sentence_transformers import (  # pyright: ignore[reportMissingImports]
+            SentenceTransformer,
+        )
+        import numpy as np  # pyright: ignore[reportMissingImports]
     except ImportError as error:
         return None, [f"Semantic search unavailable: {error}"]
 

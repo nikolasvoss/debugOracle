@@ -6,7 +6,7 @@ import os
 import platform
 import shlex
 import signal
-import subprocess
+import subprocess  # nosec B404
 import sys
 import time
 from datetime import datetime, timezone
@@ -152,7 +152,7 @@ def _cmd_run_detach(
 
     launch_log.parent.mkdir(parents=True, exist_ok=True)
     with launch_log.open("a", encoding="utf-8") as log_handle:
-        child = subprocess.Popen(
+        child = subprocess.Popen(  # nosec B603
             build_detached_run_command(
                 args=args,
                 workspace_root=workspace_root,
@@ -336,7 +336,7 @@ def read_process_cmdline(pid: int) -> str:
         pass
 
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # nosec
             ["ps", "-p", str(pid), "-o", "args="],
             capture_output=True,
             text=True,
@@ -355,7 +355,7 @@ def read_process_cmdline(pid: int) -> str:
                 f'$p = Get-CimInstance Win32_Process -Filter "ProcessId = {pid}"; '
                 "if ($p -ne $null) { $p.CommandLine }"
             )
-            result = subprocess.run(
+            result = subprocess.run(  # nosec
                 ["powershell", "-NoProfile", "-Command", command],
                 capture_output=True,
                 text=True,

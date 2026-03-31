@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
-import subprocess
+import subprocess  # nosec B404
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -96,7 +96,7 @@ class PipxBackend:
                     binary = str(candidate)
         if binary is None:
             return False, "Installed binary is not discoverable"
-        completed = subprocess.run(
+        completed = subprocess.run(  # nosec B603
             [binary, "--version"],
             check=False,
             capture_output=True,
@@ -113,7 +113,7 @@ class PipxBackend:
         return True, output
 
     def _run(self, command: list[str]) -> subprocess.CompletedProcess[str]:
-        completed = subprocess.run(
+        completed = subprocess.run(  # nosec B603
             command, check=False, capture_output=True, text=True, env=self._env
         )
         if completed.returncode != 0:
