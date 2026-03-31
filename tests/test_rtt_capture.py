@@ -31,13 +31,21 @@ class RttCaptureTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             output = Path(tmpdir) / "session.rtt"
             fake_connection = _FakeConnection([payload, b""])
-            with patch(
-                "debugoracle.rtt.socket.create_connection",
-                side_effect=[OSError("refused"), OSError("refused"), fake_connection],
-            ), patch(
-                "debugoracle.rtt.time.monotonic",
-                side_effect=[0.0, 0.1, 0.2, 0.25, 0.3],
-            ), patch("debugoracle.rtt.time.sleep"):
+            with (
+                patch(
+                    "debugoracle.rtt.socket.create_connection",
+                    side_effect=[
+                        OSError("refused"),
+                        OSError("refused"),
+                        fake_connection,
+                    ],
+                ),
+                patch(
+                    "debugoracle.rtt.time.monotonic",
+                    side_effect=[0.0, 0.1, 0.2, 0.25, 0.3],
+                ),
+                patch("debugoracle.rtt.time.sleep"),
+            ):
                 state = capture_rtt(
                     "127.0.0.1",
                     60001,
@@ -57,12 +65,15 @@ class RttCaptureTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             output = Path(tmpdir) / "session.rtt"
             fake_connection = _FakeConnection([socket.timeout()])
-            with patch(
-                "debugoracle.rtt.socket.create_connection",
-                return_value=fake_connection,
-            ), patch(
-                "debugoracle.rtt.time.monotonic",
-                side_effect=[0.0, 0.0, 0.2],
+            with (
+                patch(
+                    "debugoracle.rtt.socket.create_connection",
+                    return_value=fake_connection,
+                ),
+                patch(
+                    "debugoracle.rtt.time.monotonic",
+                    side_effect=[0.0, 0.0, 0.2],
+                ),
             ):
                 state = capture_rtt(
                     "127.0.0.1",
@@ -83,13 +94,17 @@ class RttCaptureTests(unittest.TestCase):
     def test_capture_rtt_records_connect_timeout_in_state_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             output = Path(tmpdir) / "session.rtt"
-            with patch(
-                "debugoracle.rtt.socket.create_connection",
-                side_effect=OSError("refused"),
-            ), patch(
-                "debugoracle.rtt.time.monotonic",
-                side_effect=[0.0, 0.1, 0.21],
-            ), patch("debugoracle.rtt.time.sleep"):
+            with (
+                patch(
+                    "debugoracle.rtt.socket.create_connection",
+                    side_effect=OSError("refused"),
+                ),
+                patch(
+                    "debugoracle.rtt.time.monotonic",
+                    side_effect=[0.0, 0.1, 0.21],
+                ),
+                patch("debugoracle.rtt.time.sleep"),
+            ):
                 with self.assertRaises(RttCaptureTimeoutError):
                     capture_rtt(
                         "127.0.0.1",
@@ -99,7 +114,9 @@ class RttCaptureTests(unittest.TestCase):
                         poll_interval=0.05,
                     )
 
-            payload = json.loads((Path(f"{output}.state.json")).read_text(encoding="utf-8"))
+            payload = json.loads(
+                (Path(f"{output}.state.json")).read_text(encoding="utf-8")
+            )
             self.assertEqual(payload["status"], "error")
             self.assertEqual(payload["error"], "connect_timeout")
 
@@ -131,10 +148,13 @@ class RttCaptureTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             output = Path(tmpdir) / "session.rtt"
             buffer = io.StringIO()
-            with patch(
-                "debugoracle.rtt.socket.create_connection",
-                return_value=_FakeConnection([payload, b""]),
-            ), redirect_stdout(buffer):
+            with (
+                patch(
+                    "debugoracle.rtt.socket.create_connection",
+                    return_value=_FakeConnection([payload, b""]),
+                ),
+                redirect_stdout(buffer),
+            ):
                 exit_code = main(
                     [
                         "capture-rtt",
@@ -153,7 +173,10 @@ class RttCaptureTests(unittest.TestCase):
             self.assertEqual(output.read_bytes(), payload)
             stdout = buffer.getvalue()
             self.assertIn(f"RTT capture connected 127.0.0.1:60001 -> {output}", stdout)
-            self.assertIn("RTT capture stopped because the RTT server closed the connection.", stdout)
+            self.assertIn(
+                "RTT capture stopped because the RTT server closed the connection.",
+                stdout,
+            )
 
     def test_capture_rtt_keyboard_interrupt_is_graceful_and_updates_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -1,7 +1,15 @@
-from .halt_snapshot import GDB_HALT_SNAPSHOT_SOURCE, GdbHaltSnapshot, build_halt_snapshot
+from .halt_snapshot import (
+    GDB_HALT_SNAPSHOT_SOURCE,
+    GdbHaltSnapshot,
+    build_halt_snapshot,
+)
 from .memory import GDB_MEMORY_SOURCE, GdbMemorySnapshot, collect_gdb_memory_read
 from .registers import GDB_REGISTERS_SOURCE, collect_gdb_registers
-from .transcript import GDB_TRANSCRIPT_SOURCE, GdbTranscriptParseResult, parse_gdb_transcript
+from .transcript import (
+    GDB_TRANSCRIPT_SOURCE,
+    GdbTranscriptParseResult,
+    parse_gdb_transcript,
+)
 
 __all__ = [
     "GDB_HALT_SNAPSHOT_SOURCE",

@@ -96,7 +96,9 @@ def capture_rtt_impl(
     time_module: Any,
 ) -> RttCaptureState:
     target = Path(output_path)
-    state_target = default_state_path(target) if state_path is None else Path(state_path)
+    state_target = (
+        default_state_path(target) if state_path is None else Path(state_path)
+    )
     target.parent.mkdir(parents=True, exist_ok=True)
     state_target.parent.mkdir(parents=True, exist_ok=True)
 
@@ -187,7 +189,9 @@ def _wait_for_connection(
                     error="connect_timeout",
                 )
                 _write_capture_state(state_target, error_state)
-                raise RttCaptureTimeoutError(f"Timed out waiting for RTT server at {host}:{port}") from None
+                raise RttCaptureTimeoutError(
+                    f"Timed out waiting for RTT server at {host}:{port}"
+                ) from None
             _write_capture_state(state_target, waiting_state)
             time_module.sleep(max(0.0, poll_interval))
 
@@ -211,7 +215,10 @@ def _capture_stream_loop(
             try:
                 chunk = connection.recv(4096)
             except socket_module.timeout:
-                if idle_timeout is not None and time_module.monotonic() - last_activity >= idle_timeout:
+                if (
+                    idle_timeout is not None
+                    and time_module.monotonic() - last_activity >= idle_timeout
+                ):
                     idle_state = _state_from(current_state, status=STATE_STATUS_IDLE)
                     _write_capture_state(state_target, idle_state)
                     return idle_state, current_state
@@ -270,7 +277,9 @@ def _state_from(
         status=status,
         connected_at=current.connected_at,
         last_byte_at=current.last_byte_at if last_byte_at is None else last_byte_at,
-        bytes_captured=current.bytes_captured if bytes_captured is None else bytes_captured,
+        bytes_captured=current.bytes_captured
+        if bytes_captured is None
+        else bytes_captured,
         error=error,
     )
 

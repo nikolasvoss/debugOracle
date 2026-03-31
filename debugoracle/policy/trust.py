@@ -76,7 +76,10 @@ def evaluate_artifact_trust(
         caution_reasons.append("GDB source evidence is missing from the snapshot.")
     for warning in parse_warnings:
         lowered = warning.lower()
-        if "evidence quality is reduced" in lowered or "could not parse snapshot" in lowered:
+        if (
+            "evidence quality is reduced" in lowered
+            or "could not parse snapshot" in lowered
+        ):
             caution_reasons.append(warning)
 
     if reasons:

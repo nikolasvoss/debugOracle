@@ -81,7 +81,9 @@ class DemoLiveDebugBackend(LiveDebugBackend):
         "r0": "0x00000001",
     }
 
-    def __init__(self, *, available: bool = True, target_state: str = "stopped") -> None:
+    def __init__(
+        self, *, available: bool = True, target_state: str = "stopped"
+    ) -> None:
         self._available = available
         self._target_state = target_state
 
@@ -115,7 +117,10 @@ class DemoLiveDebugBackend(LiveDebugBackend):
                 source=self.name,
                 timestamp=utc_now(),
                 available=False,
-                warnings=[self._warning, "Register data is unavailable because the demo backend is disabled."],
+                warnings=[
+                    self._warning,
+                    "Register data is unavailable because the demo backend is disabled.",
+                ],
                 registers={},
             )
         halt_decision = evaluate_halt_requirement(self._target_state)
@@ -144,7 +149,10 @@ class DemoLiveDebugBackend(LiveDebugBackend):
                 source=self.name,
                 timestamp=utc_now(),
                 available=False,
-                warnings=[self._warning, "Memory data is unavailable because the demo backend is disabled."],
+                warnings=[
+                    self._warning,
+                    "Memory data is unavailable because the demo backend is disabled.",
+                ],
                 address=_format_address(address),
                 size=size,
             )
@@ -168,7 +176,10 @@ class DemoLiveDebugBackend(LiveDebugBackend):
                 source=self.name,
                 timestamp=utc_now(),
                 available=False,
-                warnings=[self._warning, "Requested memory range is outside the demo memory window."],
+                warnings=[
+                    self._warning,
+                    "Requested memory range is outside the demo memory window.",
+                ],
                 address=_format_address(address),
                 size=size,
             )
@@ -188,7 +199,9 @@ class DemoLiveDebugBackend(LiveDebugBackend):
             address=memory_snapshot.address,
             size=memory_snapshot.size,
             data_hex=memory_snapshot.data_hex,
-            ascii_preview="".join(chr(byte) if 32 <= byte <= 126 else "." for byte in payload),
+            ascii_preview="".join(
+                chr(byte) if 32 <= byte <= 126 else "." for byte in payload
+            ),
         )
 
 
@@ -198,7 +211,9 @@ def build_live_backend(name: str | None = None) -> LiveDebugBackend:
         factory = _BACKEND_FACTORIES[selected]
     except KeyError as error:
         available = ", ".join(sorted(_BACKEND_FACTORIES))
-        raise ValueError(f"Unknown live backend '{selected}'. Available backends: {available}.") from error
+        raise ValueError(
+            f"Unknown live backend '{selected}'. Available backends: {available}."
+        ) from error
     return factory()
 
 
@@ -248,7 +263,11 @@ def render_register_result(result: RegisterReadResult, fmt: str = "text") -> str
         "Registers:",
     ]
     if result.registers:
-        lines.extend(_bullet_lines([f"{key}: {value}" for key, value in result.registers.items()]))
+        lines.extend(
+            _bullet_lines(
+                [f"{key}: {value}" for key, value in result.registers.items()]
+            )
+        )
     else:
         lines.append("- None")
     lines.extend(["", "Warnings:"])

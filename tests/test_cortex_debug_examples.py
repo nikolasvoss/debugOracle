@@ -32,7 +32,11 @@ class CortexDebugExampleTests(unittest.TestCase):
         prelaunch = tasks["DebugOracle: Prelaunch"]
         self.assertEqual(
             prelaunch["dependsOn"],
-            ["Prepare debug logs", "DebugOracle: Guard Attach Launch", "DebugOracle: Start RTT run"],
+            [
+                "Prepare debug logs",
+                "DebugOracle: Guard Attach Launch",
+                "DebugOracle: Start RTT run",
+            ],
         )
 
     def test_launch_example_wires_prelaunch_and_postdebug_tasks(self) -> None:
@@ -42,12 +46,17 @@ class CortexDebugExampleTests(unittest.TestCase):
         self.assertIn('"preLaunchTask": "DebugOracle: Prelaunch"', launch)
         self.assertIn('"postDebugTask": "DebugOracle: Stop RTT run"', launch)
         self.assertIn('// "monitor rtt setup', launch)
-        self.assertIn('// "monitor rtt server start ${config:debugoracle.rttPort} 0"', launch)
+        self.assertIn(
+            '// "monitor rtt server start ${config:debugoracle.rttPort} 0"', launch
+        )
 
     def test_readme_documents_run_stop_workflow(self) -> None:
         readme = README_EXAMPLE.read_text(encoding="utf-8")
         self.assertIn("## Which command when?", readme)
-        self.assertIn("dbgoracle init-workspace --workspace-root . --executable build/app.elf --attach", readme)
+        self.assertIn(
+            "dbgoracle init-workspace --workspace-root . --executable build/app.elf --attach",
+            readme,
+        )
         self.assertIn("DebugOracle: Attach STM32", readme)
         self.assertIn("Golden Path: prepared", readme)
         self.assertIn("dbgoracle run --detach", readme)
@@ -58,8 +67,13 @@ class CortexDebugExampleTests(unittest.TestCase):
         readme = README_EXAMPLE.read_text(encoding="utf-8")
         agent_instructions = AGENT_INSTRUCTIONS.read_text(encoding="utf-8")
 
-        self.assertIn("dbgoracle find-tcl-port --workspace-root . --print-fetch", readme)
-        self.assertIn("dbgoracle find-tcl-port --workspace-root . --print-fetch", agent_instructions)
+        self.assertIn(
+            "dbgoracle find-tcl-port --workspace-root . --print-fetch", readme
+        )
+        self.assertIn(
+            "dbgoracle find-tcl-port --workspace-root . --print-fetch",
+            agent_instructions,
+        )
 
 
 if __name__ == "__main__":

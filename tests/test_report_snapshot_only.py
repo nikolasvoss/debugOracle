@@ -31,7 +31,6 @@ class ReportSnapshotOnlyTests(unittest.TestCase):
         self.assertIn("report requires a snapshot", message)
         self.assertIn("run `fetch`", message)
 
-
     def test_prompt_command_is_removed(self) -> None:
         parser = build_parser()
 
@@ -54,9 +53,15 @@ class ReportSnapshotOnlyTests(unittest.TestCase):
             exit_text = str(exit_payload)
             if exit_text:
                 stderr_text = (
-                    f"{stderr_text.rstrip()}\n{exit_text}\n" if stderr_text else f"{exit_text}\n"
+                    f"{stderr_text.rstrip()}\n{exit_text}\n"
+                    if stderr_text
+                    else f"{exit_text}\n"
                 )
-        return (exit_payload if isinstance(exit_payload, int) else 1, stdout.getvalue(), stderr_text)
+        return (
+            exit_payload if isinstance(exit_payload, int) else 1,
+            stdout.getvalue(),
+            stderr_text,
+        )
 
 
 if __name__ == "__main__":

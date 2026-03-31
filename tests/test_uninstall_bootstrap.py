@@ -7,7 +7,9 @@ from unittest.mock import patch
 
 
 def _load_uninstall_module():
-    module_path = Path(__file__).resolve().parents[1] / "scripts" / "install" / "uninstall.py"
+    module_path = (
+        Path(__file__).resolve().parents[1] / "scripts" / "install" / "uninstall.py"
+    )
     spec = importlib.util.spec_from_file_location("test_uninstall_module", module_path)
     if spec is None or spec.loader is None:
         raise AssertionError("Could not load uninstall module spec")

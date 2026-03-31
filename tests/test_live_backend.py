@@ -44,9 +44,13 @@ class LiveBackendTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "safe limit"):
             validate_memory_request("0x20002000", MAX_MEMORY_READ_BYTES + 1)
 
-    def test_policy_limit_validation_matches_legacy_memory_request_contract(self) -> None:
+    def test_policy_limit_validation_matches_legacy_memory_request_contract(
+        self,
+    ) -> None:
         self.assertEqual(
-            validate_bounded_memory_read("0x20002000", 16, max_bytes=MAX_MEMORY_READ_BYTES),
+            validate_bounded_memory_read(
+                "0x20002000", 16, max_bytes=MAX_MEMORY_READ_BYTES
+            ),
             validate_memory_request("0x20002000", 16),
         )
 

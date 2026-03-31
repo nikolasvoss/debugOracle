@@ -34,14 +34,16 @@ class MIParseTests(unittest.TestCase):
         self.assertEqual(record.kind, "download")
         self.assertEqual(record.data.get("section"), ".text")
 
-    def test_parse_mi_record_preserves_composite_variable_values_as_strings(self) -> None:
+    def test_parse_mi_record_preserves_composite_variable_values_as_strings(
+        self,
+    ) -> None:
         record = parse_mi_record(
-            '^done,locals=['
+            "^done,locals=["
             '{name="arr",value="{1, 2, 3, 4}"},'
             '{name="point",value="{x = 1, y = 2}"},'
             '{name="matrix",value="{{1, 2}, {3, 4}}"},'
             '{name="message",value="[72, 101, 108, 108, 111]"}'
-            ']'
+            "]"
         )
         self.assertIsNotNone(record)
         assert record is not None

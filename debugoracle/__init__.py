@@ -6,4 +6,5 @@ def main(argv: list[str] | None = None) -> int:
 
     return _main(argv)
 
+
 __all__ = ["main"]

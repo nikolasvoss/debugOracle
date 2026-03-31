@@ -10,7 +10,12 @@ from typing import Callable
 
 from ..diagnostics import build_installer_doctor_notes
 from .backend.pipx import InstallationStatus, PipxBackend, PipxError
-from .manifest import ManifestError, ManifestFetcher, ManifestNetworkError, ReleaseManifest
+from .manifest import (
+    ManifestError,
+    ManifestFetcher,
+    ManifestNetworkError,
+    ReleaseManifest,
+)
 from .outcomes import InstallState, InstallerOutcome, InstallerOutcomeCode, PathAction
 from .platform import linux as linux_platform
 
@@ -57,7 +62,9 @@ class InstallerCore:
             return InstallerOutcome(
                 code=InstallerOutcomeCode.BLOCKED_MISSING_PYTHON,
                 message="DebugOracle requires Python 3.10 or newer.",
-                details=[f"Detected Python: {'.'.join(str(part) for part in self.python_version)}"],
+                details=[
+                    f"Detected Python: {'.'.join(str(part) for part in self.python_version)}"
+                ],
             )
         if not self.backend.is_available():
             return InstallerOutcome(
@@ -108,7 +115,9 @@ class InstallerCore:
             )
 
         try:
-            current = self.backend.inspect_installation(manifest.package_name, manifest.version)
+            current = self.backend.inspect_installation(
+                manifest.package_name, manifest.version
+            )
         except PipxError as error:
             return InstallerOutcome(
                 code=InstallerOutcomeCode.FAILED_INSTALL,
@@ -116,8 +125,13 @@ class InstallerCore:
                 details=[str(error)],
             )
 
-        if current.state in {InstallState.INSTALLED_SAME_VERSION, InstallState.INSTALLED_NEWER_VERSION}:
-            verified, verify_message = self._verify_status_binary(current, current.installed_version or manifest.version)
+        if current.state in {
+            InstallState.INSTALLED_SAME_VERSION,
+            InstallState.INSTALLED_NEWER_VERSION,
+        }:
+            verified, verify_message = self._verify_status_binary(
+                current, current.installed_version or manifest.version
+            )
             if not verified:
                 return InstallerOutcome(
                     code=InstallerOutcomeCode.FAILED_VERIFY,
@@ -136,7 +150,11 @@ class InstallerCore:
             self._finalize_success(outcome, current, options)
             return outcome
 
-        source_spec = options.package_source_override or manifest.source_url or f"{manifest.package_name}=={manifest.version}"
+        source_spec = (
+            options.package_source_override
+            or manifest.source_url
+            or f"{manifest.package_name}=={manifest.version}"
+        )
         try:
             if current.state == InstallState.INSTALLED_OLDER_VERSION:
                 self.backend.upgrade(manifest.package_name, source_spec)
@@ -145,12 +163,18 @@ class InstallerCore:
             else:
                 self.backend.install(source_spec)
                 action = InstallerOutcomeCode.SUCCESS_INSTALLED
-                success_message = f"dbgoracle {manifest.version} installed successfully."
+                success_message = (
+                    f"dbgoracle {manifest.version} installed successfully."
+                )
         except PipxError as error:
             return self._handle_install_failure(error, manifest, current)
 
-        post_install = self.backend.inspect_installation(manifest.package_name, manifest.version)
-        verified, verify_message = self._verify_status_binary(post_install, manifest.version)
+        post_install = self.backend.inspect_installation(
+            manifest.package_name, manifest.version
+        )
+        verified, verify_message = self._verify_status_binary(
+            post_install, manifest.version
+        )
         if not verified:
             return self._handle_verify_failure(manifest, current, verify_message)
         outcome = InstallerOutcome(
@@ -188,7 +212,9 @@ class InstallerCore:
                 )
         else:
             try:
-                restored = self.backend.inspect_installation(manifest.package_name, current.installed_version or "0")
+                restored = self.backend.inspect_installation(
+                    manifest.package_name, current.installed_version or "0"
+                )
             except PipxError as inspect_error:
                 return InstallerOutcome(
                     code=InstallerOutcomeCode.FAILED_CLEANUP,
@@ -227,7 +253,9 @@ class InstallerCore:
                     details=[verify_message, str(cleanup_error)],
                 )
         else:
-            restored = self.backend.inspect_installation(manifest.package_name, current.installed_version or "0")
+            restored = self.backend.inspect_installation(
+                manifest.package_name, current.installed_version or "0"
+            )
             if restored.installed_version != current.installed_version:
                 return InstallerOutcome(
                     code=InstallerOutcomeCode.FAILED_CLEANUP,
@@ -250,12 +278,16 @@ class InstallerCore:
     ) -> None:
         if options.doctor:
             outcome.doctor_notes.extend(build_installer_doctor_notes(self.env))
-        binary_path = status.binary_path or str(self.backend.bin_dir() / DEFAULT_BINARY_NAME)
+        binary_path = status.binary_path or str(
+            self.backend.bin_dir() / DEFAULT_BINARY_NAME
+        )
         binary_dir = Path(binary_path).parent
         if self._is_binary_discoverable(binary_path):
             return
         home = Path(self.env.get("HOME", str(Path.home()))).expanduser()
-        plan = linux_platform.build_path_plan(binary_dir, self.env.get("SHELL"), home, self.env)
+        plan = linux_platform.build_path_plan(
+            binary_dir, self.env.get("SHELL"), home, self.env
+        )
         path_action = PathAction(
             bin_dir=str(plan.bin_dir),
             profile_path=str(plan.profile_path) if plan.profile_path else None,
@@ -270,7 +302,9 @@ class InstallerCore:
         else:
             path_action.declined = True
         if accepted and plan.profile_path and plan.export_line:
-            applied, error = linux_platform.append_path_line(plan.profile_path, plan.export_line)
+            applied, error = linux_platform.append_path_line(
+                plan.profile_path, plan.export_line
+            )
             path_action.applied = applied
             path_action.error = error
             if not applied:
@@ -290,10 +324,16 @@ class InstallerCore:
                 return discovered_path.samefile(target_path)
             except OSError:
                 return discovered_path.resolve() == target_path.resolve()
-        return linux_platform.path_contains(Path(binary_path).parent, self.env.get("PATH"))
+        return linux_platform.path_contains(
+            Path(binary_path).parent, self.env.get("PATH")
+        )
 
-    def _verify_status_binary(self, status: InstallationStatus, expected_version: str) -> tuple[bool, str]:
-        binary_path = status.binary_path or str(self.backend.bin_dir() / DEFAULT_BINARY_NAME)
+    def _verify_status_binary(
+        self, status: InstallationStatus, expected_version: str
+    ) -> tuple[bool, str]:
+        binary_path = status.binary_path or str(
+            self.backend.bin_dir() / DEFAULT_BINARY_NAME
+        )
         return self.backend.verify_cli(
             DEFAULT_BINARY_NAME,
             binary_path=binary_path,
@@ -314,10 +354,18 @@ def create_default_installer(
         input_func=input_func,
     )
 
+
 def _python_satisfies(version: tuple[int, int, int], specifier: str) -> bool:
     clauses = [piece.strip() for piece in specifier.split(",") if piece.strip()]
     for clause in clauses:
-        operator = next((candidate for candidate in (">=", "<=", "==", ">", "<") if clause.startswith(candidate)), None)
+        operator = next(
+            (
+                candidate
+                for candidate in (">=", "<=", "==", ">", "<")
+                if clause.startswith(candidate)
+            ),
+            None,
+        )
         if operator is None:
             return False
         expected = tuple(int(part) for part in clause[len(operator) :].split("."))

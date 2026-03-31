@@ -56,20 +56,33 @@ class SourceContractTests(unittest.TestCase):
         self.assertTrue(GDB_HALT_SNAPSHOT_SOURCE.supports_parsing)
         self.assertTrue(GDB_HALT_SNAPSHOT_SOURCE.supports_reduction)
 
-    def test_canonical_gdb_transcript_source_module_exports_stream_descriptor(self) -> None:
+    def test_canonical_gdb_transcript_source_module_exports_stream_descriptor(
+        self,
+    ) -> None:
         self.assertIsInstance(CANONICAL_GDB_TRANSCRIPT_SOURCE, SourceDescriptor)
         self.assertEqual(CANONICAL_GDB_TRANSCRIPT_SOURCE.source_id, "gdb_transcript")
         self.assertEqual(CANONICAL_GDB_TRANSCRIPT_SOURCE.family, "stream")
 
-    def test_canonical_gdb_halt_snapshot_module_exports_snapshot_descriptor_and_builder(self) -> None:
+    def test_canonical_gdb_halt_snapshot_module_exports_snapshot_descriptor_and_builder(
+        self,
+    ) -> None:
         self.assertIsInstance(CANONICAL_GDB_HALT_SNAPSHOT_SOURCE, SourceDescriptor)
-        self.assertEqual(CANONICAL_GDB_HALT_SNAPSHOT_SOURCE.source_id, "gdb_halt_snapshot")
+        self.assertEqual(
+            CANONICAL_GDB_HALT_SNAPSHOT_SOURCE.source_id, "gdb_halt_snapshot"
+        )
         self.assertEqual(CANONICAL_GDB_HALT_SNAPSHOT_SOURCE.family, "snapshot")
 
         snapshot = build_halt_snapshot(
-            latest_stop={"reason": "breakpoint-hit", "frame": {"addr": "0x08000100", "func": "main"}},
+            latest_stop={
+                "reason": "breakpoint-hit",
+                "frame": {"addr": "0x08000100", "func": "main"},
+            },
             latest_stack=[],
-            latest_registers={"13": "0x20002000", "14": "0x08000081", "15": "0x08000100"},
+            latest_registers={
+                "13": "0x20002000",
+                "14": "0x08000081",
+                "15": "0x08000100",
+            },
             variable_evidence=VariableEvidence(
                 locals=[
                     VariableEntry(
@@ -89,7 +102,9 @@ class SourceContractTests(unittest.TestCase):
         self.assertEqual(snapshot.variable_evidence.locals[0].name, "system_state")
         self.assertEqual(snapshot.variable_evidence.locals[0].value, "READY")
 
-    def test_canonical_gdb_register_source_module_exports_snapshot_descriptor(self) -> None:
+    def test_canonical_gdb_register_source_module_exports_snapshot_descriptor(
+        self,
+    ) -> None:
         self.assertIsInstance(CANONICAL_GDB_REGISTERS_SOURCE, SourceDescriptor)
         self.assertEqual(CANONICAL_GDB_REGISTERS_SOURCE.source_id, "gdb_registers")
         self.assertEqual(CANONICAL_GDB_REGISTERS_SOURCE.family, "snapshot")
@@ -99,23 +114,36 @@ class SourceContractTests(unittest.TestCase):
         self.assertEqual(registers["15"], "0x08000100")
         self.assertEqual(registers["13"], "0x20002000")
 
-    def test_canonical_gdb_peripheral_register_source_module_exports_snapshot_descriptor(self) -> None:
-        self.assertIsInstance(CANONICAL_GDB_PERIPHERAL_REGISTERS_SOURCE, SourceDescriptor)
-        self.assertEqual(CANONICAL_GDB_PERIPHERAL_REGISTERS_SOURCE.source_id, "gdb_peripheral_registers")
+    def test_canonical_gdb_peripheral_register_source_module_exports_snapshot_descriptor(
+        self,
+    ) -> None:
+        self.assertIsInstance(
+            CANONICAL_GDB_PERIPHERAL_REGISTERS_SOURCE, SourceDescriptor
+        )
+        self.assertEqual(
+            CANONICAL_GDB_PERIPHERAL_REGISTERS_SOURCE.source_id,
+            "gdb_peripheral_registers",
+        )
         self.assertEqual(CANONICAL_GDB_PERIPHERAL_REGISTERS_SOURCE.family, "snapshot")
 
-        register_source = collect_peripheral_registers_from_svd("tests/fixtures/sample.svd")
+        register_source = collect_peripheral_registers_from_svd(
+            "tests/fixtures/sample.svd"
+        )
         self.assertEqual(register_source.device_name, "STM32L432KCTest")
         self.assertEqual(register_source.peripheral_count, 2)
         self.assertEqual(register_source.skipped_count, 4)
 
-    def test_canonical_gdb_memory_source_module_exports_snapshot_descriptor(self) -> None:
+    def test_canonical_gdb_memory_source_module_exports_snapshot_descriptor(
+        self,
+    ) -> None:
         self.assertIsInstance(CANONICAL_GDB_MEMORY_SOURCE, SourceDescriptor)
         self.assertEqual(CANONICAL_GDB_MEMORY_SOURCE.source_id, "gdb_memory")
         self.assertEqual(CANONICAL_GDB_MEMORY_SOURCE.family, "snapshot")
         self.assertTrue(CANONICAL_GDB_MEMORY_SOURCE.requires_halt)
 
-        memory = collect_gdb_memory_read(address="0x20002000", size=4, data_hex="44 65 62 75")
+        memory = collect_gdb_memory_read(
+            address="0x20002000", size=4, data_hex="44 65 62 75"
+        )
         self.assertEqual(memory.address, "0x20002000")
         self.assertEqual(memory.size, 4)
         self.assertEqual(memory.data_hex, "44 65 62 75")

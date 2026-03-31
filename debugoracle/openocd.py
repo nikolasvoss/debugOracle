@@ -88,7 +88,9 @@ def discover_workspace_openocd_session(
         if not candidates:
             return OpenOcdDiscoveryResult(status=DISCOVERY_NO_SESSION)
         return OpenOcdDiscoveryResult(status=DISCOVERY_MULTIPLE, candidates=candidates)
-    if not is_tcp_endpoint_reachable(candidate.host, candidate.tcl_port, timeout_seconds=connect_timeout):
+    if not is_tcp_endpoint_reachable(
+        candidate.host, candidate.tcl_port, timeout_seconds=connect_timeout
+    ):
         return OpenOcdDiscoveryResult(
             status=DISCOVERY_UNREACHABLE,
             candidate=candidate,
@@ -122,7 +124,9 @@ def find_workspace_openocd_process_matches(
     *,
     workspace_root: Path,
 ) -> tuple[OpenOcdProcess, ...]:
-    return tuple(_matching_openocd_items(list(processes), workspace_root=workspace_root))
+    return tuple(
+        _matching_openocd_items(list(processes), workspace_root=workspace_root)
+    )
 
 
 def select_openocd_candidate(
@@ -255,7 +259,9 @@ def _discover_openocd_processes_from_ps() -> Iterable[OpenOcdProcess]:
     )
     for command in commands:
         try:
-            completed = subprocess.run(command, capture_output=True, text=True, check=True)
+            completed = subprocess.run(
+                command, capture_output=True, text=True, check=True
+            )
         except (FileNotFoundError, subprocess.CalledProcessError):
             continue
         processes = list(_parse_ps_output_processes(completed.stdout))
@@ -317,7 +323,9 @@ def _matching_openocd_items(
     workspace_root: Path,
 ) -> list[_T_Ocd]:
     cwd_matches = [
-        item for item in items if item.cwd and Path(item.cwd).resolve() == workspace_root
+        item
+        for item in items
+        if item.cwd and Path(item.cwd).resolve() == workspace_root
     ]
     if cwd_matches:
         return cwd_matches
@@ -327,7 +335,9 @@ def _matching_openocd_items(
 
 def _read_proc_cmdline(path: Path) -> tuple[str, ...]:
     raw = path.read_bytes()
-    parts = [chunk.decode("utf-8", errors="replace") for chunk in raw.split(b"\x00") if chunk]
+    parts = [
+        chunk.decode("utf-8", errors="replace") for chunk in raw.split(b"\x00") if chunk
+    ]
     return tuple(parts)
 
 

@@ -6,7 +6,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 from debugoracle.installer.core import InstallerCore, InstallerOptions
-from debugoracle.installer.manifest import ManifestError, ManifestNetworkError, ReleaseManifest
+from debugoracle.installer.manifest import (
+    ManifestError,
+    ManifestNetworkError,
+    ReleaseManifest,
+)
 from debugoracle.installer.outcomes import InstallState, InstallerOutcomeCode
 from debugoracle.installer.backend.pipx import PipxError
 
@@ -34,20 +38,31 @@ class InstallerCoreTests(unittest.TestCase):
             home = Path(tmpdir)
             backend = _FakeBackend(
                 statuses=[
-                    _status(InstallState.NOT_INSTALLED, binary_path=str(home / ".local" / "bin" / "dbgoracle")),
-                    _status(InstallState.INSTALLED_SAME_VERSION, "0.1.0", binary_path=str(home / ".local" / "bin" / "dbgoracle")),
+                    _status(
+                        InstallState.NOT_INSTALLED,
+                        binary_path=str(home / ".local" / "bin" / "dbgoracle"),
+                    ),
+                    _status(
+                        InstallState.INSTALLED_SAME_VERSION,
+                        "0.1.0",
+                        binary_path=str(home / ".local" / "bin" / "dbgoracle"),
+                    ),
                 ],
                 bin_dir=str(home / ".local" / "bin"),
             )
             installer = InstallerCore(
                 backend=backend,
-                fetcher=_FakeFetcher(_manifest(), failures=[ManifestNetworkError("timeout")]),
+                fetcher=_FakeFetcher(
+                    _manifest(), failures=[ManifestNetworkError("timeout")]
+                ),
                 env=_env(home),
                 sleep=lambda _seconds: None,
                 input_func=lambda _prompt: "n",
             )
 
-            outcome = installer.run(InstallerOptions(package_source_override=str(home), doctor=False))
+            outcome = installer.run(
+                InstallerOptions(package_source_override=str(home), doctor=False)
+            )
 
         self.assertEqual(outcome.code, InstallerOutcomeCode.SUCCESS_NEEDS_PATH_STEP)
         self.assertEqual(backend.install_calls, [str(home)])
@@ -57,7 +72,9 @@ class InstallerCoreTests(unittest.TestCase):
     def test_same_version_returns_already_installed(self) -> None:
         env = _env()
         env["PATH"] = env["PATH"] + ":/tmp/fake-bin"
-        backend = _FakeBackend(statuses=[_status(InstallState.INSTALLED_SAME_VERSION, "0.1.0")])
+        backend = _FakeBackend(
+            statuses=[_status(InstallState.INSTALLED_SAME_VERSION, "0.1.0")]
+        )
         installer = InstallerCore(
             backend=backend,
             fetcher=_FakeFetcher(_manifest()),
@@ -84,7 +101,9 @@ class InstallerCoreTests(unittest.TestCase):
             sleep=lambda _seconds: None,
         )
 
-        outcome = installer.run(InstallerOptions(package_source_override="/tmp/src", doctor=False))
+        outcome = installer.run(
+            InstallerOptions(package_source_override="/tmp/src", doctor=False)
+        )
 
         self.assertEqual(outcome.code, InstallerOutcomeCode.SUCCESS_NEEDS_PATH_STEP)
         self.assertEqual(backend.upgrade_calls, [("debugoracle", "/tmp/src")])
@@ -104,7 +123,10 @@ class InstallerCoreTests(unittest.TestCase):
         self.assertEqual(backend.install_calls, [])
 
     def test_fresh_install_failure_cleans_up(self) -> None:
-        backend = _FakeBackend(statuses=[_status(InstallState.NOT_INSTALLED)], install_error=PipxError("boom"))
+        backend = _FakeBackend(
+            statuses=[_status(InstallState.NOT_INSTALLED)],
+            install_error=PipxError("boom"),
+        )
         installer = InstallerCore(
             backend=backend,
             fetcher=_FakeFetcher(_manifest()),
@@ -112,7 +134,9 @@ class InstallerCoreTests(unittest.TestCase):
             sleep=lambda _seconds: None,
         )
 
-        outcome = installer.run(InstallerOptions(package_source_override="/tmp/src", doctor=False))
+        outcome = installer.run(
+            InstallerOptions(package_source_override="/tmp/src", doctor=False)
+        )
 
         self.assertEqual(outcome.code, InstallerOutcomeCode.FAILED_INSTALL)
         self.assertEqual(backend.uninstall_calls, ["debugoracle"])
@@ -129,7 +153,9 @@ class InstallerCoreTests(unittest.TestCase):
             sleep=lambda _seconds: None,
         )
 
-        outcome = installer.run(InstallerOptions(package_source_override="/tmp/src", doctor=False))
+        outcome = installer.run(
+            InstallerOptions(package_source_override="/tmp/src", doctor=False)
+        )
 
         self.assertEqual(outcome.code, InstallerOutcomeCode.FAILED_VERIFY)
         self.assertEqual(backend.uninstall_calls, ["debugoracle"])
@@ -139,8 +165,15 @@ class InstallerCoreTests(unittest.TestCase):
             home = Path(tmpdir)
             backend = _FakeBackend(
                 statuses=[
-                    _status(InstallState.NOT_INSTALLED, binary_path=str(home / ".local" / "bin" / "dbgoracle")),
-                    _status(InstallState.INSTALLED_SAME_VERSION, "0.1.0", binary_path=str(home / ".local" / "bin" / "dbgoracle")),
+                    _status(
+                        InstallState.NOT_INSTALLED,
+                        binary_path=str(home / ".local" / "bin" / "dbgoracle"),
+                    ),
+                    _status(
+                        InstallState.INSTALLED_SAME_VERSION,
+                        "0.1.0",
+                        binary_path=str(home / ".local" / "bin" / "dbgoracle"),
+                    ),
                 ],
                 bin_dir=str(home / ".local" / "bin"),
             )
@@ -151,8 +184,12 @@ class InstallerCoreTests(unittest.TestCase):
                 sleep=lambda _seconds: None,
                 input_func=lambda _prompt: "yes",
             )
-            with patch("debugoracle.installer.core.sys.stdin.isatty", return_value=True):
-                outcome = installer.run(InstallerOptions(package_source_override=str(home), doctor=False))
+            with patch(
+                "debugoracle.installer.core.sys.stdin.isatty", return_value=True
+            ):
+                outcome = installer.run(
+                    InstallerOptions(package_source_override=str(home), doctor=False)
+                )
 
             bashrc = home / ".bashrc"
             content = bashrc.read_text(encoding="utf-8")
@@ -160,7 +197,9 @@ class InstallerCoreTests(unittest.TestCase):
         self.assertEqual(outcome.code, InstallerOutcomeCode.SUCCESS_NEEDS_PATH_STEP)
         self.assertTrue(outcome.path_action.applied)
         self.assertIn("# debugoracle-managed-path", content)
-        self.assertIn('export PATH="' + str(home / '.local' / 'bin') + ':$PATH"', content)
+        self.assertIn(
+            'export PATH="' + str(home / ".local" / "bin") + ':$PATH"', content
+        )
 
     def test_existing_legacy_path_line_is_not_rewritten_with_marker(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -170,8 +209,15 @@ class InstallerCoreTests(unittest.TestCase):
             bashrc.write_text(f"{legacy_line}\n", encoding="utf-8")
             backend = _FakeBackend(
                 statuses=[
-                    _status(InstallState.NOT_INSTALLED, binary_path=str(home / ".local" / "bin" / "dbgoracle")),
-                    _status(InstallState.INSTALLED_SAME_VERSION, "0.1.0", binary_path=str(home / ".local" / "bin" / "dbgoracle")),
+                    _status(
+                        InstallState.NOT_INSTALLED,
+                        binary_path=str(home / ".local" / "bin" / "dbgoracle"),
+                    ),
+                    _status(
+                        InstallState.INSTALLED_SAME_VERSION,
+                        "0.1.0",
+                        binary_path=str(home / ".local" / "bin" / "dbgoracle"),
+                    ),
                 ],
                 bin_dir=str(home / ".local" / "bin"),
             )
@@ -182,8 +228,12 @@ class InstallerCoreTests(unittest.TestCase):
                 sleep=lambda _seconds: None,
                 input_func=lambda _prompt: "yes",
             )
-            with patch("debugoracle.installer.core.sys.stdin.isatty", return_value=True):
-                outcome = installer.run(InstallerOptions(package_source_override=str(home), doctor=False))
+            with patch(
+                "debugoracle.installer.core.sys.stdin.isatty", return_value=True
+            ):
+                outcome = installer.run(
+                    InstallerOptions(package_source_override=str(home), doctor=False)
+                )
 
             content = bashrc.read_text(encoding="utf-8")
 
@@ -200,8 +250,15 @@ class InstallerCoreTests(unittest.TestCase):
             bashrc.write_text(f"# {legacy_line}\n", encoding="utf-8")
             backend = _FakeBackend(
                 statuses=[
-                    _status(InstallState.NOT_INSTALLED, binary_path=str(home / ".local" / "bin" / "dbgoracle")),
-                    _status(InstallState.INSTALLED_SAME_VERSION, "0.1.0", binary_path=str(home / ".local" / "bin" / "dbgoracle")),
+                    _status(
+                        InstallState.NOT_INSTALLED,
+                        binary_path=str(home / ".local" / "bin" / "dbgoracle"),
+                    ),
+                    _status(
+                        InstallState.INSTALLED_SAME_VERSION,
+                        "0.1.0",
+                        binary_path=str(home / ".local" / "bin" / "dbgoracle"),
+                    ),
                 ],
                 bin_dir=str(home / ".local" / "bin"),
             )
@@ -212,8 +269,12 @@ class InstallerCoreTests(unittest.TestCase):
                 sleep=lambda _seconds: None,
                 input_func=lambda _prompt: "yes",
             )
-            with patch("debugoracle.installer.core.sys.stdin.isatty", return_value=True):
-                outcome = installer.run(InstallerOptions(package_source_override=str(home), doctor=False))
+            with patch(
+                "debugoracle.installer.core.sys.stdin.isatty", return_value=True
+            ):
+                outcome = installer.run(
+                    InstallerOptions(package_source_override=str(home), doctor=False)
+                )
 
             content = bashrc.read_text(encoding="utf-8")
 
@@ -224,7 +285,12 @@ class InstallerCoreTests(unittest.TestCase):
         self.assertIn(legacy_line, content)
 
     def test_optional_doctor_warns_without_blocking_install(self) -> None:
-        backend = _FakeBackend(statuses=[_status(InstallState.NOT_INSTALLED), _status(InstallState.INSTALLED_SAME_VERSION, "0.1.0")])
+        backend = _FakeBackend(
+            statuses=[
+                _status(InstallState.NOT_INSTALLED),
+                _status(InstallState.INSTALLED_SAME_VERSION, "0.1.0"),
+            ]
+        )
         installer = InstallerCore(
             backend=backend,
             fetcher=_FakeFetcher(_manifest()),
@@ -232,18 +298,25 @@ class InstallerCoreTests(unittest.TestCase):
             sleep=lambda _seconds: None,
         )
         with patch("debugoracle.installer.core.shutil.which", return_value=None):
-            outcome = installer.run(InstallerOptions(package_source_override="/tmp/src", doctor=True))
+            outcome = installer.run(
+                InstallerOptions(package_source_override="/tmp/src", doctor=True)
+            )
 
         self.assertEqual(outcome.code, InstallerOutcomeCode.SUCCESS_NEEDS_PATH_STEP)
         self.assertTrue(outcome.doctor_notes)
         self.assertIn("openocd", outcome.doctor_notes[0])
 
-    def test_existing_binary_on_path_with_wrong_version_fails_verification(self) -> None:
+    def test_existing_binary_on_path_with_wrong_version_fails_verification(
+        self,
+    ) -> None:
         env = _env()
         env["PATH"] = env["PATH"] + ":/tmp/fake-bin"
         backend = _FakeBackend(
             statuses=[_status(InstallState.INSTALLED_SAME_VERSION, "0.1.0")],
-            verify_result=(False, "Installed binary reports unexpected version: dbgoracle 0.0.9"),
+            verify_result=(
+                False,
+                "Installed binary reports unexpected version: dbgoracle 0.0.9",
+            ),
         )
         installer = InstallerCore(
             backend=backend,
@@ -271,7 +344,12 @@ class InstallerCoreTests(unittest.TestCase):
 
 
 class _FakeFetcher:
-    def __init__(self, manifest: ReleaseManifest | None = None, failures: list[Exception] | None = None, error: Exception | None = None) -> None:
+    def __init__(
+        self,
+        manifest: ReleaseManifest | None = None,
+        failures: list[Exception] | None = None,
+        error: Exception | None = None,
+    ) -> None:
         self.manifest = manifest
         self.failures = list(failures or [])
         self.error = error
@@ -351,13 +429,22 @@ class _FakeBackend:
 
 
 class _InstallationStatus:
-    def __init__(self, state: InstallState, installed_version: str | None = None, binary_path: str | None = None) -> None:
+    def __init__(
+        self,
+        state: InstallState,
+        installed_version: str | None = None,
+        binary_path: str | None = None,
+    ) -> None:
         self.state = state
         self.installed_version = installed_version
         self.binary_path = binary_path or "/tmp/fake-bin/dbgoracle"
 
 
-def _status(state: InstallState, installed_version: str | None = None, binary_path: str | None = None) -> _InstallationStatus:
+def _status(
+    state: InstallState,
+    installed_version: str | None = None,
+    binary_path: str | None = None,
+) -> _InstallationStatus:
     return _InstallationStatus(state, installed_version, binary_path)
 
 

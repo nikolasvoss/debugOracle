@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest tests/ --ignore=tests/debugoracle-hil-tests -v)",
+      "Skill(update-config)",
+      "Skill(update-config:*)",
+      "Bash(ruff check:*)",
+      "Bash(ruff format:*)",
+      "Bash(pytest tests/ -x -q --tb=short --ignore=tests/debugoracle-hil-tests)",
+      "Skill(plan-eng-review)",
+      "Skill(plan-eng-review:*)",
+      "Bash(python -m pytest tests/contracts/ -v)",
+      "Bash(python -m pytest tests/contracts/ tests/ --ignore=tests/debugoracle-hil-tests -q)"
+    ]
+  }
+}

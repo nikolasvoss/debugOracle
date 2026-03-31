@@ -95,7 +95,9 @@ def _rtt_capture_summary_line(capture) -> str:
         return "- RTT Capture: absent"
     freshness = "stale" if capture.stale else "fresh"
     status_text = capture.status or "no managed capture detected"
-    bytes_captured = capture.bytes_captured if capture.bytes_captured is not None else "unavailable"
+    bytes_captured = (
+        capture.bytes_captured if capture.bytes_captured is not None else "unavailable"
+    )
     return f"- RTT Capture: present, {freshness}, {status_text}, {bytes_captured} bytes"
 
 
@@ -125,7 +127,11 @@ def _rtt_capture_lines(capture) -> list[str]:
         f"- Source: {capture.source or 'unavailable'}",
         f"- Host: {capture.host or 'unavailable'}",
         f"- Port: {capture.port if capture.port is not None else 'unavailable'}",
-        (f"- Transport Status: {capture.status}" if capture.status else "- Transport Status: no managed capture detected"),
+        (
+            f"- Transport Status: {capture.status}"
+            if capture.status
+            else "- Transport Status: no managed capture detected"
+        ),
         f"- Connected At: {capture.connected_at or 'unavailable'}",
         f"- Last Byte At: {capture.last_byte_at or 'unavailable'}",
         f"- Bytes Captured: {capture.bytes_captured if capture.bytes_captured is not None else 'unavailable'}",

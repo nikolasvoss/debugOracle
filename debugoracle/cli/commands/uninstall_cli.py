@@ -111,7 +111,9 @@ def cmd_uninstall_cli(args: Any) -> int:
         return _emit_outcome(args, outcome)
 
     home = Path(os.environ.get("HOME", str(Path.home()))).expanduser()
-    plan = linux_platform.build_path_plan(backend.bin_dir(), os.environ.get("SHELL"), home, os.environ)
+    plan = linux_platform.build_path_plan(
+        backend.bin_dir(), os.environ.get("SHELL"), home, os.environ
+    )
     profile_path = plan.profile_path
     export_line = plan.export_line
     cleanup_payload = PathCleanupPayload(
@@ -185,5 +187,7 @@ def _emit_outcome(args: Any, outcome: UninstallOutcome) -> int:
             elif outcome.path_cleanup.manual_action:
                 print("PATH cleanup requires manual action.", file=stream)
             if outcome.path_cleanup.error:
-                print(f"Profile cleanup error: {outcome.path_cleanup.error}", file=stream)
+                print(
+                    f"Profile cleanup error: {outcome.path_cleanup.error}", file=stream
+                )
     return 0 if outcome.success else 1

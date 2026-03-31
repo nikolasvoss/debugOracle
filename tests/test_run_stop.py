@@ -29,7 +29,9 @@ class DebugOracleRunStopTests(unittest.TestCase):
             )
             buffer = io.StringIO()
             with (
-                patch("debugoracle.cli.commands.run_stop.capture_rtt", return_value=state),
+                patch(
+                    "debugoracle.cli.commands.run_stop.capture_rtt", return_value=state
+                ),
                 redirect_stdout(buffer),
             ):
                 exit_code = package_main(
@@ -42,7 +44,10 @@ class DebugOracleRunStopTests(unittest.TestCase):
                     ]
                 )
         self.assertEqual(exit_code, 0)
-        self.assertIn("RTT run stopped because the RTT server closed the connection.", buffer.getvalue())
+        self.assertIn(
+            "RTT run stopped because the RTT server closed the connection.",
+            buffer.getvalue(),
+        )
 
     def test_run_foreground_reports_eof(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -58,7 +63,12 @@ class DebugOracleRunStopTests(unittest.TestCase):
                 error=None,
             )
             buffer = io.StringIO()
-            with patch("debugoracle.cli.commands.run_stop.capture_rtt", return_value=state), redirect_stdout(buffer):
+            with (
+                patch(
+                    "debugoracle.cli.commands.run_stop.capture_rtt", return_value=state
+                ),
+                redirect_stdout(buffer),
+            ):
                 exit_code = main(
                     [
                         "run",
@@ -69,7 +79,10 @@ class DebugOracleRunStopTests(unittest.TestCase):
                     ]
                 )
         self.assertEqual(exit_code, 0)
-        self.assertIn("RTT run stopped because the RTT server closed the connection.", buffer.getvalue())
+        self.assertIn(
+            "RTT run stopped because the RTT server closed the connection.",
+            buffer.getvalue(),
+        )
 
     def test_run_detach_writes_runtime_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -78,8 +91,16 @@ class DebugOracleRunStopTests(unittest.TestCase):
             popen = Mock()
             popen.pid = 23456
             popen.poll.return_value = None
-            with patch("debugoracle.cli.commands.run_stop.subprocess.Popen", return_value=popen) as popen_mock, redirect_stdout(buffer):
-                exit_code = main(["run", "--detach", "--workspace-root", str(workspace)])
+            with (
+                patch(
+                    "debugoracle.cli.commands.run_stop.subprocess.Popen",
+                    return_value=popen,
+                ) as popen_mock,
+                redirect_stdout(buffer),
+            ):
+                exit_code = main(
+                    ["run", "--detach", "--workspace-root", str(workspace)]
+                )
             runtime_path = workspace / ".dbgoracle" / "session.rtt.run.json"
             payload = json.loads(runtime_path.read_text(encoding="utf-8"))
 
@@ -101,11 +122,16 @@ class DebugOracleRunStopTests(unittest.TestCase):
             popen.pid = 12345
             popen.poll.return_value = 1
             with (
-                patch("debugoracle.cli.commands.run_stop.subprocess.Popen", return_value=popen),
+                patch(
+                    "debugoracle.cli.commands.run_stop.subprocess.Popen",
+                    return_value=popen,
+                ),
                 redirect_stdout(stdout),
                 redirect_stderr(stderr),
             ):
-                exit_code = main(["run", "--detach", "--workspace-root", str(workspace)])
+                exit_code = main(
+                    ["run", "--detach", "--workspace-root", str(workspace)]
+                )
             runtime_path = workspace / ".dbgoracle" / "session.rtt.run.json"
         self.assertEqual(exit_code, 1)
         self.assertFalse(runtime_path.exists())
@@ -114,7 +140,10 @@ class DebugOracleRunStopTests(unittest.TestCase):
     def test_run_foreground_returns_timeout_exit_code(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             output = Path(tmpdir) / "session.rtt"
-            with patch("debugoracle.cli.commands.run_stop.capture_rtt", side_effect=RttCaptureTimeoutError("timeout")):
+            with patch(
+                "debugoracle.cli.commands.run_stop.capture_rtt",
+                side_effect=RttCaptureTimeoutError("timeout"),
+            ):
                 exit_code = main(["run", "--port", "60001", "--output", str(output)])
         self.assertEqual(exit_code, 2)
 
@@ -127,12 +156,20 @@ class DebugOracleRunStopTests(unittest.TestCase):
             runtime.write_text(json.dumps({"pid": 7777}), encoding="utf-8")
             buffer = io.StringIO()
             with (
-                patch("debugoracle.cli.commands.run_stop.is_pid_running", return_value=True),
-                patch("debugoracle.cli.commands.run_stop.is_owned_run_process", return_value=True),
+                patch(
+                    "debugoracle.cli.commands.run_stop.is_pid_running",
+                    return_value=True,
+                ),
+                patch(
+                    "debugoracle.cli.commands.run_stop.is_owned_run_process",
+                    return_value=True,
+                ),
                 patch("debugoracle.cli.commands.run_stop.subprocess.Popen") as popen,
                 redirect_stdout(buffer),
             ):
-                exit_code = main(["run", "--detach", "--workspace-root", str(workspace)])
+                exit_code = main(
+                    ["run", "--detach", "--workspace-root", str(workspace)]
+                )
         self.assertEqual(exit_code, 0)
         popen.assert_not_called()
         self.assertIn("Detached RTT run already active", buffer.getvalue())
@@ -146,8 +183,14 @@ class DebugOracleRunStopTests(unittest.TestCase):
             runtime.write_text(json.dumps({"pid": 4242}), encoding="utf-8")
             buffer = io.StringIO()
             with (
-                patch("debugoracle.cli.commands.run_stop.is_pid_running", side_effect=[True, False]),
-                patch("debugoracle.cli.commands.run_stop.is_owned_run_process", return_value=True),
+                patch(
+                    "debugoracle.cli.commands.run_stop.is_pid_running",
+                    side_effect=[True, False],
+                ),
+                patch(
+                    "debugoracle.cli.commands.run_stop.is_owned_run_process",
+                    return_value=True,
+                ),
                 patch("debugoracle.cli.commands.run_stop.os.kill") as kill,
                 redirect_stdout(buffer),
             ):
@@ -166,8 +209,14 @@ class DebugOracleRunStopTests(unittest.TestCase):
             runtime.write_text(json.dumps({"pid": 3131}), encoding="utf-8")
             buffer = io.StringIO()
             with (
-                patch("debugoracle.cli.commands.run_stop.is_pid_running", return_value=True),
-                patch("debugoracle.cli.commands.run_stop.is_owned_run_process", return_value=False),
+                patch(
+                    "debugoracle.cli.commands.run_stop.is_pid_running",
+                    return_value=True,
+                ),
+                patch(
+                    "debugoracle.cli.commands.run_stop.is_owned_run_process",
+                    return_value=False,
+                ),
                 patch("debugoracle.cli.commands.run_stop.os.kill") as kill,
                 redirect_stdout(buffer),
             ):

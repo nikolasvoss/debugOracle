@@ -24,7 +24,9 @@ class PathCleanupResult:
     error: str | None = None
 
 
-def detect_profile_path(shell: str | None, home: Path, env: Mapping[str, str] | None = None) -> Path | None:
+def detect_profile_path(
+    shell: str | None, home: Path, env: Mapping[str, str] | None = None
+) -> Path | None:
     env = env or os.environ
     shell_name = Path(shell or env.get("SHELL", "")).name
     if shell_name == "bash":
@@ -37,14 +39,18 @@ def detect_profile_path(shell: str | None, home: Path, env: Mapping[str, str] | 
     return None
 
 
-def build_path_plan(bin_dir: Path, shell: str | None, home: Path, env: Mapping[str, str] | None = None) -> LinuxPathPlan:
+def build_path_plan(
+    bin_dir: Path, shell: str | None, home: Path, env: Mapping[str, str] | None = None
+) -> LinuxPathPlan:
     profile_path = detect_profile_path(shell, home, env)
     shell_name = Path(shell or (env or os.environ).get("SHELL", "")).name
     if shell_name == "fish":
         export_line = f"set -gx PATH {bin_dir} $PATH"
     else:
         export_line = f'export PATH="{bin_dir}:$PATH"'
-    return LinuxPathPlan(bin_dir=bin_dir, profile_path=profile_path, export_line=export_line)
+    return LinuxPathPlan(
+        bin_dir=bin_dir, profile_path=profile_path, export_line=export_line
+    )
 
 
 def path_contains(bin_dir: Path, path_value: str | None) -> bool:
@@ -56,8 +62,12 @@ def path_contains(bin_dir: Path, path_value: str | None) -> bool:
 
 def append_path_line(profile_path: Path, export_line: str) -> tuple[bool, str | None]:
     try:
-        existing = profile_path.read_text(encoding="utf-8") if profile_path.exists() else ""
-        if _has_managed_block(existing, export_line) or _has_exact_path_line(existing, export_line):
+        existing = (
+            profile_path.read_text(encoding="utf-8") if profile_path.exists() else ""
+        )
+        if _has_managed_block(existing, export_line) or _has_exact_path_line(
+            existing, export_line
+        ):
             return True, None
         if profile_path.parent and not profile_path.parent.exists():
             profile_path.parent.mkdir(parents=True, exist_ok=True)
@@ -176,7 +186,9 @@ def _extract_bin_dir_from_export_line(export_line: str) -> str | None:
     return None
 
 
-def _line_matches_path_export(line: str, export_line: str, managed_bin_dir: str | None) -> bool:
+def _line_matches_path_export(
+    line: str, export_line: str, managed_bin_dir: str | None
+) -> bool:
     stripped = line.strip()
     if stripped == export_line:
         return True

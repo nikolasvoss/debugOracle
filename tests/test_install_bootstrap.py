@@ -9,7 +9,9 @@ from unittest.mock import patch
 
 
 def _load_bootstrap_module():
-    module_path = Path(__file__).resolve().parents[1] / "scripts" / "install" / "bootstrap.py"
+    module_path = (
+        Path(__file__).resolve().parents[1] / "scripts" / "install" / "bootstrap.py"
+    )
     spec = importlib.util.spec_from_file_location("test_bootstrap_module", module_path)
     if spec is None or spec.loader is None:
         raise AssertionError("Could not load bootstrap module spec")
@@ -19,7 +21,9 @@ def _load_bootstrap_module():
 
 
 class InstallBootstrapTests(unittest.TestCase):
-    def test_bootstrap_uses_manifest_source_without_package_source_override(self) -> None:
+    def test_bootstrap_uses_manifest_source_without_package_source_override(
+        self,
+    ) -> None:
         bootstrap_module = _load_bootstrap_module()
         with patch.object(bootstrap_module, "main", return_value=0) as main_mock:
             exit_code = bootstrap_module.bootstrap(["--docs-tools", "none"])
@@ -37,7 +41,9 @@ class InstallBootstrapTests(unittest.TestCase):
             patch.object(bootstrap_module.sys.stdin, "isatty", return_value=True),
             patch("builtins.input", return_value=""),
         ):
-            exit_code = bootstrap_module._install_docs_tools(bootstrap_module.DOCS_MODE_DOCLING)
+            exit_code = bootstrap_module._install_docs_tools(
+                bootstrap_module.DOCS_MODE_DOCLING
+            )
 
         self.assertEqual(exit_code, 0)
 
@@ -48,7 +54,9 @@ class InstallBootstrapTests(unittest.TestCase):
             patch.object(bootstrap_module.sys.stdin, "isatty", return_value=True),
             patch("builtins.input", return_value="n"),
         ):
-            exit_code = bootstrap_module._install_docs_tools(bootstrap_module.DOCS_MODE_SEMANTIC)
+            exit_code = bootstrap_module._install_docs_tools(
+                bootstrap_module.DOCS_MODE_SEMANTIC
+            )
 
         self.assertEqual(exit_code, 1)
 

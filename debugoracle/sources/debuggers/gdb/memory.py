@@ -25,7 +25,9 @@ class GdbMemorySnapshot:
     data_hex: str
 
 
-def collect_gdb_memory_read(*, address: str, size: int, data_hex: str) -> GdbMemorySnapshot:
+def collect_gdb_memory_read(
+    *, address: str, size: int, data_hex: str
+) -> GdbMemorySnapshot:
     return GdbMemorySnapshot(
         address=address,
         size=size,

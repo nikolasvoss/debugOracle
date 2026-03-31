@@ -5,7 +5,9 @@ import unittest
 class ModuleSpecRegistryTests(unittest.TestCase):
     def test_spec_registry_entries_point_to_existing_code_and_spec_files(self) -> None:
         repo_root = Path(__file__).resolve().parent.parent
-        registry = (repo_root / "docs" / "specs" / "README.md").read_text(encoding="utf-8")
+        registry = (repo_root / "docs" / "specs" / "README.md").read_text(
+            encoding="utf-8"
+        )
 
         entries: list[tuple[str, str, str]] = []
         for line in registry.splitlines():
@@ -26,4 +28,6 @@ class ModuleSpecRegistryTests(unittest.TestCase):
 
         for _, code_path, spec_name in entries:
             self.assertTrue((repo_root / code_path).is_file(), code_path)
-            self.assertTrue((repo_root / "docs" / "specs" / spec_name).is_file(), spec_name)
+            self.assertTrue(
+                (repo_root / "docs" / "specs" / spec_name).is_file(), spec_name
+            )

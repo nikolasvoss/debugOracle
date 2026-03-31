@@ -145,8 +145,10 @@ class _ValueParser:
                 continue
             break
         if start == self.pos:
-            raise MIParseError(f"Expected identifier at position {self.pos}: {self.text!r}")
-        return self.text[start:self.pos]
+            raise MIParseError(
+                f"Expected identifier at position {self.pos}: {self.text!r}"
+            )
+        return self.text[start : self.pos]
 
     def _parse_string(self) -> str:
         self._expect('"')
@@ -171,7 +173,7 @@ class _ValueParser:
         start = self.pos
         while not self._eof() and self._peek() not in {",", "]", "}", " ", "\t"}:
             self.pos += 1
-        return self.text[start:self.pos]
+        return self.text[start : self.pos]
 
     def _expect(self, token: str) -> None:
         if not self._consume_if(token):

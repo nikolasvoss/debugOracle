@@ -1,0 +1,48 @@
+repos:
+  # ---- Ruff (lint + format) ----
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.7
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  # ---- Local deterministic hooks ----
+  - repo: local
+    hooks:
+      # ---- Type checking ----
+      - id: pyright
+        name: pyright
+        entry: .venv/bin/pyright debugoracle/
+        language: system
+        pass_filenames: false
+
+      # ---- Fast test gate (no HIL) ----
+      - id: pytest-fast
+        name: pytest-fast
+        entry: >
+          .venv/bin/pytest tests/
+          -x -q --tb=short
+          --ignore=tests/debugoracle-hil-tests
+        language: system
+        pass_filenames: false
+
+      # ---- Coverage gate ----
+      - id: coverage
+        name: coverage
+        entry: >
+          .venv/bin/pytest tests/
+          --cov=debugoracle
+          --cov-report=term-missing
+          --cov-fail-under=85
+          -q
+          --ignore=tests/debugoracle-hil-tests
+        language: system
+        pass_filenames: false
+
+      # ---- Security (Bandit via pipx) ----
+      - id: bandit
+        name: bandit
+        entry: bandit -c pyproject.toml -r debugoracle/
+        language: system
+        pass_filenames: false

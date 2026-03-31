@@ -63,14 +63,18 @@ class DocsEnvelope:
         return cls(
             source_pdf=str(raw.get("source_pdf") or ""),
             parser_used=str(raw.get("parser_used") or "unknown"),
-            derived_paths=[str(item) for item in raw.get("derived_paths", []) if item is not None],
+            derived_paths=[
+                str(item) for item in raw.get("derived_paths", []) if item is not None
+            ],
             page_count=_to_int(raw.get("page_count")),
             chunk_count=_to_int(raw.get("chunk_count")),
             warning_summary=str(raw.get("warning_summary") or ""),
             ingest_state=str(raw.get("ingest_state") or "failed"),
             source_hash=str(raw.get("source_hash") or ""),
             semantic_indexed=bool(raw.get("semantic_indexed", False)),
-            warnings=[str(item) for item in raw.get("warnings", []) if item is not None],
+            warnings=[
+                str(item) for item in raw.get("warnings", []) if item is not None
+            ],
         )
 
 
@@ -166,7 +170,9 @@ class DocsIngestCheckpoint:
             parser_used=str(raw.get("parser_used") or ""),
             page_count=max(0, _to_int(raw.get("page_count"))),
             empty_page_count=max(0, _to_int(raw.get("empty_page_count"))),
-            warnings=[str(item) for item in raw.get("warnings", []) if item is not None],
+            warnings=[
+                str(item) for item in raw.get("warnings", []) if item is not None
+            ],
         )
 
 
@@ -310,7 +316,9 @@ def ingest_documents(
         discovered = discover_candidate_documents(workspace_root)
         if not discovered:
             warnings.append("No likely PDFs were discovered under doc/ or docs/.")
-            return DocsIngestBatch(results=[], discovered_candidates=[], warnings=warnings)
+            return DocsIngestBatch(
+                results=[], discovered_candidates=[], warnings=warnings
+            )
         if not confirm_discovered:
             warnings.append(
                 "Discovered likely PDFs under doc/ or docs/; re-run with --yes or pass --file/--folder explicitly."
@@ -360,9 +368,15 @@ def ingest_document(
     source = Path(path).expanduser().resolve()
     sidecar_dir = sidecar_dir_for(source)
     staging_dir = _staging_dir_for(sidecar_dir)
-    expected_parser = "plain-text" if source.suffix.lower() in {".txt", ".md", ".rst"} else parser_name
+    expected_parser = (
+        "plain-text"
+        if source.suffix.lower() in {".txt", ".md", ".rst"}
+        else parser_name
+    )
 
-    if not force and is_ingest_fresh(source, sidecar_dir, parser_name=expected_parser, semantic=semantic):
+    if not force and is_ingest_fresh(
+        source, sidecar_dir, parser_name=expected_parser, semantic=semantic
+    ):
         artifact = load_docs_artifact(sidecar_dir)
         return DocsIngestResult(
             source_pdf=str(source),
@@ -415,15 +429,21 @@ def ingest_document(
     try:
         if not chunks:
             if source.suffix.lower() in {".txt", ".md", ".rst"}:
-                parse_result = make_parser("plaintext").parse(source, progress_cb=progress_cb)
+                parse_result = make_parser("plaintext").parse(
+                    source, progress_cb=progress_cb
+                )
             elif source.suffix.lower() == ".pdf":
                 if parser_name == "plaintext":
                     raise RuntimeError(
                         "Parser 'plaintext' is not supported for PDF ingestion. Use --parser=pymupdf or --parser=docling."
                     )
-                parse_result = make_parser(parser_name).parse(source, progress_cb=progress_cb)
+                parse_result = make_parser(parser_name).parse(
+                    source, progress_cb=progress_cb
+                )
             else:
-                raise RuntimeError(f"Unsupported document type for ingestion: {source.suffix or '<none>'}")
+                raise RuntimeError(
+                    f"Unsupported document type for ingestion: {source.suffix or '<none>'}"
+                )
             parser_used = parse_result.parser_used
             warnings = list(parse_result.warnings)
             chunks = list(parse_result.chunks)
@@ -519,9 +539,13 @@ def ingest_document(
         semantic_indexed=semantic_indexed,
         warnings=warnings,
     )
-    save_docs_artifact(DocsArtifact(envelope=envelope, index_entries=index_entries), publish_dir)
+    save_docs_artifact(
+        DocsArtifact(envelope=envelope, index_entries=index_entries), publish_dir
+    )
     if semantic_indexed and (staging_dir / EMBEDDINGS_FILENAME).exists():
-        shutil.copy2(staging_dir / EMBEDDINGS_FILENAME, publish_dir / EMBEDDINGS_FILENAME)
+        shutil.copy2(
+            staging_dir / EMBEDDINGS_FILENAME, publish_dir / EMBEDDINGS_FILENAME
+        )
     _publish_sidecar_atomically(publish_dir=publish_dir, sidecar_dir=sidecar_dir)
     if fatal_error is None:
         _discard_staging_dir(staging_dir)
@@ -556,17 +580,21 @@ def resolve_document_inputs(
     for folder_path in folders:
         resolved_folder = _resolve_from_workspace(workspace, folder_path)
         if not resolved_folder.is_dir():
-            invalid_inputs.append(f"Explicit folder input was not found: {resolved_folder}")
+            invalid_inputs.append(
+                f"Explicit folder input was not found: {resolved_folder}"
+            )
             continue
         for child in sorted(resolved_folder.rglob("*")):
             if child.is_file() and child.suffix.lower() in SUPPORTED_INGEST_SUFFIXES:
                 selected.append(child.resolve())
     return (
-        _dedupe_paths([
-            path
-            for path in selected
-            if path.suffix.lower() in SUPPORTED_INGEST_SUFFIXES
-        ]),
+        _dedupe_paths(
+            [
+                path
+                for path in selected
+                if path.suffix.lower() in SUPPORTED_INGEST_SUFFIXES
+            ]
+        ),
         invalid_inputs,
     )
 
@@ -579,8 +607,14 @@ def search_documents(
     files: list[str] | None = None,
     semantic: bool = False,
 ) -> DocsSearchResult:
-    artifacts, warnings = load_docs_artifacts(workspace_root=workspace_root, files=files or [])
-    entries = [(artifact.envelope, index_entry) for artifact in artifacts for index_entry in artifact.index_entries]
+    artifacts, warnings = load_docs_artifacts(
+        workspace_root=workspace_root, files=files or []
+    )
+    entries = [
+        (artifact.envelope, index_entry)
+        for artifact in artifacts
+        for index_entry in artifact.index_entries
+    ]
     if not entries:
         return DocsSearchResult(query=query, warnings=warnings)
     query_tokens = tokenize(query)
@@ -590,7 +624,9 @@ def search_documents(
     document_frequency = Counter()
     for _, index_entry in entries:
         document_frequency.update(set(index_entry.tokens))
-    average_length = sum(max(1, entry.token_count) for _, entry in entries) / len(entries)
+    average_length = sum(max(1, entry.token_count) for _, entry in entries) / len(
+        entries
+    )
 
     bm25_scores: list[float] = []
     query_text = query.strip().lower()
@@ -636,8 +672,12 @@ def search_documents(
                 table_rows=index_entry.table_rows,
             )
         )
-    results.sort(key=lambda item: (-item.score, item.source_pdf, item.page_start, item.page_end))
-    return DocsSearchResult(query=query, hits=results[: max(1, limit)], warnings=warnings)
+    results.sort(
+        key=lambda item: (-item.score, item.source_pdf, item.page_start, item.page_end)
+    )
+    return DocsSearchResult(
+        query=query, hits=results[: max(1, limit)], warnings=warnings
+    )
 
 
 def status_documents(
@@ -647,7 +687,11 @@ def status_documents(
 ) -> list[DocsStatusEntry]:
     if files:
         targets = [
-            sidecar_dir_for(_resolve_from_workspace(Path(workspace_root).expanduser().resolve(), item))
+            sidecar_dir_for(
+                _resolve_from_workspace(
+                    Path(workspace_root).expanduser().resolve(), item
+                )
+            )
             for item in files
         ]
     else:
@@ -696,7 +740,11 @@ def load_docs_artifacts(
 ) -> tuple[list[DocsArtifact], list[str]]:
     sidecar_dirs = (
         [
-            sidecar_dir_for(_resolve_from_workspace(Path(workspace_root).expanduser().resolve(), item))
+            sidecar_dir_for(
+                _resolve_from_workspace(
+                    Path(workspace_root).expanduser().resolve(), item
+                )
+            )
             for item in files
         ]
         if files
@@ -726,13 +774,17 @@ def discover_sidecar_directories(workspace_root: str | Path) -> list[Path]:
 def load_docs_artifact(sidecar_dir: str | Path) -> DocsArtifact:
     sidecar = Path(sidecar_dir).expanduser().resolve()
     try:
-        envelope_raw = json.loads((sidecar / ENVELOPE_FILENAME).read_text(encoding="utf-8"))
+        envelope_raw = json.loads(
+            (sidecar / ENVELOPE_FILENAME).read_text(encoding="utf-8")
+        )
     except FileNotFoundError as error:
         raise RuntimeError(
             f"Docs sidecar not found for '{_source_path_from_sidecar(sidecar)}'. Run `dbgoracle docs ingest` first."
         ) from error
     except (OSError, json.JSONDecodeError) as error:
-        raise RuntimeError(f"Corrupt docs envelope in '{sidecar / ENVELOPE_FILENAME}': {error}") from error
+        raise RuntimeError(
+            f"Corrupt docs envelope in '{sidecar / ENVELOPE_FILENAME}': {error}"
+        ) from error
     try:
         index_raw = json.loads((sidecar / INDEX_FILENAME).read_text(encoding="utf-8"))
     except FileNotFoundError as error:
@@ -740,7 +792,9 @@ def load_docs_artifact(sidecar_dir: str | Path) -> DocsArtifact:
             f"Docs sidecar index is missing for '{_source_path_from_sidecar(sidecar)}'. Re-run `dbgoracle docs ingest`."
         ) from error
     except (OSError, json.JSONDecodeError) as error:
-        raise RuntimeError(f"Corrupt docs index in '{sidecar / INDEX_FILENAME}': {error}") from error
+        raise RuntimeError(
+            f"Corrupt docs index in '{sidecar / INDEX_FILENAME}': {error}"
+        ) from error
     envelope = DocsEnvelope.from_dict(envelope_raw)
     if not isinstance(index_raw, list):
         raise RuntimeError(f"Corrupt docs index in '{sidecar / INDEX_FILENAME}'.")
@@ -769,7 +823,9 @@ def save_embeddings(sidecar_dir: str | Path, embeddings: Any) -> None:
     try:
         import numpy as np
     except ImportError as error:
-        raise RuntimeError("Install with: pip install 'debugoracle[semantic]'") from error
+        raise RuntimeError(
+            "Install with: pip install 'debugoracle[semantic]'"
+        ) from error
     np.save(sidecar / EMBEDDINGS_FILENAME, embeddings)
 
 
@@ -863,7 +919,9 @@ def _load_staged_chunks(staging_dir: Path) -> list[DocsChunk]:
     return chunks
 
 
-def _save_staged_index_entries(staging_dir: Path, entries: list[DocsIndexEntry]) -> None:
+def _save_staged_index_entries(
+    staging_dir: Path, entries: list[DocsIndexEntry]
+) -> None:
     staging_dir.mkdir(parents=True, exist_ok=True)
     (staging_dir / STAGED_INDEX_FILENAME).write_text(
         json.dumps([entry.to_dict() for entry in entries], indent=2),
@@ -884,7 +942,9 @@ def _load_staged_index_entries(staging_dir: Path) -> list[DocsIndexEntry]:
     if not isinstance(raw, list):
         _discard_staging_dir(staging_dir)
         return []
-    return [DocsIndexEntry.from_dict(item if isinstance(item, dict) else {}) for item in raw]
+    return [
+        DocsIndexEntry.from_dict(item if isinstance(item, dict) else {}) for item in raw
+    ]
 
 
 def _is_checkpoint_compatible(
@@ -901,7 +961,9 @@ def _is_checkpoint_compatible(
         return False
     if checkpoint.source_hash != source_hash:
         return False
-    if _canonical_parser_name(checkpoint.parser_name) != _canonical_parser_name(parser_name):
+    if _canonical_parser_name(checkpoint.parser_name) != _canonical_parser_name(
+        parser_name
+    ):
         return False
     if checkpoint.semantic != semantic:
         return False
@@ -924,7 +986,9 @@ def _publish_sidecar_atomically(*, publish_dir: Path, sidecar_dir: Path) -> None
         raise
 
 
-def build_index_entries(source_path: str | Path, chunks: list[DocsChunk]) -> list[DocsIndexEntry]:
+def build_index_entries(
+    source_path: str | Path, chunks: list[DocsChunk]
+) -> list[DocsIndexEntry]:
     entries: list[DocsIndexEntry] = []
     source = str(Path(source_path).expanduser().resolve())
     for chunk in chunks:
@@ -1045,7 +1109,9 @@ class PlainTextParser:
             text=text,
             table_rows=None,
         )
-        return DocsParseResult(chunks=[chunk], parser_used="plain-text", warnings=[], page_count=1)
+        return DocsParseResult(
+            chunks=[chunk], parser_used="plain-text", warnings=[], page_count=1
+        )
 
 
 class PyMuPDFParser:
@@ -1067,7 +1133,9 @@ class PyMuPDFParser:
         doc = fitz.open(str(source))
         total_pages = len(doc)
         if progress_cb:
-            progress_cb(0, total_pages, f"{source.name} (extracting markdown; may take minutes)")
+            progress_cb(
+                0, total_pages, f"{source.name} (extracting markdown; may take minutes)"
+            )
         md = pymupdf4llm.to_markdown(doc)
         if progress_cb:
             progress_cb(0, total_pages, f"{source.name} (validating extracted pages)")
@@ -1134,7 +1202,9 @@ class DoclingParser:
             while not heartbeat_stop.wait(15.0):
                 elapsed = int(max(0, time.monotonic() - start_time))
                 if progress_cb:
-                    progress_cb(0, 1, f"{source.name} (Docling running, elapsed {elapsed}s)")
+                    progress_cb(
+                        0, 1, f"{source.name} (Docling running, elapsed {elapsed}s)"
+                    )
 
         if progress_cb:
             heartbeat_thread = threading.Thread(target=heartbeat, daemon=True)
@@ -1204,7 +1274,9 @@ def split_markdown_by_headings(
         if not body:
             page_start = current_page
             return
-        chunk_id = _slugify(current_heading) if current_heading else f"page-{page_start}"
+        chunk_id = (
+            _slugify(current_heading) if current_heading else f"page-{page_start}"
+        )
         table_rows = parse_markdown_table(body)
         chunks.append(
             DocsChunk(
@@ -1308,7 +1380,9 @@ def encode_embeddings(chunks: list[DocsChunk]) -> Any:
         from sentence_transformers import SentenceTransformer
         import numpy as np
     except ImportError as error:
-        raise RuntimeError("Install with: pip install 'debugoracle[semantic]'") from error
+        raise RuntimeError(
+            "Install with: pip install 'debugoracle[semantic]'"
+        ) from error
     model = SentenceTransformer("all-MiniLM-L6-v2")
     texts = [chunk.text for chunk in chunks]
     embeddings = model.encode(texts, convert_to_numpy=True, show_progress_bar=False)
@@ -1328,7 +1402,9 @@ def _semantic_scores_for_entries(
         return None, [f"Semantic search unavailable: {error}"]
 
     model = SentenceTransformer("all-MiniLM-L6-v2")
-    query_embedding = model.encode([query], convert_to_numpy=True, show_progress_bar=False)
+    query_embedding = model.encode(
+        [query], convert_to_numpy=True, show_progress_bar=False
+    )
     query_vector = query_embedding[0]
 
     grouped: dict[str, list[tuple[int, DocsEnvelope, DocsIndexEntry]]] = {}
@@ -1352,7 +1428,9 @@ def _semantic_scores_for_entries(
                     f"Semantic embeddings row count mismatch for '{source_pdf}'; falling back to BM25 for this file."
                 )
                 continue
-            denom = np.linalg.norm(embeddings, axis=1) * max(np.linalg.norm(query_vector), 1e-12)
+            denom = np.linalg.norm(embeddings, axis=1) * max(
+                np.linalg.norm(query_vector), 1e-12
+            )
             cosine = np.dot(embeddings, query_vector) / np.maximum(denom, 1e-12)
             for (global_index, _, _), cosine_value in zip(group, cosine):
                 scores[global_index] = float(cosine_value)
@@ -1389,9 +1467,15 @@ def _bm25_score(
         if term_frequency <= 0:
             continue
         doc_freq = document_frequency.get(token, 0)
-        inverse_document_frequency = math.log(1.0 + (corpus_size - doc_freq + 0.5) / (doc_freq + 0.5))
-        denominator = term_frequency + k1 * (1.0 - b + b * (doc_length / max(1.0, average_length)))
-        score += inverse_document_frequency * (term_frequency * (k1 + 1.0) / max(1.0, denominator))
+        inverse_document_frequency = math.log(
+            1.0 + (corpus_size - doc_freq + 0.5) / (doc_freq + 0.5)
+        )
+        denominator = term_frequency + k1 * (
+            1.0 - b + b * (doc_length / max(1.0, average_length))
+        )
+        score += inverse_document_frequency * (
+            term_frequency * (k1 + 1.0) / max(1.0, denominator)
+        )
     return score
 
 
@@ -1478,7 +1562,9 @@ def _fallback_page_chunks(doc: Any) -> list[DocsChunk]:
     return chunks
 
 
-def _build_failed_result(source: Path, parser_name: str, warnings: list[str]) -> DocsIngestResult:
+def _build_failed_result(
+    source: Path, parser_name: str, warnings: list[str]
+) -> DocsIngestResult:
     sidecar_dir = sidecar_dir_for(source)
     sidecar_dir.mkdir(parents=True, exist_ok=True)
     envelope_path = sidecar_dir / ENVELOPE_FILENAME

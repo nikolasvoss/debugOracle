@@ -86,7 +86,9 @@ class OpenOcdMemoryReader:
             try:
                 chunk = self._socket.recv(4096)
             except socket.timeout as error:
-                raise OSError("Timed out waiting for an OpenOCD Tcl response terminator.") from error
+                raise OSError(
+                    "Timed out waiting for an OpenOCD Tcl response terminator."
+                ) from error
             if not chunk:
                 raise OSError("OpenOCD closed the connection")
             buffer.extend(chunk)
@@ -118,16 +120,24 @@ def capture_peripheral_registers_from_svd(
     source = _build_register_source(definition)
     safe_targets = _safe_targets(source)
     if not safe_targets:
-        raise ValueError("Peripheral capture did not find any safe-readable registers in the supplied SVD.")
+        raise ValueError(
+            "Peripheral capture did not find any safe-readable registers in the supplied SVD."
+        )
 
     host = openocd_tcl_host or os.environ.get(OPENOCD_HOST_ENV, OPENOCD_DEFAULT_HOST)
-    port = openocd_tcl_port if openocd_tcl_port is not None else _resolve_openocd_port(os.environ.get(OPENOCD_PORT_ENV))
+    port = (
+        openocd_tcl_port
+        if openocd_tcl_port is not None
+        else _resolve_openocd_port(os.environ.get(OPENOCD_PORT_ENV))
+    )
 
     try:
         with OpenOcdMemoryReader(host=host, port=port) as reader:
             for register in safe_targets:
                 try:
-                    register.value_hex = reader.read_memory(_parse_int(register.address), register.width_bits)
+                    register.value_hex = reader.read_memory(
+                        _parse_int(register.address), register.width_bits
+                    )
                     register.read_status = "success"
                     register.failure_reason = None
                     register.skip_reason = None
@@ -136,11 +146,15 @@ def capture_peripheral_registers_from_svd(
                     register.failure_reason = str(error)
                     register.skip_reason = None
     except OSError as error:
-        raise OpenOcdReachabilityError(host=host, port=port, detail=str(error)) from error
+        raise OpenOcdReachabilityError(
+            host=host, port=port, detail=str(error)
+        ) from error
 
     _update_counts(source)
     if source.success_count == 0:
-        raise ValueError("Peripheral capture did not read any register values successfully.")
+        raise ValueError(
+            "Peripheral capture did not read any register values successfully."
+        )
     return source
 
 
@@ -166,7 +180,9 @@ def parse_svd_definition(svd_file: str) -> SvdDeviceDefinition:
     )
 
 
-def _load_peripheral_index(root: ET.Element) -> tuple[dict[str, ET.Element], list[ET.Element]]:
+def _load_peripheral_index(
+    root: ET.Element,
+) -> tuple[dict[str, ET.Element], list[ET.Element]]:
     peripherals_node = root.find("peripherals")
     if peripherals_node is None:
         raise ValueError("SVD file did not contain any peripherals")
@@ -185,14 +201,18 @@ def _collect_peripheral_sets(
 ) -> list[PeripheralRegisterSet]:
     peripherals: list[PeripheralRegisterSet] = []
     for peripheral_node in peripheral_nodes:
-        resolved_peripheral = _resolve_peripheral_node(peripheral_node, peripheral_lookup, seen=set())
+        resolved_peripheral = _resolve_peripheral_node(
+            peripheral_node, peripheral_lookup, seen=set()
+        )
         peripheral = _build_peripheral_register_set(resolved_peripheral)
         if peripheral is not None:
             peripherals.append(peripheral)
     return peripherals
 
 
-def _build_peripheral_register_set(resolved_peripheral: ET.Element) -> PeripheralRegisterSet | None:
+def _build_peripheral_register_set(
+    resolved_peripheral: ET.Element,
+) -> PeripheralRegisterSet | None:
     peripheral_name = _text(resolved_peripheral.find("name"))
     base_address_text = _text(resolved_peripheral.find("baseAddress"))
     if peripheral_name is None or base_address_text is None:
@@ -207,7 +227,9 @@ def _build_peripheral_register_set(resolved_peripheral: ET.Element) -> Periphera
     )
 
 
-def _build_register_entries(registers_node: ET.Element | None, base_address: int) -> list[RegisterEntry]:
+def _build_register_entries(
+    registers_node: ET.Element | None, base_address: int
+) -> list[RegisterEntry]:
     if registers_node is None:
         return []
     registers: list[RegisterEntry] = []
@@ -218,7 +240,9 @@ def _build_register_entries(registers_node: ET.Element | None, base_address: int
     return registers
 
 
-def _build_register_entry(register_node: ET.Element, base_address: int) -> RegisterEntry | None:
+def _build_register_entry(
+    register_node: ET.Element, base_address: int
+) -> RegisterEntry | None:
     register_name = _text(register_node.find("name"))
     offset_text = _text(register_node.find("addressOffset"))
     size_text = _text(register_node.find("size"))
@@ -238,7 +262,9 @@ def _build_register_entry(register_node: ET.Element, base_address: int) -> Regis
 
 def _build_register_source(definition: SvdDeviceDefinition) -> RegisterSource:
     peripheral_count = len(definition.peripherals)
-    register_count = sum(len(peripheral.registers) for peripheral in definition.peripherals)
+    register_count = sum(
+        len(peripheral.registers) for peripheral in definition.peripherals
+    )
     source = RegisterSource(
         embedded=True,
         svd_source=definition.svd_source,
@@ -299,7 +325,9 @@ def _update_counts(source: RegisterSource) -> None:
 def _require_recent_halt(mi_text: str) -> None:
     latest_state = _latest_mi_target_state(mi_text)
     if latest_state != MI_STATE_STOPPED:
-        raise ValueError("Peripheral capture requires a recent halted target in the GDB/MI log.")
+        raise ValueError(
+            "Peripheral capture requires a recent halted target in the GDB/MI log."
+        )
 
 
 def _latest_mi_target_state(mi_text: str) -> str | None:
@@ -327,7 +355,9 @@ def _resolve_openocd_port(raw: str | None) -> int:
     try:
         return int(raw, 10)
     except ValueError as error:
-        raise ValueError(f"Invalid OpenOCD port in {OPENOCD_PORT_ENV}: {raw}") from error
+        raise ValueError(
+            f"Invalid OpenOCD port in {OPENOCD_PORT_ENV}: {raw}"
+        ) from error
 
 
 def _normalize_value_hex(raw_value: str, width_bits: int) -> str:
@@ -351,7 +381,9 @@ def _skip_reason_for_access(access_mode: str | None) -> str:
         return "Skipped because access metadata is missing."
     if access_mode == "write-only":
         return "Skipped because write-only registers are not safe to read."
-    return f"Skipped because access mode '{access_mode}' is not supported for safe reads."
+    return (
+        f"Skipped because access mode '{access_mode}' is not supported for safe reads."
+    )
 
 
 def _resolve_peripheral_node(
@@ -364,19 +396,27 @@ def _resolve_peripheral_node(
     if not derived_from:
         return deepcopy(peripheral_node)
     if derived_from in seen:
-        raise ValueError(f"SVD peripheral inheritance cycle detected for '{derived_from}'")
+        raise ValueError(
+            f"SVD peripheral inheritance cycle detected for '{derived_from}'"
+        )
     base_node = peripheral_lookup.get(derived_from)
     if base_node is None:
-        raise ValueError(f"SVD peripheral '{_text(peripheral_node.find('name')) or '<unnamed>'}' derives from unknown base '{derived_from}'")
+        raise ValueError(
+            f"SVD peripheral '{_text(peripheral_node.find('name')) or '<unnamed>'}' derives from unknown base '{derived_from}'"
+        )
 
-    merged = _resolve_peripheral_node(base_node, peripheral_lookup, seen=seen | {derived_from})
+    merged = _resolve_peripheral_node(
+        base_node, peripheral_lookup, seen=seen | {derived_from}
+    )
     _overlay_text_child(merged, peripheral_node, "name")
     _overlay_text_child(merged, peripheral_node, "baseAddress")
     _merge_register_nodes(merged, peripheral_node)
     return merged
 
 
-def _merge_register_nodes(target_peripheral: ET.Element, override_peripheral: ET.Element) -> None:
+def _merge_register_nodes(
+    target_peripheral: ET.Element, override_peripheral: ET.Element
+) -> None:
     override_registers = override_peripheral.find("registers")
     if override_registers is None:
         return
@@ -392,7 +432,9 @@ def _merge_register_nodes(target_peripheral: ET.Element, override_peripheral: ET
             register_lookup[register_name] = register_node
 
     for override_register in override_registers.findall("register"):
-        resolved_register = _resolve_register_node(override_register, register_lookup, seen=set())
+        resolved_register = _resolve_register_node(
+            override_register, register_lookup, seen=set()
+        )
         register_name = _text(resolved_register.find("name"))
         if register_name is None:
             continue
@@ -413,18 +455,26 @@ def _resolve_register_node(
     if not derived_from:
         return deepcopy(register_node)
     if derived_from in seen:
-        raise ValueError(f"SVD register inheritance cycle detected for '{derived_from}'")
+        raise ValueError(
+            f"SVD register inheritance cycle detected for '{derived_from}'"
+        )
     base_node = register_lookup.get(derived_from)
     if base_node is None:
-        raise ValueError(f"SVD register '{_text(register_node.find('name')) or '<unnamed>'}' derives from unknown base '{derived_from}'")
+        raise ValueError(
+            f"SVD register '{_text(register_node.find('name')) or '<unnamed>'}' derives from unknown base '{derived_from}'"
+        )
 
-    merged = _resolve_register_node(base_node, register_lookup, seen=seen | {derived_from})
+    merged = _resolve_register_node(
+        base_node, register_lookup, seen=seen | {derived_from}
+    )
     for tag_name in ("name", "addressOffset", "size", "access"):
         _overlay_text_child(merged, register_node, tag_name)
     return merged
 
 
-def _overlay_text_child(target: ET.Element, override: ET.Element, tag_name: str) -> None:
+def _overlay_text_child(
+    target: ET.Element, override: ET.Element, tag_name: str
+) -> None:
     override_node = override.find(tag_name)
     if override_node is None or override_node.text is None:
         return

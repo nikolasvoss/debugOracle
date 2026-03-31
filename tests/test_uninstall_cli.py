@@ -24,16 +24,23 @@ class UninstallCliTests(unittest.TestCase):
                 f"# debugoracle-managed-path\n{export_line}\n",
                 encoding="utf-8",
             )
-            fake_backend = _FakeBackend(InstallState.INSTALLED_SAME_VERSION, str(home / ".local" / "bin"))
+            fake_backend = _FakeBackend(
+                InstallState.INSTALLED_SAME_VERSION, str(home / ".local" / "bin")
+            )
             args = SimpleNamespace(
                 format="json",
                 keep_path=False,
                 force_legacy_path_cleanup=False,
             )
             with (
-                patch("debugoracle.cli.commands.uninstall_cli.PipxBackend", return_value=fake_backend),
+                patch(
+                    "debugoracle.cli.commands.uninstall_cli.PipxBackend",
+                    return_value=fake_backend,
+                ),
                 patch("debugoracle.cli.commands.uninstall_cli.sys.platform", "linux"),
-                patch.dict("os.environ", {"HOME": str(home), "SHELL": "/bin/bash"}, clear=False),
+                patch.dict(
+                    "os.environ", {"HOME": str(home), "SHELL": "/bin/bash"}, clear=False
+                ),
                 redirect_stdout(StringIO()) as out,
             ):
                 exit_code = cmd_uninstall_cli(args)
@@ -52,16 +59,23 @@ class UninstallCliTests(unittest.TestCase):
             profile = home / ".bashrc"
             export_line = f'export PATH="{home / ".local" / "bin"}:$PATH"'
             profile.write_text(f"{export_line}\n", encoding="utf-8")
-            fake_backend = _FakeBackend(InstallState.NOT_INSTALLED, str(home / ".local" / "bin"))
+            fake_backend = _FakeBackend(
+                InstallState.NOT_INSTALLED, str(home / ".local" / "bin")
+            )
             args = SimpleNamespace(
                 format="json",
                 keep_path=False,
                 force_legacy_path_cleanup=False,
             )
             with (
-                patch("debugoracle.cli.commands.uninstall_cli.PipxBackend", return_value=fake_backend),
+                patch(
+                    "debugoracle.cli.commands.uninstall_cli.PipxBackend",
+                    return_value=fake_backend,
+                ),
                 patch("debugoracle.cli.commands.uninstall_cli.sys.platform", "linux"),
-                patch.dict("os.environ", {"HOME": str(home), "SHELL": "/bin/bash"}, clear=False),
+                patch.dict(
+                    "os.environ", {"HOME": str(home), "SHELL": "/bin/bash"}, clear=False
+                ),
                 redirect_stdout(StringIO()) as out,
             ):
                 exit_code = cmd_uninstall_cli(args)
@@ -80,16 +94,23 @@ class UninstallCliTests(unittest.TestCase):
             profile = home / ".bashrc"
             export_line = f'export PATH="{home / ".local" / "bin"}:$PATH"'
             profile.write_text(f"{export_line}\n", encoding="utf-8")
-            fake_backend = _FakeBackend(InstallState.NOT_INSTALLED, str(home / ".local" / "bin"))
+            fake_backend = _FakeBackend(
+                InstallState.NOT_INSTALLED, str(home / ".local" / "bin")
+            )
             args = SimpleNamespace(
                 format="json",
                 keep_path=False,
                 force_legacy_path_cleanup=True,
             )
             with (
-                patch("debugoracle.cli.commands.uninstall_cli.PipxBackend", return_value=fake_backend),
+                patch(
+                    "debugoracle.cli.commands.uninstall_cli.PipxBackend",
+                    return_value=fake_backend,
+                ),
                 patch("debugoracle.cli.commands.uninstall_cli.sys.platform", "linux"),
-                patch.dict("os.environ", {"HOME": str(home), "SHELL": "/bin/bash"}, clear=False),
+                patch.dict(
+                    "os.environ", {"HOME": str(home), "SHELL": "/bin/bash"}, clear=False
+                ),
                 redirect_stdout(StringIO()) as out,
             ):
                 exit_code = cmd_uninstall_cli(args)
@@ -109,16 +130,23 @@ class UninstallCliTests(unittest.TestCase):
                 f"# debugoracle-managed-path\n{export_line}  # local tweak\n",
                 encoding="utf-8",
             )
-            fake_backend = _FakeBackend(InstallState.NOT_INSTALLED, str(home / ".local" / "bin"))
+            fake_backend = _FakeBackend(
+                InstallState.NOT_INSTALLED, str(home / ".local" / "bin")
+            )
             args = SimpleNamespace(
                 format="json",
                 keep_path=False,
                 force_legacy_path_cleanup=False,
             )
             with (
-                patch("debugoracle.cli.commands.uninstall_cli.PipxBackend", return_value=fake_backend),
+                patch(
+                    "debugoracle.cli.commands.uninstall_cli.PipxBackend",
+                    return_value=fake_backend,
+                ),
                 patch("debugoracle.cli.commands.uninstall_cli.sys.platform", "linux"),
-                patch.dict("os.environ", {"HOME": str(home), "SHELL": "/bin/bash"}, clear=False),
+                patch.dict(
+                    "os.environ", {"HOME": str(home), "SHELL": "/bin/bash"}, clear=False
+                ),
                 redirect_stdout(StringIO()) as out,
             ):
                 exit_code = cmd_uninstall_cli(args)
@@ -133,10 +161,17 @@ class UninstallCliTests(unittest.TestCase):
             )
 
     def test_missing_pipx_returns_blocked_code(self) -> None:
-        fake_backend = _FakeBackend(InstallState.NOT_INSTALLED, "/tmp/fake-bin", available=False)
-        args = SimpleNamespace(format="json", keep_path=False, force_legacy_path_cleanup=False)
+        fake_backend = _FakeBackend(
+            InstallState.NOT_INSTALLED, "/tmp/fake-bin", available=False
+        )
+        args = SimpleNamespace(
+            format="json", keep_path=False, force_legacy_path_cleanup=False
+        )
         with (
-            patch("debugoracle.cli.commands.uninstall_cli.PipxBackend", return_value=fake_backend),
+            patch(
+                "debugoracle.cli.commands.uninstall_cli.PipxBackend",
+                return_value=fake_backend,
+            ),
             patch("debugoracle.cli.commands.uninstall_cli.sys.platform", "linux"),
             redirect_stdout(StringIO()) as out,
         ):
@@ -152,9 +187,14 @@ class UninstallCliTests(unittest.TestCase):
             "/tmp/fake-bin",
             uninstall_error=PipxError("boom"),
         )
-        args = SimpleNamespace(format="json", keep_path=False, force_legacy_path_cleanup=False)
+        args = SimpleNamespace(
+            format="json", keep_path=False, force_legacy_path_cleanup=False
+        )
         with (
-            patch("debugoracle.cli.commands.uninstall_cli.PipxBackend", return_value=fake_backend),
+            patch(
+                "debugoracle.cli.commands.uninstall_cli.PipxBackend",
+                return_value=fake_backend,
+            ),
             patch("debugoracle.cli.commands.uninstall_cli.sys.platform", "linux"),
             redirect_stdout(StringIO()) as out,
         ):
@@ -170,9 +210,14 @@ class UninstallCliTests(unittest.TestCase):
             "/tmp/fake-bin",
             inspect_error=PipxError("inspect boom"),
         )
-        args = SimpleNamespace(format="json", keep_path=False, force_legacy_path_cleanup=False)
+        args = SimpleNamespace(
+            format="json", keep_path=False, force_legacy_path_cleanup=False
+        )
         with (
-            patch("debugoracle.cli.commands.uninstall_cli.PipxBackend", return_value=fake_backend),
+            patch(
+                "debugoracle.cli.commands.uninstall_cli.PipxBackend",
+                return_value=fake_backend,
+            ),
             patch("debugoracle.cli.commands.uninstall_cli.sys.platform", "linux"),
             redirect_stdout(StringIO()) as out,
         ):
@@ -186,12 +231,23 @@ class UninstallCliTests(unittest.TestCase):
     def test_unknown_shell_skips_profile_cleanup(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             home = Path(tmpdir)
-            fake_backend = _FakeBackend(InstallState.NOT_INSTALLED, str(home / ".local" / "bin"))
-            args = SimpleNamespace(format="json", keep_path=False, force_legacy_path_cleanup=False)
+            fake_backend = _FakeBackend(
+                InstallState.NOT_INSTALLED, str(home / ".local" / "bin")
+            )
+            args = SimpleNamespace(
+                format="json", keep_path=False, force_legacy_path_cleanup=False
+            )
             with (
-                patch("debugoracle.cli.commands.uninstall_cli.PipxBackend", return_value=fake_backend),
+                patch(
+                    "debugoracle.cli.commands.uninstall_cli.PipxBackend",
+                    return_value=fake_backend,
+                ),
                 patch("debugoracle.cli.commands.uninstall_cli.sys.platform", "linux"),
-                patch.dict("os.environ", {"HOME": str(home), "SHELL": "/bin/unknown-shell"}, clear=False),
+                patch.dict(
+                    "os.environ",
+                    {"HOME": str(home), "SHELL": "/bin/unknown-shell"},
+                    clear=False,
+                ),
                 redirect_stdout(StringIO()) as out,
             ):
                 exit_code = cmd_uninstall_cli(args)
@@ -204,12 +260,21 @@ class UninstallCliTests(unittest.TestCase):
     def test_cleanup_failure_returns_failed_profile_cleanup(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             home = Path(tmpdir)
-            fake_backend = _FakeBackend(InstallState.NOT_INSTALLED, str(home / ".local" / "bin"))
-            args = SimpleNamespace(format="json", keep_path=False, force_legacy_path_cleanup=False)
+            fake_backend = _FakeBackend(
+                InstallState.NOT_INSTALLED, str(home / ".local" / "bin")
+            )
+            args = SimpleNamespace(
+                format="json", keep_path=False, force_legacy_path_cleanup=False
+            )
             with (
-                patch("debugoracle.cli.commands.uninstall_cli.PipxBackend", return_value=fake_backend),
+                patch(
+                    "debugoracle.cli.commands.uninstall_cli.PipxBackend",
+                    return_value=fake_backend,
+                ),
                 patch("debugoracle.cli.commands.uninstall_cli.sys.platform", "linux"),
-                patch.dict("os.environ", {"HOME": str(home), "SHELL": "/bin/bash"}, clear=False),
+                patch.dict(
+                    "os.environ", {"HOME": str(home), "SHELL": "/bin/bash"}, clear=False
+                ),
                 patch(
                     "debugoracle.cli.commands.uninstall_cli.linux_platform.cleanup_path_line",
                     return_value=SimpleNamespace(
@@ -232,12 +297,21 @@ class UninstallCliTests(unittest.TestCase):
     def test_keep_path_skips_profile_changes(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             home = Path(tmpdir)
-            fake_backend = _FakeBackend(InstallState.NOT_INSTALLED, str(home / ".local" / "bin"))
-            args = SimpleNamespace(format="json", keep_path=True, force_legacy_path_cleanup=False)
+            fake_backend = _FakeBackend(
+                InstallState.NOT_INSTALLED, str(home / ".local" / "bin")
+            )
+            args = SimpleNamespace(
+                format="json", keep_path=True, force_legacy_path_cleanup=False
+            )
             with (
-                patch("debugoracle.cli.commands.uninstall_cli.PipxBackend", return_value=fake_backend),
+                patch(
+                    "debugoracle.cli.commands.uninstall_cli.PipxBackend",
+                    return_value=fake_backend,
+                ),
                 patch("debugoracle.cli.commands.uninstall_cli.sys.platform", "linux"),
-                patch.dict("os.environ", {"HOME": str(home), "SHELL": "/bin/bash"}, clear=False),
+                patch.dict(
+                    "os.environ", {"HOME": str(home), "SHELL": "/bin/bash"}, clear=False
+                ),
                 redirect_stdout(StringIO()) as out,
             ):
                 exit_code = cmd_uninstall_cli(args)
@@ -272,7 +346,9 @@ class _FakeBackend:
     def is_available(self) -> bool:
         return self.available
 
-    def inspect_installation(self, package_name: str, target_version: str) -> _FakeStatus:
+    def inspect_installation(
+        self, package_name: str, target_version: str
+    ) -> _FakeStatus:
         if self.inspect_error is not None:
             raise self.inspect_error
         return _FakeStatus(self.state)

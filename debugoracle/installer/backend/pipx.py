@@ -35,13 +35,17 @@ class PipxBackend:
         home = Path(self._env.get("HOME", str(Path.home()))).expanduser()
         return home / ".local" / "bin"
 
-    def inspect_installation(self, package_name: str, target_version: str) -> InstallationStatus:
+    def inspect_installation(
+        self, package_name: str, target_version: str
+    ) -> InstallationStatus:
         payload = self._run_json(["pipx", "list", "--json"])
         venvs = payload.get("venvs") if isinstance(payload, dict) else None
         if not isinstance(venvs, dict) or package_name not in venvs:
             return InstallationStatus(state=InstallState.NOT_INSTALLED)
         metadata = venvs[package_name].get("metadata", {})
-        main_package = metadata.get("main_package", {}) if isinstance(metadata, dict) else {}
+        main_package = (
+            metadata.get("main_package", {}) if isinstance(metadata, dict) else {}
+        )
         installed_version = None
         if isinstance(main_package, dict):
             candidate = main_package.get("package_version")
@@ -56,7 +60,9 @@ class PipxBackend:
             state = InstallState.INSTALLED_OLDER_VERSION
         else:
             state = InstallState.INSTALLED_NEWER_VERSION
-        return InstallationStatus(state=state, installed_version=installed_version, binary_path=binary_path)
+        return InstallationStatus(
+            state=state, installed_version=installed_version, binary_path=binary_path
+        )
 
     def install(self, source_spec: str, *, force: bool = False) -> None:
         command = ["pipx", "install"]
@@ -98,16 +104,22 @@ class PipxBackend:
             env=self._env,
         )
         if completed.returncode != 0:
-            return False, (completed.stderr or completed.stdout or "version check failed").strip()
+            return False, (
+                completed.stderr or completed.stdout or "version check failed"
+            ).strip()
         output = (completed.stdout or completed.stderr).strip()
         if expected_version is not None and expected_version not in output:
             return False, f"Installed binary reports unexpected version: {output}"
         return True, output
 
     def _run(self, command: list[str]) -> subprocess.CompletedProcess[str]:
-        completed = subprocess.run(command, check=False, capture_output=True, text=True, env=self._env)
+        completed = subprocess.run(
+            command, check=False, capture_output=True, text=True, env=self._env
+        )
         if completed.returncode != 0:
-            raise PipxError((completed.stderr or completed.stdout or "pipx command failed").strip())
+            raise PipxError(
+                (completed.stderr or completed.stdout or "pipx command failed").strip()
+            )
         return completed
 
     def _run_json(self, command: list[str]) -> dict[str, object]:

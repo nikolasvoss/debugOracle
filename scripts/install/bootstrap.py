@@ -25,7 +25,13 @@ def _parse_bootstrap_args(argv: list[str]) -> tuple[str, list[str]]:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument(
         "--docs-tools",
-        choices=[DOCS_MODE_PROMPT, DOCS_MODE_NONE, DOCS_MODE_DOCLING, DOCS_MODE_SEMANTIC, DOCS_MODE_ALL],
+        choices=[
+            DOCS_MODE_PROMPT,
+            DOCS_MODE_NONE,
+            DOCS_MODE_DOCLING,
+            DOCS_MODE_SEMANTIC,
+            DOCS_MODE_ALL,
+        ],
         default=DOCS_MODE_PROMPT,
         help=argparse.SUPPRESS,
     )
@@ -35,8 +41,12 @@ def _parse_bootstrap_args(argv: list[str]) -> tuple[str, list[str]]:
 
 def _render_docs_tools_intro() -> None:
     print("Optional docs tooling can improve manual/datasheet ingest quality.")
-    print("  - docling: better extraction on hard or scanned PDFs (heavier dependency).")
-    print("  - semantic: hybrid semantic search over ingested docs (installs embedding deps).")
+    print(
+        "  - docling: better extraction on hard or scanned PDFs (heavier dependency)."
+    )
+    print(
+        "  - semantic: hybrid semantic search over ingested docs (installs embedding deps)."
+    )
 
 
 def _ask_docs_tools_choice() -> str:
@@ -67,7 +77,10 @@ def _handle_optional_install_failure(remediation: str) -> int:
     print("Optional docs tooling installation failed.", file=sys.stderr)
     print(f"Remediation: {remediation}", file=sys.stderr)
     if not sys.stdin.isatty():
-        print("Non-interactive mode: failing setup due to optional tooling install failure.", file=sys.stderr)
+        print(
+            "Non-interactive mode: failing setup due to optional tooling install failure.",
+            file=sys.stderr,
+        )
         return 1
 
     answer = input("Continue with base dbgoracle install only? [Y/n] ").strip().lower()
@@ -81,7 +94,9 @@ def _handle_optional_install_failure(remediation: str) -> int:
 def _install_docs_tools(selection: str) -> int:
     if selection == DOCS_MODE_NONE:
         print("Skipped optional docs tooling setup.")
-        print("Install later with: pipx inject debugoracle docling sentence-transformers numpy")
+        print(
+            "Install later with: pipx inject debugoracle docling sentence-transformers numpy"
+        )
         return 0
 
     print()
@@ -98,7 +113,9 @@ def _install_docs_tools(selection: str) -> int:
         if _inject_requirements(["sentence-transformers", "numpy"]):
             print("Installed semantic search dependencies.")
             return 0
-        return _handle_optional_install_failure("pipx inject debugoracle sentence-transformers numpy")
+        return _handle_optional_install_failure(
+            "pipx inject debugoracle sentence-transformers numpy"
+        )
 
     if selection == DOCS_MODE_ALL:
         if _inject_requirements(["docling", "sentence-transformers", "numpy"]):
@@ -115,12 +132,14 @@ def _install_docs_tools(selection: str) -> int:
 def bootstrap(argv: list[str] | None = None) -> int:
     raw_args = list(argv or sys.argv[1:])
     docs_tools_mode, passthrough = _parse_bootstrap_args(raw_args)
-    install_code = main([
-        "install-cli",
-        "--manifest-url",
-        str(MANIFEST_PATH),
-        *passthrough,
-    ])
+    install_code = main(
+        [
+            "install-cli",
+            "--manifest-url",
+            str(MANIFEST_PATH),
+            *passthrough,
+        ]
+    )
     if install_code != 0:
         return install_code
 
@@ -130,8 +149,12 @@ def bootstrap(argv: list[str] | None = None) -> int:
             selected_mode = _ask_docs_tools_choice()
         else:
             selected_mode = DOCS_MODE_NONE
-            print("Skipping optional docs tooling prompt because stdin is non-interactive.")
-            print("Install later with: pipx inject debugoracle docling sentence-transformers numpy")
+            print(
+                "Skipping optional docs tooling prompt because stdin is non-interactive."
+            )
+            print(
+                "Install later with: pipx inject debugoracle docling sentence-transformers numpy"
+            )
     return _install_docs_tools(selected_mode)
 
 

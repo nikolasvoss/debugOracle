@@ -47,21 +47,32 @@ class GuardOpenOcdLaunchTests(unittest.TestCase):
                 {
                     "version": "2.0.0",
                     "tasks": [
-                        {"label": "DebugOracle: Prelaunch", "dependsOn": ["Prepare debug logs"]},
-                        {"label": "Prepare debug logs", "type": "shell", "command": "mkdir -p .dbgoracle"},
+                        {
+                            "label": "DebugOracle: Prelaunch",
+                            "dependsOn": ["Prepare debug logs"],
+                        },
+                        {
+                            "label": "Prepare debug logs",
+                            "type": "shell",
+                            "command": "mkdir -p .dbgoracle",
+                        },
                     ],
                 }
             ),
             encoding="utf-8",
         )
 
-    def test_guard_openocd_launch_fails_early_when_workspace_setup_is_incomplete(self) -> None:
+    def test_guard_openocd_launch_fails_early_when_workspace_setup_is_incomplete(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
             stdout = io.StringIO()
             stderr = io.StringIO()
             with redirect_stdout(stdout), redirect_stderr(stderr):
-                exit_code = main(["guard-openocd-launch", "--workspace-root", str(workspace)])
+                exit_code = main(
+                    ["guard-openocd-launch", "--workspace-root", str(workspace)]
+                )
 
         self.assertEqual(exit_code, 2)
         self.assertEqual(stdout.getvalue(), "")
@@ -69,7 +80,10 @@ class GuardOpenOcdLaunchTests(unittest.TestCase):
         self.assertIn("Run `dbgoracle init-workspace --attach", stderr.getvalue())
 
     def test_guard_openocd_launch_passes_when_no_matching_process_exists(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir, tempfile.TemporaryDirectory() as otherdir:
+        with (
+            tempfile.TemporaryDirectory() as tmpdir,
+            tempfile.TemporaryDirectory() as otherdir,
+        ):
             workspace = Path(tmpdir)
             self._write_attach_workspace(workspace)
             process = OpenOcdProcess(
@@ -80,14 +94,22 @@ class GuardOpenOcdLaunchTests(unittest.TestCase):
 
             stdout = io.StringIO()
             stderr = io.StringIO()
-            with patch(
-                "debugoracle.cli.commands.guard_openocd_launch.discover_openocd_processes",
-                return_value=[process],
-            ), redirect_stdout(stdout), redirect_stderr(stderr):
-                exit_code = main(["guard-openocd-launch", "--workspace-root", str(workspace)])
+            with (
+                patch(
+                    "debugoracle.cli.commands.guard_openocd_launch.discover_openocd_processes",
+                    return_value=[process],
+                ),
+                redirect_stdout(stdout),
+                redirect_stderr(stderr),
+            ):
+                exit_code = main(
+                    ["guard-openocd-launch", "--workspace-root", str(workspace)]
+                )
 
         self.assertEqual(exit_code, 0)
-        self.assertIn("no conflicting workspace-matching OpenOCD session", stdout.getvalue())
+        self.assertIn(
+            "no conflicting workspace-matching OpenOCD session", stdout.getvalue()
+        )
         self.assertEqual(stderr.getvalue(), "")
 
     def test_guard_openocd_launch_blocks_matching_process(self) -> None:
@@ -102,11 +124,17 @@ class GuardOpenOcdLaunchTests(unittest.TestCase):
 
             stdout = io.StringIO()
             stderr = io.StringIO()
-            with patch(
-                "debugoracle.cli.commands.guard_openocd_launch.discover_openocd_processes",
-                return_value=[process],
-            ), redirect_stdout(stdout), redirect_stderr(stderr):
-                exit_code = main(["guard-openocd-launch", "--workspace-root", str(workspace)])
+            with (
+                patch(
+                    "debugoracle.cli.commands.guard_openocd_launch.discover_openocd_processes",
+                    return_value=[process],
+                ),
+                redirect_stdout(stdout),
+                redirect_stderr(stderr),
+            ):
+                exit_code = main(
+                    ["guard-openocd-launch", "--workspace-root", str(workspace)]
+                )
 
         self.assertEqual(exit_code, 2)
         self.assertEqual(stdout.getvalue(), "")
@@ -131,17 +159,25 @@ class GuardOpenOcdLaunchTests(unittest.TestCase):
 
             stdout = io.StringIO()
             stderr = io.StringIO()
-            with patch(
-                "debugoracle.cli.commands.guard_openocd_launch.discover_openocd_processes",
-                return_value=processes,
-            ), redirect_stdout(stdout), redirect_stderr(stderr):
-                exit_code = main(["guard-openocd-launch", "--workspace-root", str(workspace)])
+            with (
+                patch(
+                    "debugoracle.cli.commands.guard_openocd_launch.discover_openocd_processes",
+                    return_value=processes,
+                ),
+                redirect_stdout(stdout),
+                redirect_stderr(stderr),
+            ):
+                exit_code = main(
+                    ["guard-openocd-launch", "--workspace-root", str(workspace)]
+                )
 
         self.assertEqual(exit_code, 2)
         self.assertEqual(stdout.getvalue(), "")
         self.assertIn("multiple workspace-matching OpenOCD sessions", stderr.getvalue())
 
-    def test_guard_openocd_launch_blocks_when_process_discovery_lacks_workspace_identity(self) -> None:
+    def test_guard_openocd_launch_blocks_when_process_discovery_lacks_workspace_identity(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
             self._write_attach_workspace(workspace)
@@ -153,15 +189,23 @@ class GuardOpenOcdLaunchTests(unittest.TestCase):
 
             stdout = io.StringIO()
             stderr = io.StringIO()
-            with patch(
-                "debugoracle.cli.commands.guard_openocd_launch.discover_openocd_processes",
-                return_value=[process],
-            ), redirect_stdout(stdout), redirect_stderr(stderr):
-                exit_code = main(["guard-openocd-launch", "--workspace-root", str(workspace)])
+            with (
+                patch(
+                    "debugoracle.cli.commands.guard_openocd_launch.discover_openocd_processes",
+                    return_value=[process],
+                ),
+                redirect_stdout(stdout),
+                redirect_stderr(stderr),
+            ):
+                exit_code = main(
+                    ["guard-openocd-launch", "--workspace-root", str(workspace)]
+                )
 
         self.assertEqual(exit_code, 2)
         self.assertEqual(stdout.getvalue(), "")
-        self.assertIn("could not safely determine workspace ownership", stderr.getvalue())
+        self.assertIn(
+            "could not safely determine workspace ownership", stderr.getvalue()
+        )
 
 
 if __name__ == "__main__":

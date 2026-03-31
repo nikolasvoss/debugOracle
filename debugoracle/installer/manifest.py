@@ -36,15 +36,26 @@ class ReleaseManifest:
             "python_requires",
             "installer_min_version",
         ]
-        missing = [key for key in required if not isinstance(payload.get(key), str) or not str(payload.get(key)).strip()]
+        missing = [
+            key
+            for key in required
+            if not isinstance(payload.get(key), str)
+            or not str(payload.get(key)).strip()
+        ]
         if missing:
-            raise ManifestError(f"Manifest missing required string fields: {', '.join(missing)}")
+            raise ManifestError(
+                f"Manifest missing required string fields: {', '.join(missing)}"
+            )
         release_notes_url = payload.get("release_notes_url")
         source_url = payload.get("source_url")
         if release_notes_url is not None and not isinstance(release_notes_url, str):
-            raise ManifestError("Manifest field release_notes_url must be a string when provided")
+            raise ManifestError(
+                "Manifest field release_notes_url must be a string when provided"
+            )
         if source_url is not None and not isinstance(source_url, str):
-            raise ManifestError("Manifest field source_url must be a string when provided")
+            raise ManifestError(
+                "Manifest field source_url must be a string when provided"
+            )
         return cls(
             schema_version=str(payload["schema_version"]),
             channel=str(payload["channel"]),

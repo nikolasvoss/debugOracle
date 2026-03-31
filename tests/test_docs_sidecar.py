@@ -80,7 +80,9 @@ class DocsSidecarTests(unittest.TestCase):
     def test_ingest_explicit_text_file_writes_extended_sidecar(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             manual = Path(tmpdir) / "manual.txt"
-            manual.write_text("USART1 CR1 register enables transmitter.\n", encoding="utf-8")
+            manual.write_text(
+                "USART1 CR1 register enables transmitter.\n", encoding="utf-8"
+            )
             expected_hash = compute_source_hash(manual.resolve())
 
             batch = ingest_documents(workspace_root=tmpdir, files=[str(manual)])
@@ -150,7 +152,9 @@ class DocsSidecarTests(unittest.TestCase):
             manual.write_text("GPIOA MODER register.\n", encoding="utf-8")
 
             ingest_documents(workspace_root=tmpdir, files=[str(manual)])
-            forced = ingest_documents(workspace_root=tmpdir, files=[str(manual)], force=True)
+            forced = ingest_documents(
+                workspace_root=tmpdir, files=[str(manual)], force=True
+            )
 
         self.assertFalse(forced.results[0].skipped)
 
@@ -163,7 +167,10 @@ class DocsSidecarTests(unittest.TestCase):
             envelope = {
                 "source_pdf": str(source.resolve()),
                 "parser_used": "docling",
-                "derived_paths": [str(sidecar / ENVELOPE_FILENAME), str(sidecar / "index.json")],
+                "derived_paths": [
+                    str(sidecar / ENVELOPE_FILENAME),
+                    str(sidecar / "index.json"),
+                ],
                 "page_count": 1,
                 "chunk_count": 1,
                 "warning_summary": "",
@@ -171,7 +178,9 @@ class DocsSidecarTests(unittest.TestCase):
                 "source_hash": compute_source_hash(source.resolve()),
                 "semantic_indexed": False,
             }
-            (sidecar / ENVELOPE_FILENAME).write_text(json.dumps(envelope), encoding="utf-8")
+            (sidecar / ENVELOPE_FILENAME).write_text(
+                json.dumps(envelope), encoding="utf-8"
+            )
             (sidecar / "index.json").write_text("[]", encoding="utf-8")
 
             fresh = is_ingest_fresh(source.resolve(), sidecar, parser_name="pymupdf")
@@ -187,13 +196,18 @@ class DocsSidecarTests(unittest.TestCase):
             envelope = {
                 "source_pdf": str(source.resolve()),
                 "parser_used": "pymupdf",
-                "derived_paths": [str(sidecar / ENVELOPE_FILENAME), str(sidecar / "index.json")],
+                "derived_paths": [
+                    str(sidecar / ENVELOPE_FILENAME),
+                    str(sidecar / "index.json"),
+                ],
                 "page_count": 1,
                 "chunk_count": 1,
                 "warning_summary": "",
                 "ingest_state": "clean",
             }
-            (sidecar / ENVELOPE_FILENAME).write_text(json.dumps(envelope), encoding="utf-8")
+            (sidecar / ENVELOPE_FILENAME).write_text(
+                json.dumps(envelope), encoding="utf-8"
+            )
             (sidecar / "index.json").write_text("[]", encoding="utf-8")
 
             fresh = is_ingest_fresh(source.resolve(), sidecar, parser_name="pymupdf")
@@ -209,7 +223,10 @@ class DocsSidecarTests(unittest.TestCase):
             envelope = {
                 "source_pdf": str(source.resolve()),
                 "parser_used": "pymupdf",
-                "derived_paths": [str(sidecar / ENVELOPE_FILENAME), str(sidecar / "index.json")],
+                "derived_paths": [
+                    str(sidecar / ENVELOPE_FILENAME),
+                    str(sidecar / "index.json"),
+                ],
                 "page_count": 1,
                 "chunk_count": 0,
                 "warning_summary": "failed run",
@@ -217,7 +234,9 @@ class DocsSidecarTests(unittest.TestCase):
                 "source_hash": compute_source_hash(source.resolve()),
                 "semantic_indexed": False,
             }
-            (sidecar / ENVELOPE_FILENAME).write_text(json.dumps(envelope), encoding="utf-8")
+            (sidecar / ENVELOPE_FILENAME).write_text(
+                json.dumps(envelope), encoding="utf-8"
+            )
             (sidecar / "index.json").write_text("[]", encoding="utf-8")
 
             fresh = is_ingest_fresh(source.resolve(), sidecar, parser_name="pymupdf")
@@ -275,7 +294,9 @@ second-page text
         self.assertEqual(chunks[1].page_start, 2)
 
     def test_fallback_chunk_when_no_headings(self) -> None:
-        chunks, warnings = split_markdown_by_headings("plain markdown body", Path("manual.pdf"), doc=None)
+        chunks, warnings = split_markdown_by_headings(
+            "plain markdown body", Path("manual.pdf"), doc=None
+        )
 
         self.assertEqual(warnings, [])
         self.assertEqual(len(chunks), 1)
@@ -304,7 +325,10 @@ second-page text
                 envelope=DocsEnvelope(
                     source_pdf=str(manual.resolve()),
                     parser_used="plain-text",
-                    derived_paths=[str(sidecar / ENVELOPE_FILENAME), str(sidecar / "index.json")],
+                    derived_paths=[
+                        str(sidecar / ENVELOPE_FILENAME),
+                        str(sidecar / "index.json"),
+                    ],
                     page_count=1,
                     chunk_count=1,
                     warning_summary="",
@@ -345,7 +369,10 @@ second-page text
                 envelope=DocsEnvelope(
                     source_pdf=str(manual.resolve()),
                     parser_used="plain-text",
-                    derived_paths=[str(sidecar / ENVELOPE_FILENAME), str(sidecar / "index.json")],
+                    derived_paths=[
+                        str(sidecar / ENVELOPE_FILENAME),
+                        str(sidecar / "index.json"),
+                    ],
                     page_count=2,
                     chunk_count=2,
                     warning_summary="",
@@ -383,7 +410,9 @@ second-page text
                 "debugoracle.docs_sidecar._semantic_scores_for_entries",
                 return_value=([0.1, 0.95], []),
             ):
-                result = search_documents(workspace_root=tmpdir, query="baud", semantic=True)
+                result = search_documents(
+                    workspace_root=tmpdir, query="baud", semantic=True
+                )
 
         self.assertEqual(len(result.hits), 2)
         self.assertGreaterEqual(result.hits[0].score, result.hits[1].score)
@@ -439,7 +468,9 @@ second-page text
 
         self.assertEqual(len(batch.results), 1)
         self.assertEqual(batch.results[0].ingest_state, "failed")
-        self.assertIn("not supported for PDF ingestion", batch.results[0].warning_summary)
+        self.assertIn(
+            "not supported for PDF ingestion", batch.results[0].warning_summary
+        )
 
     def test_search_surfaces_sidecar_load_warning_instead_of_hiding_it(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -481,7 +512,15 @@ second-page text
             stderr_buffer = StringIO()
             with redirect_stdout(stdout_buffer), redirect_stderr(stderr_buffer):
                 exit_code = main(
-                    ["docs", "search", "GPIOB", "--workspace-root", tmpdir, "--format", "json"]
+                    [
+                        "docs",
+                        "search",
+                        "GPIOB",
+                        "--workspace-root",
+                        tmpdir,
+                        "--format",
+                        "json",
+                    ]
                 )
             stdout = stdout_buffer.getvalue()
             stderr = stderr_buffer.getvalue()
@@ -507,7 +546,9 @@ second-page text
             discovered_candidates=[],
         )
 
-        with patch("debugoracle.cli.commands.docs_cli._docling_installed", return_value=False):
+        with patch(
+            "debugoracle.cli.commands.docs_cli._docling_installed", return_value=False
+        ):
             rendered = _render_ingest(batch, fmt="text")
 
         self.assertIn("hint: extraction quality may improve with Docling", rendered)
@@ -549,9 +590,17 @@ second-page text
             ],
             discovered_candidates=["/tmp/a.pdf"],
         )
-        with patch("debugoracle.cli.commands.docs_cli.ingest_documents", side_effect=[first, second]) as mocked_ingest, patch(
-            "debugoracle.cli.commands.docs_cli._interactive_enabled", return_value=True
-        ), patch("builtins.input", return_value="y"):
+        with (
+            patch(
+                "debugoracle.cli.commands.docs_cli.ingest_documents",
+                side_effect=[first, second],
+            ) as mocked_ingest,
+            patch(
+                "debugoracle.cli.commands.docs_cli._interactive_enabled",
+                return_value=True,
+            ),
+            patch("builtins.input", return_value="y"),
+        ):
             batch = _run_docs_ingest(args, progress_cb=None)
 
         self.assertEqual(batch.results[0].ingest_state, "clean")
@@ -561,7 +610,9 @@ second-page text
     def test_resume_reuses_staged_parse_after_semantic_failure(self) -> None:
         calls: list[int] = []
 
-        def fake_parse(self: PlainTextParser, source: Path, *, progress_cb=None) -> DocsParseResult:
+        def fake_parse(
+            self: PlainTextParser, source: Path, *, progress_cb=None
+        ) -> DocsParseResult:
             calls.append(1)
             return DocsParseResult(
                 chunks=[
@@ -583,12 +634,25 @@ second-page text
             manual = Path(tmpdir) / "manual.txt"
             manual.write_text("USART2 BRR register.\n", encoding="utf-8")
 
-            with patch("debugoracle.docs_sidecar.PlainTextParser.parse", new=fake_parse), patch(
-                "debugoracle.docs_sidecar.encode_embeddings",
-                side_effect=[RuntimeError("semantic failed"), [[0.0]]],
-            ), patch("debugoracle.docs_sidecar.save_embeddings", side_effect=lambda sidecar_dir, _: (Path(sidecar_dir) / "embeddings.npy").write_bytes(b"x")):
-                first = ingest_documents(workspace_root=tmpdir, files=[str(manual)], semantic=True)
-                second = ingest_documents(workspace_root=tmpdir, files=[str(manual)], semantic=True)
+            with (
+                patch("debugoracle.docs_sidecar.PlainTextParser.parse", new=fake_parse),
+                patch(
+                    "debugoracle.docs_sidecar.encode_embeddings",
+                    side_effect=[RuntimeError("semantic failed"), [[0.0]]],
+                ),
+                patch(
+                    "debugoracle.docs_sidecar.save_embeddings",
+                    side_effect=lambda sidecar_dir, _: (
+                        Path(sidecar_dir) / "embeddings.npy"
+                    ).write_bytes(b"x"),
+                ),
+            ):
+                first = ingest_documents(
+                    workspace_root=tmpdir, files=[str(manual)], semantic=True
+                )
+                second = ingest_documents(
+                    workspace_root=tmpdir, files=[str(manual)], semantic=True
+                )
 
             sidecar = sidecar_dir_for(manual)
             staging = sidecar.with_name(f"{sidecar.name}{STAGING_SUFFIX}")
@@ -602,7 +666,13 @@ second-page text
         parser = DoclingParser()
         real_import = builtins.__import__
 
-        def fake_import(name: str, globals: object = None, locals: object = None, fromlist: object = (), level: int = 0) -> object:
+        def fake_import(
+            name: str,
+            globals: object = None,
+            locals: object = None,
+            fromlist: object = (),
+            level: int = 0,
+        ) -> object:
             if name == "docling.document_converter":
                 error = ModuleNotFoundError("No module named 'rapidocr'")
                 error.name = "rapidocr"
@@ -620,7 +690,13 @@ second-page text
         parser = DoclingParser()
         real_import = builtins.__import__
 
-        def fake_import(name: str, globals: object = None, locals: object = None, fromlist: object = (), level: int = 0) -> object:
+        def fake_import(
+            name: str,
+            globals: object = None,
+            locals: object = None,
+            fromlist: object = (),
+            level: int = 0,
+        ) -> object:
             if name == "docling.document_converter":
                 error = ModuleNotFoundError("No module named 'docling'")
                 error.name = "docling"
