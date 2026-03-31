@@ -43,14 +43,18 @@ class DocsCliTests(unittest.TestCase):
     def test_ingest_exit_code_branches(self) -> None:
         self.assertEqual(
             docs_cli._ingest_exit_code(
-                DocsIngestBatch(results=[], discovered_candidates=[], confirmation_required=True)
+                DocsIngestBatch(
+                    results=[], discovered_candidates=[], confirmation_required=True
+                )
             ),
             2,
         )
         self.assertEqual(
             docs_cli._ingest_exit_code(
                 DocsIngestBatch(
-                    results=[], discovered_candidates=[], invalid_inputs=["missing file"]
+                    results=[],
+                    discovered_candidates=[],
+                    invalid_inputs=["missing file"],
                 )
             ),
             1,
@@ -66,7 +70,9 @@ class DocsCliTests(unittest.TestCase):
             2,
         )
         self.assertEqual(
-            docs_cli._ingest_exit_code(DocsIngestBatch(results=[], discovered_candidates=[])),
+            docs_cli._ingest_exit_code(
+                DocsIngestBatch(results=[], discovered_candidates=[])
+            ),
             1,
         )
         self.assertEqual(
@@ -87,7 +93,9 @@ class DocsCliTests(unittest.TestCase):
         )
         self.assertEqual(
             docs_cli._ingest_exit_code(
-                DocsIngestBatch(results=[_ingest_result(state="ok")], discovered_candidates=[])
+                DocsIngestBatch(
+                    results=[_ingest_result(state="ok")], discovered_candidates=[]
+                )
             ),
             0,
         )
@@ -111,13 +119,20 @@ class DocsCliTests(unittest.TestCase):
     def test_render_ingest_text_and_json(self) -> None:
         batch = DocsIngestBatch(
             results=[
-                _ingest_result(state="warning", parser="pymupdf", warning_summary="warn", skipped=True)
+                _ingest_result(
+                    state="warning",
+                    parser="pymupdf",
+                    warning_summary="warn",
+                    skipped=True,
+                )
             ],
             discovered_candidates=["/tmp/docs/a.pdf"],
             warnings=["top-level warning"],
             confirmation_required=True,
         )
-        with patch("debugoracle.cli.commands.docs_cli._docling_installed", return_value=False):
+        with patch(
+            "debugoracle.cli.commands.docs_cli._docling_installed", return_value=False
+        ):
             text = docs_cli._render_ingest(batch, fmt="text")
         self.assertIn("Discovered candidates:", text)
         self.assertIn("Action: re-run with --yes", text)
@@ -202,8 +217,12 @@ class DocsCliTests(unittest.TestCase):
         )
 
         with (
-            patch("debugoracle.cli.commands.docs_cli.sys.stdin.isatty", return_value=True),
-            patch("debugoracle.cli.commands.docs_cli.sys.stdout.isatty", return_value=True),
+            patch(
+                "debugoracle.cli.commands.docs_cli.sys.stdin.isatty", return_value=True
+            ),
+            patch(
+                "debugoracle.cli.commands.docs_cli.sys.stdout.isatty", return_value=True
+            ),
             patch(
                 "debugoracle.cli.commands.docs_cli.ingest_documents",
                 side_effect=[first, second],
@@ -216,8 +235,12 @@ class DocsCliTests(unittest.TestCase):
         self.assertTrue(ingest_mock.call_args.kwargs["confirm_discovered"])
 
         with (
-            patch("debugoracle.cli.commands.docs_cli.sys.stdin.isatty", return_value=True),
-            patch("debugoracle.cli.commands.docs_cli.sys.stdout.isatty", return_value=True),
+            patch(
+                "debugoracle.cli.commands.docs_cli.sys.stdin.isatty", return_value=True
+            ),
+            patch(
+                "debugoracle.cli.commands.docs_cli.sys.stdout.isatty", return_value=True
+            ),
             patch(
                 "debugoracle.cli.commands.docs_cli.ingest_documents",
                 return_value=first,
@@ -234,15 +257,23 @@ class DocsCliTests(unittest.TestCase):
 
         args = SimpleNamespace(no_interactive=False, format="json", output=None)
         with (
-            patch("debugoracle.cli.commands.docs_cli.sys.stdin.isatty", return_value=True),
-            patch("debugoracle.cli.commands.docs_cli.sys.stdout.isatty", return_value=True),
+            patch(
+                "debugoracle.cli.commands.docs_cli.sys.stdin.isatty", return_value=True
+            ),
+            patch(
+                "debugoracle.cli.commands.docs_cli.sys.stdout.isatty", return_value=True
+            ),
         ):
             self.assertFalse(docs_cli._interactive_enabled(args))
 
         args = SimpleNamespace(no_interactive=False, format="text", output=None)
         with (
-            patch("debugoracle.cli.commands.docs_cli.sys.stdin.isatty", return_value=True),
-            patch("debugoracle.cli.commands.docs_cli.sys.stdout.isatty", return_value=True),
+            patch(
+                "debugoracle.cli.commands.docs_cli.sys.stdin.isatty", return_value=True
+            ),
+            patch(
+                "debugoracle.cli.commands.docs_cli.sys.stdout.isatty", return_value=True
+            ),
         ):
             self.assertTrue(docs_cli._interactive_enabled(args))
 
@@ -257,7 +288,9 @@ class DocsCliTests(unittest.TestCase):
             patch("debugoracle.cli.commands.docs_cli.emit") as emit_mock,
         ):
             code = docs_cli.cmd_docs_search(
-                SimpleNamespace(**common_args, query="q", limit=5, file=[], semantic=False)
+                SimpleNamespace(
+                    **common_args, query="q", limit=5, file=[], semantic=False
+                )
             )
         self.assertEqual(code, 1)
         emit_mock.assert_called_once()
@@ -270,7 +303,9 @@ class DocsCliTests(unittest.TestCase):
             patch("debugoracle.cli.commands.docs_cli.emit"),
         ):
             code = docs_cli.cmd_docs_search(
-                SimpleNamespace(**common_args, query="q", limit=5, file=[], semantic=False)
+                SimpleNamespace(
+                    **common_args, query="q", limit=5, file=[], semantic=False
+                )
             )
         self.assertEqual(code, 2)
 
@@ -295,12 +330,16 @@ class DocsCliTests(unittest.TestCase):
             patch("debugoracle.cli.commands.docs_cli.emit"),
         ):
             code = docs_cli.cmd_docs_search(
-                SimpleNamespace(**common_args, query="q", limit=5, file=[], semantic=False)
+                SimpleNamespace(
+                    **common_args, query="q", limit=5, file=[], semantic=False
+                )
             )
         self.assertEqual(code, 0)
 
         with (
-            patch("debugoracle.cli.commands.docs_cli.status_documents", return_value=[]),
+            patch(
+                "debugoracle.cli.commands.docs_cli.status_documents", return_value=[]
+            ),
             patch("debugoracle.cli.commands.docs_cli.emit"),
         ):
             code = docs_cli.cmd_docs_status(SimpleNamespace(**common_args, file=[]))

@@ -24,7 +24,9 @@ from debugoracle.installer.outcomes import InstallState
 class PipxBackendTests(unittest.TestCase):
     def test_is_available_follows_which(self) -> None:
         backend = PipxBackend(env={"PATH": "/bin"})
-        with patch("debugoracle.installer.backend.pipx.shutil.which", return_value=None):
+        with patch(
+            "debugoracle.installer.backend.pipx.shutil.which", return_value=None
+        ):
             self.assertFalse(backend.is_available())
         with patch(
             "debugoracle.installer.backend.pipx.shutil.which", return_value="/bin/pipx"
@@ -111,7 +113,9 @@ class PipxBackendTests(unittest.TestCase):
             run_mock.call_args_list,
             [
                 unittest.mock.call(["pipx", "install", "debugoracle==0.2.0"]),
-                unittest.mock.call(["pipx", "install", "--force", "debugoracle==0.2.0"]),
+                unittest.mock.call(
+                    ["pipx", "install", "--force", "debugoracle==0.2.0"]
+                ),
                 unittest.mock.call(["pipx", "upgrade", "debugoracle"]),
                 unittest.mock.call(["pipx", "install", "--force", "/tmp/src"]),
                 unittest.mock.call(["pipx", "uninstall", "debugoracle"]),
@@ -120,8 +124,9 @@ class PipxBackendTests(unittest.TestCase):
 
     def test_verify_cli_failure_paths_and_success(self) -> None:
         backend = PipxBackend(env={"PATH": "/bin", "HOME": "/tmp/home"})
-        with patch("debugoracle.installer.backend.pipx.shutil.which", return_value=None), patch(
-            "pathlib.Path.is_file", return_value=False
+        with (
+            patch("debugoracle.installer.backend.pipx.shutil.which", return_value=None),
+            patch("pathlib.Path.is_file", return_value=False),
         ):
             ok, message = backend.verify_cli("dbgoracle")
         self.assertFalse(ok)
@@ -137,7 +142,9 @@ class PipxBackendTests(unittest.TestCase):
 
         with patch(
             "debugoracle.installer.backend.pipx.subprocess.run",
-            return_value=SimpleNamespace(returncode=0, stdout="dbgoracle 0.1.0", stderr=""),
+            return_value=SimpleNamespace(
+                returncode=0, stdout="dbgoracle 0.1.0", stderr=""
+            ),
         ):
             ok, message = backend.verify_cli(
                 "dbgoracle", binary_path="/tmp/dbgoracle", expected_version="0.2.0"
@@ -147,7 +154,9 @@ class PipxBackendTests(unittest.TestCase):
 
         with patch(
             "debugoracle.installer.backend.pipx.subprocess.run",
-            return_value=SimpleNamespace(returncode=0, stdout="dbgoracle 0.2.0", stderr=""),
+            return_value=SimpleNamespace(
+                returncode=0, stdout="dbgoracle 0.2.0", stderr=""
+            ),
         ):
             ok, message = backend.verify_cli(
                 "dbgoracle", binary_path="/tmp/dbgoracle", expected_version="0.2.0"
@@ -166,7 +175,9 @@ class PipxBackendTests(unittest.TestCase):
 
     def test_run_json_rejects_invalid_and_non_mapping_payloads(self) -> None:
         backend = PipxBackend(env={"PATH": "/bin"})
-        with patch.object(backend, "_run", return_value=SimpleNamespace(stdout="not-json")):
+        with patch.object(
+            backend, "_run", return_value=SimpleNamespace(stdout="not-json")
+        ):
             with self.assertRaises(PipxError):
                 backend._run_json(["pipx", "list", "--json"])
         with patch.object(backend, "_run", return_value=SimpleNamespace(stdout="[]")):
@@ -180,7 +191,9 @@ class PipxBackendTests(unittest.TestCase):
 
 
 class ManifestFetcherTests(unittest.TestCase):
-    def test_release_manifest_requires_strings_for_required_and_optional_fields(self) -> None:
+    def test_release_manifest_requires_strings_for_required_and_optional_fields(
+        self,
+    ) -> None:
         with self.assertRaises(ManifestError):
             ReleaseManifest.from_mapping({"schema_version": "1"})
 

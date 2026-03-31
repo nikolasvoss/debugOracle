@@ -8,7 +8,11 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from debugoracle.cli.commands.install_cli import cmd_install_cli
-from debugoracle.installer.outcomes import InstallerOutcome, InstallerOutcomeCode, PathAction
+from debugoracle.installer.outcomes import (
+    InstallerOutcome,
+    InstallerOutcomeCode,
+    PathAction,
+)
 
 
 class InstallCliCommandTests(unittest.TestCase):
@@ -56,7 +60,9 @@ class InstallCliCommandTests(unittest.TestCase):
 
         payload = json.loads(buffer.getvalue())
         self.assertEqual(exit_code, 0)
-        self.assertEqual(payload["code"], InstallerOutcomeCode.SUCCESS_NEEDS_PATH_STEP.value)
+        self.assertEqual(
+            payload["code"], InstallerOutcomeCode.SUCCESS_NEEDS_PATH_STEP.value
+        )
         self.assertEqual(payload["path_action"]["bin_dir"], "/tmp/bin")
         self.assertEqual(fake_installer.options.channel, "stable")
         self.assertTrue(fake_installer.options.assume_yes)

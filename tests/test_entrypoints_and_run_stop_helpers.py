@@ -53,7 +53,10 @@ class RunStopHelpersTests(unittest.TestCase):
             runtime.write_text(json.dumps({"pid": 9999}), encoding="utf-8")
             stdout = io.StringIO()
             with (
-                patch("debugoracle.cli.commands.run_stop.is_pid_running", return_value=False),
+                patch(
+                    "debugoracle.cli.commands.run_stop.is_pid_running",
+                    return_value=False,
+                ),
                 redirect_stdout(stdout),
             ):
                 code = cli_main(["stop", "--workspace-root", str(workspace)])
@@ -70,7 +73,10 @@ class RunStopHelpersTests(unittest.TestCase):
 
             stderr = io.StringIO()
             with (
-                patch("debugoracle.cli.commands.run_stop.is_pid_running", return_value=True),
+                patch(
+                    "debugoracle.cli.commands.run_stop.is_pid_running",
+                    return_value=True,
+                ),
                 patch(
                     "debugoracle.cli.commands.run_stop.is_owned_run_process",
                     return_value=True,
@@ -180,7 +186,10 @@ class RunStopHelpersTests(unittest.TestCase):
 
             stdout = io.StringIO()
             with (
-                patch("debugoracle.cli.commands.run_stop.capture_rtt", return_value=idle_state),
+                patch(
+                    "debugoracle.cli.commands.run_stop.capture_rtt",
+                    return_value=idle_state,
+                ),
                 redirect_stdout(stdout),
             ):
                 code = cli_main(["run", "--output", str(output)])
@@ -245,7 +254,7 @@ class RunStopHelpersTests(unittest.TestCase):
 
         with patch(
             "debugoracle.cli.commands.run_stop.read_process_cmdline",
-            return_value='python -m debugoracle run --workspace-root /tmp',
+            return_value="python -m debugoracle run --workspace-root /tmp",
         ):
             self.assertTrue(run_stop.is_owned_run_process(123))
         with patch(
@@ -262,19 +271,31 @@ class RunStopHelpersTests(unittest.TestCase):
             self.assertFalse(file_path.exists())
 
     def test_read_process_cmdline_ps_and_windows_fallbacks(self) -> None:
-        with patch("pathlib.Path.read_bytes", side_effect=OSError("no proc")), patch(
-            "debugoracle.cli.commands.run_stop.subprocess.run",
-            return_value=SimpleNamespace(returncode=0, stdout="dbgoracle run", stderr=""),
+        with (
+            patch("pathlib.Path.read_bytes", side_effect=OSError("no proc")),
+            patch(
+                "debugoracle.cli.commands.run_stop.subprocess.run",
+                return_value=SimpleNamespace(
+                    returncode=0, stdout="dbgoracle run", stderr=""
+                ),
+            ),
         ):
             self.assertEqual(run_stop.read_process_cmdline(1), "dbgoracle run")
 
-        with patch("pathlib.Path.read_bytes", side_effect=OSError("no proc")), patch(
-            "debugoracle.cli.commands.run_stop.subprocess.run",
-            side_effect=[
-                OSError("ps missing"),
-                SimpleNamespace(returncode=0, stdout="powershell run", stderr=""),
-            ],
-        ), patch("debugoracle.cli.commands.run_stop.platform.system", return_value="Windows"):
+        with (
+            patch("pathlib.Path.read_bytes", side_effect=OSError("no proc")),
+            patch(
+                "debugoracle.cli.commands.run_stop.subprocess.run",
+                side_effect=[
+                    OSError("ps missing"),
+                    SimpleNamespace(returncode=0, stdout="powershell run", stderr=""),
+                ],
+            ),
+            patch(
+                "debugoracle.cli.commands.run_stop.platform.system",
+                return_value="Windows",
+            ),
+        ):
             self.assertEqual(run_stop.read_process_cmdline(1), "powershell run")
 
 
