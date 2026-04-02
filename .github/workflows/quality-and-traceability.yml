@@ -1,0 +1,100 @@
+name: quality-and-traceability
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+
+concurrency:
+  group: quality-and-traceability-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install pre-commit
+        run: python -m pip install --upgrade pip pre-commit
+
+      - name: Run quality gate
+        run: pre-commit run --all-files
+
+  traceability-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate traceability fields for behavior changes
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo "push event: skipping PR-body traceability checks"
+            exit 0
+          fi
+
+          BODY="${PR_BODY:-}"
+
+          if ! printf "%s" "$BODY" | grep -Eq "Behavior Change:[[:space:]]*(yes|no)"; then
+            echo "traceability-gate: missing 'Behavior Change: yes/no' field"
+            exit 1
+          fi
+
+          if printf "%s" "$BODY" | grep -Eq "Behavior Change:[[:space:]]*yes"; then
+            for required in "Spec:" "Plan:" "Acceptance Criteria -> Validation"; do
+              if ! printf "%s" "$BODY" | grep -Fq "$required"; then
+                echo "traceability-gate: missing required field for behavior change: $required"
+                exit 1
+              fi
+            done
+
+            # Require non-placeholder values for Spec and Plan.
+            spec_line=$(printf "%s\n" "$BODY" | grep -E '^[[:space:]]*-[[:space:]]*Spec:' | head -n1 || true)
+            plan_line=$(printf "%s\n" "$BODY" | grep -E '^[[:space:]]*-[[:space:]]*Plan:' | head -n1 || true)
+
+            spec_value=$(printf "%s" "$spec_line" | sed -E 's/^[[:space:]]*-[[:space:]]*Spec:[[:space:]]*//')
+            plan_value=$(printf "%s" "$plan_line" | sed -E 's/^[[:space:]]*-[[:space:]]*Plan:[[:space:]]*//')
+
+            if [ -z "$spec_value" ] || printf "%s" "$spec_value" | grep -Eq '^<!--'; then
+              echo "traceability-gate: Spec must have a non-placeholder link/path when Behavior Change: yes"
+              exit 1
+            fi
+
+            if [ -z "$plan_value" ] || printf "%s" "$plan_value" | grep -Eq '^<!--'; then
+              echo "traceability-gate: Plan must have a non-placeholder link/path when Behavior Change: yes"
+              exit 1
+            fi
+
+            if ! printf "%s\n" "$BODY" | grep -Eq '^\|[[:space:]]*AC-[0-9]+'; then
+              echo "traceability-gate: AC mapping table must include at least one AC row (example: | AC-001 | test | tests/... |)"
+              exit 1
+            fi
+          fi
+
+          exception_requested="false"
+          if printf "%s" "$BODY" | grep -Ei '(^|[[:space:][:punct:]])exception requested:[[:space:]]*yes([[:space:][:punct:]]|$)' >/dev/null; then
+            exception_requested="true"
+          elif printf "%s" "$BODY" | grep -Ei '(^|[[:space:][:punct:]])exception:[[:space:]]*yes([[:space:][:punct:]]|$)' >/dev/null; then
+            exception_requested="true"
+          fi
+
+          if [ "$exception_requested" = "true" ]; then
+            for required_exception_field in "what is being skipped" "why it is safe" "follow-up work" "expiry"; do
+              if ! printf "%s" "$BODY" | grep -Fiq "$required_exception_field"; then
+                echo "traceability-gate: exception justification is incomplete, missing: $required_exception_field"
+                exit 1
+              fi
+            done
+          fi
+
+          echo "traceability-gate: pass"
