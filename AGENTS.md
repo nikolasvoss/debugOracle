@@ -49,6 +49,11 @@ For any task:
 5. Validate  
 6. Expand scope only if required  
 
+### Spec And Branch Protocol (Mandatory)
+
+- New feature or behavior change must follow `docs/workflows/AGENT_WORKFLOW_RULES.md`.
+- Public behavior change without a task spec is not allowed.
+
 ---
 
 ## Validation (Mandatory)

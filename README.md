@@ -7,6 +7,25 @@ The intended system architecture lives in [`docs/architecture.md`](docs/architec
 
 Module specifications live under [`docs/specs/README.md`](docs/specs/README.md). The spec filename matches the module filename so agents have one predictable place to look for architecture notes.
 
+## PR workflow (solo v1)
+
+Behavior-changing pull requests are expected to include traceability fields in the PR body:
+
+- `Behavior Change: yes/no`
+- `Spec:` link (required when behavior changes)
+- `Plan:` link (required when behavior changes)
+- `Acceptance Criteria -> Validation` table (required when behavior changes)
+
+Templates and review guides:
+
+- [`.github/pull_request_template.md`](.github/pull_request_template.md)
+- [`docs/workflows/task-spec-template.md`](docs/workflows/task-spec-template.md)
+- [`docs/workflows/plan-template.md`](docs/workflows/plan-template.md)
+- [`docs/workflows/review-checklist.md`](docs/workflows/review-checklist.md)
+- [`docs/workflows/AGENT_WORKFLOW_RULES.md`](docs/workflows/AGENT_WORKFLOW_RULES.md)
+
+CI runs `pre-commit run --all-files` and a traceability gate on PRs.
+
 ## Install the CLI
 
 Linux v1 ships a CLI-only installer path. It installs `dbgoracle`; it does not install `openocd`, VS Code, Cortex-Debug, or board-specific tooling.
