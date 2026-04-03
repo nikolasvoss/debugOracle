@@ -14,6 +14,7 @@ Assemble the canonical investigation artifact from parsed source inputs.
 ## Responsibilities
 
 - Build top-level summary fields from parsed GDB and RTT evidence.
+- Carry through artifact-level metadata such as `schema_version`, `live_state`, `source_context`, and `provenance`.
 - Embed full selected source payloads into the snapshot.
 - Mark missing unselected sources as absent rather than embedded-empty so inspect modes can fail explicitly.
 - Preserve derived convenience structures for later report inspection.
@@ -22,7 +23,7 @@ Assemble the canonical investigation artifact from parsed source inputs.
 
 `build_artifact_from_sources()` must populate:
 
-- top-level summary fields for stop context, stack, registers, variables, warnings, and provenance
+- top-level summary fields for stop context, stack, registers, variables, warnings, provenance, and persisted artifact metadata
 - `sources.gdb.raw_text` and ordered `sources.gdb.events`
 - `sources.rtt.raw_text` and `sources.rtt.lines`
 - `sources.registers` for SVD-backed register evidence (embedded or absent)
