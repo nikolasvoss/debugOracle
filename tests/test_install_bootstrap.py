@@ -25,7 +25,20 @@ class InstallBootstrapTests(unittest.TestCase):
         self,
     ) -> None:
         bootstrap_module = _load_bootstrap_module()
-        with patch.object(bootstrap_module, "main", return_value=0) as main_mock:
+        success = bootstrap_module.DocsToolingOutcome(
+            code="success_skipped",
+            success=True,
+            message="Skipped optional docs tooling setup.",
+            selection=bootstrap_module.DOCS_MODE_NONE,
+            requirements=[],
+            remediation="pipx inject debugoracle docling sentence-transformers numpy",
+        )
+        with (
+            patch.object(bootstrap_module, "main", return_value=0) as main_mock,
+            patch.object(
+                bootstrap_module, "install_docs_tooling", return_value=success
+            ),
+        ):
             exit_code = bootstrap_module.bootstrap(["--docs-tools", "none"])
 
         self.assertEqual(exit_code, 0)
@@ -36,8 +49,18 @@ class InstallBootstrapTests(unittest.TestCase):
 
     def test_docs_tool_failure_prompts_and_can_continue(self) -> None:
         bootstrap_module = _load_bootstrap_module()
+        failure = bootstrap_module.DocsToolingOutcome(
+            code="failed_inject",
+            success=False,
+            message="boom",
+            selection=bootstrap_module.DOCS_MODE_DOCLING,
+            requirements=["docling"],
+            remediation="pipx inject debugoracle docling",
+        )
         with (
-            patch.object(bootstrap_module, "_inject_requirements", return_value=False),
+            patch.object(
+                bootstrap_module, "install_docs_tooling", return_value=failure
+            ),
             patch.object(bootstrap_module.sys.stdin, "isatty", return_value=True),
             patch("builtins.input", return_value=""),
         ):
@@ -49,8 +72,18 @@ class InstallBootstrapTests(unittest.TestCase):
 
     def test_docs_tool_failure_prompts_and_can_abort(self) -> None:
         bootstrap_module = _load_bootstrap_module()
+        failure = bootstrap_module.DocsToolingOutcome(
+            code="failed_inject",
+            success=False,
+            message="boom",
+            selection=bootstrap_module.DOCS_MODE_SEMANTIC,
+            requirements=["sentence-transformers", "numpy"],
+            remediation="pipx inject debugoracle sentence-transformers numpy",
+        )
         with (
-            patch.object(bootstrap_module, "_inject_requirements", return_value=False),
+            patch.object(
+                bootstrap_module, "install_docs_tooling", return_value=failure
+            ),
             patch.object(bootstrap_module.sys.stdin, "isatty", return_value=True),
             patch("builtins.input", return_value="n"),
         ):
@@ -62,9 +95,19 @@ class InstallBootstrapTests(unittest.TestCase):
 
     def test_docs_tool_failure_is_fatal_in_non_interactive_mode(self) -> None:
         bootstrap_module = _load_bootstrap_module()
+        failure = bootstrap_module.DocsToolingOutcome(
+            code="failed_inject",
+            success=False,
+            message="boom",
+            selection=bootstrap_module.DOCS_MODE_SEMANTIC,
+            requirements=["sentence-transformers", "numpy"],
+            remediation="pipx inject debugoracle sentence-transformers numpy",
+        )
         stderr = StringIO()
         with (
-            patch.object(bootstrap_module, "_inject_requirements", return_value=False),
+            patch.object(
+                bootstrap_module, "install_docs_tooling", return_value=failure
+            ),
             patch.object(bootstrap_module.sys.stdin, "isatty", return_value=False),
             patch.object(bootstrap_module, "main", return_value=0),
             redirect_stderr(stderr),
@@ -73,6 +116,27 @@ class InstallBootstrapTests(unittest.TestCase):
 
         self.assertEqual(exit_code, 1)
         self.assertIn("Non-interactive mode: failing setup", stderr.getvalue())
+
+    def test_docs_tool_success_delegates_to_shared_backend(self) -> None:
+        bootstrap_module = _load_bootstrap_module()
+        success = bootstrap_module.DocsToolingOutcome(
+            code="success_installed",
+            success=True,
+            message="Installed docling support.",
+            selection=bootstrap_module.DOCS_MODE_DOCLING,
+            requirements=["docling"],
+            remediation="pipx inject debugoracle docling",
+        )
+        with (
+            patch.object(bootstrap_module, "main", return_value=0),
+            patch.object(
+                bootstrap_module, "install_docs_tooling", return_value=success
+            ) as install_mock,
+        ):
+            exit_code = bootstrap_module.bootstrap(["--docs-tools", "docling"])
+
+        self.assertEqual(exit_code, 0)
+        install_mock.assert_called_once_with(bootstrap_module.DOCS_MODE_DOCLING)
 
 
 if __name__ == "__main__":

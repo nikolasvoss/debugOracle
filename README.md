@@ -56,6 +56,14 @@ Non-interactive or scripted installs can choose explicitly:
 ./scripts/install/linux.sh --docs-tools all
 ```
 
+If you skipped optional docs tooling during install, add it later with one command:
+
+```bash
+./scripts/install/install-docs-tools.sh --docs-tools docling
+./scripts/install/install-docs-tools.sh --docs-tools semantic
+./scripts/install/install-docs-tools.sh --docs-tools all
+```
+
 Secondary local-dev path from a checkout:
 
 ```bash
@@ -128,8 +136,8 @@ dbgoracle docs status
 Key points:
 
 - Default parser is `pymupdf` (`pymupdf` + `pymupdf4llm` are installed with base dependencies).
-- Optional parser: `--parser docling` (install with `pipx inject debugoracle docling`).
-- Optional hybrid search: ingest with `--semantic`, search with `--semantic` (install with `pipx inject debugoracle sentence-transformers numpy`).
+- Optional parser: `--parser docling` (install with `./scripts/install/install-docs-tools.sh --docs-tools docling`).
+- Optional hybrid search: ingest with `--semantic`, search with `--semantic` (install with `./scripts/install/install-docs-tools.sh --docs-tools semantic`).
 - Preflight dependency check: `dbgoracle docs doctor`.
 - If you run ingest without `--file`/`--folder`, DebugOracle discovers likely PDFs under `doc/` and `docs/` and requires `--yes` confirmation.
 - In TTY mode, ingest can prompt for discovered-doc confirmation; use `--no-interactive` to disable prompts.

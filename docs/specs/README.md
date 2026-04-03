@@ -30,6 +30,7 @@ during this refactor. It is intentionally curated rather than a flat dump of eve
 | `init_workspace` | `debugoracle/cli/commands/init_workspace.py` | [`init_workspace.md`](init_workspace.md) |
 | `halt_snapshot` | `debugoracle/sources/debuggers/gdb/halt_snapshot.py` | [`halt_snapshot.md`](halt_snapshot.md) |
 | `install_cli` | `debugoracle/cli/commands/install_cli.py` | [`install_cli.md`](install_cli.md) |
+| `install_docs_tooling` | `debugoracle/installer/docs_tooling.py` | [`install_docs_tooling.md`](install_docs_tooling.md) |
 | `uninstall_cli` | `debugoracle/cli/commands/uninstall_cli.py` | [`uninstall_cli.md`](uninstall_cli.md) |
 | `live` | `debugoracle/live.py` | [`live.md`](live.md) |
 | `memory` | `debugoracle/sources/debuggers/gdb/memory.py` | [`memory.md`](memory.md) |

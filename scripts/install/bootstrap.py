@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-import subprocess
 import sys
 from pathlib import Path
 
@@ -12,13 +11,15 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from debugoracle.cli.main import main  # noqa: E402
-
-
-DOCS_MODE_NONE = "none"
-DOCS_MODE_DOCLING = "docling"
-DOCS_MODE_SEMANTIC = "semantic"
-DOCS_MODE_ALL = "all"
-DOCS_MODE_PROMPT = "prompt"
+from debugoracle.installer.docs_tooling import (  # noqa: E402
+    DOCS_MODE_ALL,
+    DOCS_MODE_DOCLING,
+    DOCS_MODE_NONE,
+    DOCS_MODE_PROMPT,
+    DOCS_MODE_SEMANTIC,
+    DocsToolingOutcome,
+    install_docs_tooling,
+)
 
 
 def _parse_bootstrap_args(argv: list[str]) -> tuple[str, list[str]]:
@@ -67,12 +68,6 @@ def _ask_docs_tools_choice() -> str:
     return mapping.get(selected, DOCS_MODE_NONE)
 
 
-def _inject_requirements(requirements: list[str]) -> bool:
-    command = ["pipx", "inject", "debugoracle", *requirements]
-    result = subprocess.run(command, check=False)
-    return result.returncode == 0
-
-
 def _handle_optional_install_failure(remediation: str) -> int:
     print("Optional docs tooling installation failed.", file=sys.stderr)
     print(f"Remediation: {remediation}", file=sys.stderr)
@@ -92,41 +87,19 @@ def _handle_optional_install_failure(remediation: str) -> int:
 
 
 def _install_docs_tools(selection: str) -> int:
-    if selection == DOCS_MODE_NONE:
-        print("Skipped optional docs tooling setup.")
-        print(
-            "Install later with: pipx inject debugoracle docling sentence-transformers numpy"
-        )
+    if selection != DOCS_MODE_NONE:
+        print()
+        _render_docs_tools_intro()
+        print("Installing selected docs tooling...")
+
+    outcome: DocsToolingOutcome = install_docs_tooling(selection)
+    if outcome.success:
+        print(outcome.message)
+        if selection == DOCS_MODE_NONE:
+            print(f"Install later with: {outcome.remediation}")
         return 0
 
-    print()
-    _render_docs_tools_intro()
-    print("Installing selected docs tooling...")
-
-    if selection == DOCS_MODE_DOCLING:
-        if _inject_requirements(["docling"]):
-            print("Installed docling support.")
-            return 0
-        return _handle_optional_install_failure("pipx inject debugoracle docling")
-
-    if selection == DOCS_MODE_SEMANTIC:
-        if _inject_requirements(["sentence-transformers", "numpy"]):
-            print("Installed semantic search dependencies.")
-            return 0
-        return _handle_optional_install_failure(
-            "pipx inject debugoracle sentence-transformers numpy"
-        )
-
-    if selection == DOCS_MODE_ALL:
-        if _inject_requirements(["docling", "sentence-transformers", "numpy"]):
-            print("Installed docling + semantic search dependencies.")
-            return 0
-        return _handle_optional_install_failure(
-            "pipx inject debugoracle docling sentence-transformers numpy"
-        )
-
-    print(f"Unknown docs-tools selection: {selection}", file=sys.stderr)
-    return 1
+    return _handle_optional_install_failure(outcome.remediation)
 
 
 def bootstrap(argv: list[str] | None = None) -> int:
@@ -153,7 +126,7 @@ def bootstrap(argv: list[str] | None = None) -> int:
                 "Skipping optional docs tooling prompt because stdin is non-interactive."
             )
             print(
-                "Install later with: pipx inject debugoracle docling sentence-transformers numpy"
+                "Install later with: ./scripts/install/install-docs-tools.sh --docs-tools all"
             )
     return _install_docs_tools(selected_mode)
 
