@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import unittest
 from contextlib import redirect_stderr
+from contextlib import redirect_stdout
 from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
@@ -21,9 +22,34 @@ def _load_bootstrap_module():
 
 
 class InstallBootstrapTests(unittest.TestCase):
-    def test_bootstrap_uses_manifest_source_without_package_source_override(
-        self,
-    ) -> None:
+    def test_docs_tools_none_prints_linux_reinstall_hint(self) -> None:
+        bootstrap_module = _load_bootstrap_module()
+        success = bootstrap_module.DocsToolingOutcome(
+            code="success_skipped",
+            success=True,
+            message="Skipped optional docs tooling setup.",
+            selection=bootstrap_module.DOCS_MODE_NONE,
+            requirements=[],
+            remediation="pipx inject debugoracle docling sentence-transformers numpy",
+        )
+        stdout = StringIO()
+        with (
+            patch.object(bootstrap_module, "main", return_value=0),
+            patch.object(
+                bootstrap_module, "install_docs_tooling", return_value=success
+            ),
+            redirect_stdout(stdout),
+        ):
+            exit_code = bootstrap_module.bootstrap(["--docs-tools", "none"])
+
+        self.assertEqual(exit_code, 0)
+        output = stdout.getvalue()
+        self.assertIn(
+            "Install later with: ./scripts/install/linux.sh --docs-tools all", output
+        )
+        self.assertNotIn("install-docs-tools.sh", output)
+
+    def test_bootstrap_passes_local_package_source_override(self) -> None:
         bootstrap_module = _load_bootstrap_module()
         success = bootstrap_module.DocsToolingOutcome(
             code="success_skipped",
@@ -45,7 +71,39 @@ class InstallBootstrapTests(unittest.TestCase):
         forwarded = main_mock.call_args.args[0]
         self.assertIn("install-cli", forwarded)
         self.assertIn("--manifest-url", forwarded)
-        self.assertNotIn("--package-source", forwarded)
+        self.assertIn("--package-source", forwarded)
+        package_source_index = forwarded.index("--package-source") + 1
+        self.assertEqual(
+            forwarded[package_source_index], str(bootstrap_module.REPO_ROOT)
+        )
+
+    def test_bootstrap_ignores_passthrough_package_source_override(self) -> None:
+        bootstrap_module = _load_bootstrap_module()
+        success = bootstrap_module.DocsToolingOutcome(
+            code="success_skipped",
+            success=True,
+            message="Skipped optional docs tooling setup.",
+            selection=bootstrap_module.DOCS_MODE_NONE,
+            requirements=[],
+            remediation="pipx inject debugoracle docling sentence-transformers numpy",
+        )
+        with (
+            patch.object(bootstrap_module, "main", return_value=0) as main_mock,
+            patch.object(
+                bootstrap_module, "install_docs_tooling", return_value=success
+            ),
+        ):
+            exit_code = bootstrap_module.bootstrap(
+                ["--docs-tools", "none", "--package-source", "/tmp/evil"]
+            )
+
+        self.assertEqual(exit_code, 0)
+        forwarded = main_mock.call_args.args[0]
+        self.assertEqual(forwarded.count("--package-source"), 1)
+        package_source_index = forwarded.index("--package-source") + 1
+        self.assertEqual(
+            forwarded[package_source_index], str(bootstrap_module.REPO_ROOT)
+        )
 
     def test_docs_tool_failure_prompts_and_can_continue(self) -> None:
         bootstrap_module = _load_bootstrap_module()

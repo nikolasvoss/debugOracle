@@ -649,10 +649,6 @@ def _add_uninstall_cli_parser(
         description="Internal uninstall entrypoint used by the Linux launcher.",
     )
     uninstall_cli.add_argument(
-        "--manifest-url",
-        help=argparse.SUPPRESS,
-    )
-    uninstall_cli.add_argument(
         "--keep-path",
         action="store_true",
         help="Skip PATH profile cleanup",

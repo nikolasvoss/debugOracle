@@ -96,23 +96,44 @@ def _install_docs_tools(selection: str) -> int:
     if outcome.success:
         print(outcome.message)
         if selection == DOCS_MODE_NONE:
-            print(f"Install later with: {outcome.remediation}")
+            print("Install later with: ./scripts/install/linux.sh --docs-tools all")
         return 0
 
     return _handle_optional_install_failure(outcome.remediation)
 
 
+def _sanitize_install_passthrough(args: list[str]) -> list[str]:
+    sanitized: list[str] = []
+    index = 0
+    while index < len(args):
+        token = args[index]
+        if token == "--package-source":
+            index += 2
+            continue
+        if token.startswith("--package-source="):
+            index += 1
+            continue
+        sanitized.append(token)
+        index += 1
+    return sanitized
+
+
+def _build_install_cli_args(passthrough: list[str]) -> list[str]:
+    safe_passthrough = _sanitize_install_passthrough(passthrough)
+    return [
+        "install-cli",
+        "--manifest-url",
+        str(MANIFEST_PATH),
+        "--package-source",
+        str(REPO_ROOT),
+        *safe_passthrough,
+    ]
+
+
 def bootstrap(argv: list[str] | None = None) -> int:
     raw_args = list(argv or sys.argv[1:])
     docs_tools_mode, passthrough = _parse_bootstrap_args(raw_args)
-    install_code = main(
-        [
-            "install-cli",
-            "--manifest-url",
-            str(MANIFEST_PATH),
-            *passthrough,
-        ]
-    )
+    install_code = main(_build_install_cli_args(passthrough))
     if install_code != 0:
         return install_code
 
@@ -125,9 +146,7 @@ def bootstrap(argv: list[str] | None = None) -> int:
             print(
                 "Skipping optional docs tooling prompt because stdin is non-interactive."
             )
-            print(
-                "Install later with: ./scripts/install/install-docs-tools.sh --docs-tools all"
-            )
+            print("Install later with: ./scripts/install/linux.sh --docs-tools all")
     return _install_docs_tools(selected_mode)
 
 

@@ -204,6 +204,20 @@ class DebugOracleCliTests(unittest.TestCase):
         self.assertEqual(parsed.command, "uninstall_cli")
         self.assertTrue(parsed.force_legacy_path_cleanup)
 
+    def test_uninstall_cli_rejects_manifest_url(self) -> None:
+        parser = build_parser()
+        with self.assertRaises(SystemExit) as error:
+            with redirect_stderr(io.StringIO()) as stderr:
+                parser.parse_args(
+                    [
+                        "uninstall-cli",
+                        "--manifest-url",
+                        "https://example.com/manifest.json",
+                    ]
+                )
+        self.assertEqual(error.exception.code, 2)
+        self.assertIn("unrecognized arguments", stderr.getvalue())
+
     def test_init_workspace_command_parses(self) -> None:
         parser = build_parser()
         parsed = parser.parse_args(

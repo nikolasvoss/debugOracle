@@ -19,10 +19,10 @@ Included by default in packaged installs (no extra install needed for normal PDF
 Optional extras:
 
 - Docling parser (better extraction on hard PDFs, scanned docs):
-  - primary: `./scripts/install/install-docs-tools.sh --docs-tools docling`
+  - primary: `./scripts/install/linux.sh --docs-tools docling`
   - fallback: `pipx inject debugoracle docling`
 - Semantic search embeddings:
-  - primary: `./scripts/install/install-docs-tools.sh --docs-tools semantic`
+  - primary: `./scripts/install/linux.sh --docs-tools semantic`
   - fallback: `pipx inject debugoracle sentence-transformers numpy`
 
 If your distro enforces PEP 668 (`error: externally-managed-environment`), install into an isolated environment:
@@ -195,13 +195,13 @@ PyMuPDF import/install issue:
 
 Docling not installed:
 
-- primary: `./scripts/install/install-docs-tools.sh --docs-tools docling`
+- primary: `./scripts/install/linux.sh --docs-tools docling`
 - if using pipx directly: `pipx inject debugoracle docling`
 - otherwise install `debugoracle[docling]` in the active environment
 
 Semantic mode not available:
 
-- primary: `./scripts/install/install-docs-tools.sh --docs-tools semantic`
+- primary: `./scripts/install/linux.sh --docs-tools semantic`
 - if using pipx directly: `pipx inject debugoracle sentence-transformers numpy`
 - otherwise install `debugoracle[semantic]` in the active environment
 

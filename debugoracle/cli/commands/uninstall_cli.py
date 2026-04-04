@@ -8,15 +8,11 @@ from pathlib import Path
 from typing import Any
 
 from ...installer.backend.pipx import PipxBackend, PipxError
-from ...installer.manifest import ManifestError, ManifestFetcher, ManifestNetworkError
 from ...installer.outcomes import InstallState
 from ...installer.platform import linux as linux_platform
 
-PACKAGE_NAME_FALLBACK = "debugoracle"
+PACKAGE_NAME = "debugoracle"
 CLI_NAME = "dbgoracle"
-DEFAULT_MANIFEST_PATH = (
-    Path(__file__).resolve().parents[3] / "release" / "install-manifest.json"
-)
 
 
 @dataclass(slots=True)
@@ -39,6 +35,17 @@ class UninstallOutcome:
     message: str
     details: list[str] = field(default_factory=list)
     path_cleanup: PathCleanupPayload | None = None
+
+
+def _should_prompt_for_confirmation(args: Any) -> bool:
+    return bool(args.format == "text" and sys.stdin.isatty())
+
+
+def _confirm_uninstall() -> bool:
+    answer = input(
+        "Uninstall dbgoracle and bundled docs tooling (docling/semantic if installed)? [Y/n] "
+    ).strip()
+    return answer.lower() in {"", "y", "yes"}
 
 
 def cmd_uninstall_cli(args: Any) -> int:
@@ -65,9 +72,8 @@ def cmd_uninstall_cli(args: Any) -> int:
             ),
         )
 
-    package_name = _resolve_package_name(args)
     try:
-        current = backend.inspect_installation(package_name, "0")
+        current = backend.inspect_installation(PACKAGE_NAME, "0")
     except PipxError as error:
         return _emit_outcome(
             args,
@@ -81,8 +87,18 @@ def cmd_uninstall_cli(args: Any) -> int:
 
     was_installed = current.state != InstallState.NOT_INSTALLED
     if was_installed:
+        if _should_prompt_for_confirmation(args) and not _confirm_uninstall():
+            return _emit_outcome(
+                args,
+                UninstallOutcome(
+                    code="cancelled_by_user",
+                    success=True,
+                    message="Uninstall cancelled by user.",
+                    details=["No changes were made."],
+                ),
+            )
         try:
-            backend.uninstall(package_name)
+            backend.uninstall(PACKAGE_NAME)
         except PipxError as error:
             return _emit_outcome(
                 args,
@@ -104,6 +120,10 @@ def cmd_uninstall_cli(args: Any) -> int:
         success=True,
         message=message,
     )
+    if was_installed:
+        outcome.details.append(
+            "Removed dbgoracle and bundled docs tooling from the pipx environment."
+        )
 
     if args.keep_path:
         outcome.path_cleanup = PathCleanupPayload(
@@ -196,12 +216,3 @@ def _emit_outcome(args: Any, outcome: UninstallOutcome) -> int:
                     f"Profile cleanup error: {outcome.path_cleanup.error}", file=stream
                 )
     return 0 if outcome.success else 1
-
-
-def _resolve_package_name(args: Any) -> str:
-    manifest_url = getattr(args, "manifest_url", None) or str(DEFAULT_MANIFEST_PATH)
-    try:
-        manifest = ManifestFetcher().fetch(manifest_url)
-    except (ManifestError, ManifestNetworkError, OSError):
-        return PACKAGE_NAME_FALLBACK
-    return manifest.package_name.strip() or PACKAGE_NAME_FALLBACK

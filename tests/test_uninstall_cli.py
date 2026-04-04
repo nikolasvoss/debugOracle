@@ -15,6 +15,60 @@ from debugoracle.installer.outcomes import InstallState
 
 
 class UninstallCliTests(unittest.TestCase):
+    def test_interactive_decline_cancels_uninstall_cleanly(self) -> None:
+        fake_backend = _FakeBackend(
+            InstallState.INSTALLED_SAME_VERSION, "/tmp/fake-bin"
+        )
+        args = SimpleNamespace(
+            format="text",
+            keep_path=True,
+            force_legacy_path_cleanup=False,
+        )
+        with (
+            patch(
+                "debugoracle.cli.commands.uninstall_cli.PipxBackend",
+                return_value=fake_backend,
+            ),
+            patch("debugoracle.cli.commands.uninstall_cli.sys.platform", "linux"),
+            patch(
+                "debugoracle.cli.commands.uninstall_cli.sys.stdin.isatty",
+                return_value=True,
+            ),
+            patch("builtins.input", return_value="n"),
+            redirect_stdout(StringIO()) as out,
+        ):
+            exit_code = cmd_uninstall_cli(args)
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(fake_backend.uninstall_calls, [])
+        self.assertIn("cancelled", out.getvalue().lower())
+
+    def test_json_mode_skips_prompt_and_uninstalls(self) -> None:
+        fake_backend = _FakeBackend(
+            InstallState.INSTALLED_SAME_VERSION, "/tmp/fake-bin"
+        )
+        args = SimpleNamespace(
+            format="json",
+            keep_path=True,
+            force_legacy_path_cleanup=False,
+        )
+        with (
+            patch(
+                "debugoracle.cli.commands.uninstall_cli.PipxBackend",
+                return_value=fake_backend,
+            ),
+            patch("debugoracle.cli.commands.uninstall_cli.sys.platform", "linux"),
+            patch("builtins.input") as input_mock,
+            redirect_stdout(StringIO()) as out,
+        ):
+            exit_code = cmd_uninstall_cli(args)
+
+        payload = json.loads(out.getvalue())
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(payload["code"], "success_uninstalled")
+        self.assertEqual(fake_backend.uninstall_calls, ["debugoracle"])
+        input_mock.assert_not_called()
+
     def test_installed_uninstalls_and_removes_marked_path_line(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             home = Path(tmpdir)
@@ -320,7 +374,7 @@ class UninstallCliTests(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             self.assertTrue(payload["path_cleanup"]["skipped"])
 
-    def test_manifest_package_name_drives_uninstall_target(self) -> None:
+    def test_uninstall_always_targets_default_package_name(self) -> None:
         fake_backend = _FakeBackend(
             InstallState.INSTALLED_SAME_VERSION, "/tmp/fake-bin"
         )
@@ -328,16 +382,11 @@ class UninstallCliTests(unittest.TestCase):
             format="json",
             keep_path=True,
             force_legacy_path_cleanup=False,
-            manifest_url="https://example.com/manifest.json",
         )
         with (
             patch(
                 "debugoracle.cli.commands.uninstall_cli.PipxBackend",
                 return_value=fake_backend,
-            ),
-            patch(
-                "debugoracle.cli.commands.uninstall_cli.ManifestFetcher.fetch",
-                return_value=SimpleNamespace(package_name="debugoracle-next"),
             ),
             patch("debugoracle.cli.commands.uninstall_cli.sys.platform", "linux"),
             redirect_stdout(StringIO()) as out,
@@ -347,10 +396,10 @@ class UninstallCliTests(unittest.TestCase):
         payload = json.loads(out.getvalue())
         self.assertEqual(exit_code, 0)
         self.assertEqual(payload["code"], "success_uninstalled")
-        self.assertEqual(fake_backend.inspect_calls, ["debugoracle-next"])
-        self.assertEqual(fake_backend.uninstall_calls, ["debugoracle-next"])
+        self.assertEqual(fake_backend.inspect_calls, ["debugoracle"])
+        self.assertEqual(fake_backend.uninstall_calls, ["debugoracle"])
 
-    def test_manifest_fetch_failure_falls_back_to_default_package_name(self) -> None:
+    def test_uninstall_ignores_extra_arguments_for_target_resolution(self) -> None:
         fake_backend = _FakeBackend(
             InstallState.INSTALLED_SAME_VERSION, "/tmp/fake-bin"
         )
@@ -364,10 +413,6 @@ class UninstallCliTests(unittest.TestCase):
             patch(
                 "debugoracle.cli.commands.uninstall_cli.PipxBackend",
                 return_value=fake_backend,
-            ),
-            patch(
-                "debugoracle.cli.commands.uninstall_cli.ManifestFetcher.fetch",
-                side_effect=OSError("network down"),
             ),
             patch("debugoracle.cli.commands.uninstall_cli.sys.platform", "linux"),
             redirect_stdout(StringIO()) as out,

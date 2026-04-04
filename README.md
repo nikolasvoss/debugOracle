@@ -59,9 +59,9 @@ Non-interactive or scripted installs can choose explicitly:
 If you skipped optional docs tooling during install, add it later with one command:
 
 ```bash
-./scripts/install/install-docs-tools.sh --docs-tools docling
-./scripts/install/install-docs-tools.sh --docs-tools semantic
-./scripts/install/install-docs-tools.sh --docs-tools all
+./scripts/install/linux.sh --docs-tools docling
+./scripts/install/linux.sh --docs-tools semantic
+./scripts/install/linux.sh --docs-tools all
 ```
 
 Secondary local-dev path from a checkout:
@@ -70,7 +70,7 @@ Secondary local-dev path from a checkout:
 pipx install .
 ```
 
-The launcher follows `release/install-manifest.json`, so the manifest decides which package spec is installed. `pipx install .` is the explicit local checkout path.
+The checkout launcher installs from the local repository source by passing a local package override to `install-cli`. The manifest is still used for release metadata checks.
 
 If the installer succeeds but `dbgoracle` is not immediately on `PATH`, it offers one managed shell-profile update and also prints the exact line to add manually.
 
@@ -95,6 +95,7 @@ Optional flags:
 Uninstall scope is intentionally narrow:
 
 - removes the `debugoracle` pipx package
+- prompts in interactive mode before removing bundled docs tooling from the same pipx environment
 - removes installer-managed PATH profile lines when they are marker-owned
 - leaves workspace artifacts (for example `.dbgoracle/` and docs sidecars) untouched
 
@@ -136,8 +137,8 @@ dbgoracle docs status
 Key points:
 
 - Default parser is `pymupdf` (`pymupdf` + `pymupdf4llm` are installed with base dependencies).
-- Optional parser: `--parser docling` (install with `./scripts/install/install-docs-tools.sh --docs-tools docling`).
-- Optional hybrid search: ingest with `--semantic`, search with `--semantic` (install with `./scripts/install/install-docs-tools.sh --docs-tools semantic`).
+- Optional parser: `--parser docling` (install with `./scripts/install/linux.sh --docs-tools docling`).
+- Optional hybrid search: ingest with `--semantic`, search with `--semantic` (install with `./scripts/install/linux.sh --docs-tools semantic`).
 - Preflight dependency check: `dbgoracle docs doctor`.
 - If you run ingest without `--file`/`--folder`, DebugOracle discovers likely PDFs under `doc/` and `docs/` and requires `--yes` confirmation.
 - In TTY mode, ingest can prompt for discovered-doc confirmation; use `--no-interactive` to disable prompts.

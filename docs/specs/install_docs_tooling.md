@@ -57,5 +57,4 @@ dependencies after `dbgoracle` is already installed.
 - Deterministic remediation messages for every non-success outcome.
 - Must remain aligned with shell wrappers:
   - `scripts/install/bootstrap.py`
-  - `scripts/install/install_docs_tools.py`
-  - `scripts/install/install-docs-tools.sh`
+  - `scripts/install/linux.sh`

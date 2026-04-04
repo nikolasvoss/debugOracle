@@ -3,7 +3,7 @@
 - Module: `install_cli`
 - Code Path: `debugoracle/cli/commands/install_cli.py`
 - Public Entrypoints: `cmd_install_cli`
-- Last Updated: `2026-03-24`
+- Last Updated: `2026-04-04`
 
 # SPEC: Internal Installer CLI Hook
 
@@ -15,8 +15,8 @@ Provide a narrow CLI surface that a Linux launcher can call to reuse the package
 
 - Translate parser arguments into installer-core options.
 - Render installer outcomes in `text` or `json` form.
-- Keep install policy out of shell wrappers.
-- Let the resolved manifest choose the package source instead of forcing checkout-local installs from the launcher.
+- Keep install policy out of shell wrappers while accepting launcher-provided source overrides.
+- Accept checkout-local package source overrides from the Linux launcher.
 
 ## Constraints
 
