@@ -8,11 +8,15 @@ from pathlib import Path
 from typing import Any
 
 from ...installer.backend.pipx import PipxBackend, PipxError
+from ...installer.manifest import ManifestError, ManifestFetcher, ManifestNetworkError
 from ...installer.outcomes import InstallState
 from ...installer.platform import linux as linux_platform
 
-PACKAGE_NAME = "debugoracle"
+PACKAGE_NAME_FALLBACK = "debugoracle"
 CLI_NAME = "dbgoracle"
+DEFAULT_MANIFEST_PATH = (
+    Path(__file__).resolve().parents[3] / "release" / "install-manifest.json"
+)
 
 
 @dataclass(slots=True)
@@ -61,8 +65,9 @@ def cmd_uninstall_cli(args: Any) -> int:
             ),
         )
 
+    package_name = _resolve_package_name(args)
     try:
-        current = backend.inspect_installation(PACKAGE_NAME, "0")
+        current = backend.inspect_installation(package_name, "0")
     except PipxError as error:
         return _emit_outcome(
             args,
@@ -77,7 +82,7 @@ def cmd_uninstall_cli(args: Any) -> int:
     was_installed = current.state != InstallState.NOT_INSTALLED
     if was_installed:
         try:
-            backend.uninstall(PACKAGE_NAME)
+            backend.uninstall(package_name)
         except PipxError as error:
             return _emit_outcome(
                 args,
@@ -191,3 +196,12 @@ def _emit_outcome(args: Any, outcome: UninstallOutcome) -> int:
                     f"Profile cleanup error: {outcome.path_cleanup.error}", file=stream
                 )
     return 0 if outcome.success else 1
+
+
+def _resolve_package_name(args: Any) -> str:
+    manifest_url = getattr(args, "manifest_url", None) or str(DEFAULT_MANIFEST_PATH)
+    try:
+        manifest = ManifestFetcher().fetch(manifest_url)
+    except (ManifestError, ManifestNetworkError, OSError):
+        return PACKAGE_NAME_FALLBACK
+    return manifest.package_name.strip() or PACKAGE_NAME_FALLBACK

@@ -320,6 +320,66 @@ class UninstallCliTests(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             self.assertTrue(payload["path_cleanup"]["skipped"])
 
+    def test_manifest_package_name_drives_uninstall_target(self) -> None:
+        fake_backend = _FakeBackend(
+            InstallState.INSTALLED_SAME_VERSION, "/tmp/fake-bin"
+        )
+        args = SimpleNamespace(
+            format="json",
+            keep_path=True,
+            force_legacy_path_cleanup=False,
+            manifest_url="https://example.com/manifest.json",
+        )
+        with (
+            patch(
+                "debugoracle.cli.commands.uninstall_cli.PipxBackend",
+                return_value=fake_backend,
+            ),
+            patch(
+                "debugoracle.cli.commands.uninstall_cli.ManifestFetcher.fetch",
+                return_value=SimpleNamespace(package_name="debugoracle-next"),
+            ),
+            patch("debugoracle.cli.commands.uninstall_cli.sys.platform", "linux"),
+            redirect_stdout(StringIO()) as out,
+        ):
+            exit_code = cmd_uninstall_cli(args)
+
+        payload = json.loads(out.getvalue())
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(payload["code"], "success_uninstalled")
+        self.assertEqual(fake_backend.inspect_calls, ["debugoracle-next"])
+        self.assertEqual(fake_backend.uninstall_calls, ["debugoracle-next"])
+
+    def test_manifest_fetch_failure_falls_back_to_default_package_name(self) -> None:
+        fake_backend = _FakeBackend(
+            InstallState.INSTALLED_SAME_VERSION, "/tmp/fake-bin"
+        )
+        args = SimpleNamespace(
+            format="json",
+            keep_path=True,
+            force_legacy_path_cleanup=False,
+            manifest_url="https://example.com/manifest.json",
+        )
+        with (
+            patch(
+                "debugoracle.cli.commands.uninstall_cli.PipxBackend",
+                return_value=fake_backend,
+            ),
+            patch(
+                "debugoracle.cli.commands.uninstall_cli.ManifestFetcher.fetch",
+                side_effect=OSError("network down"),
+            ),
+            patch("debugoracle.cli.commands.uninstall_cli.sys.platform", "linux"),
+            redirect_stdout(StringIO()) as out,
+        ):
+            exit_code = cmd_uninstall_cli(args)
+
+        payload = json.loads(out.getvalue())
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(payload["code"], "success_uninstalled")
+        self.assertEqual(fake_backend.inspect_calls, ["debugoracle"])
+        self.assertEqual(fake_backend.uninstall_calls, ["debugoracle"])
+
 
 class _FakeStatus:
     def __init__(self, state: InstallState) -> None:
@@ -341,6 +401,7 @@ class _FakeBackend:
         self.available = available
         self.uninstall_error = uninstall_error
         self.inspect_error = inspect_error
+        self.inspect_calls: list[str] = []
         self.uninstall_calls: list[str] = []
 
     def is_available(self) -> bool:
@@ -349,6 +410,7 @@ class _FakeBackend:
     def inspect_installation(
         self, package_name: str, target_version: str
     ) -> _FakeStatus:
+        self.inspect_calls.append(package_name)
         if self.inspect_error is not None:
             raise self.inspect_error
         return _FakeStatus(self.state)
