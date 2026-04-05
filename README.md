@@ -26,6 +26,20 @@ Templates and review guides:
 
 CI runs `pre-commit run --all-files` and a traceability gate on PRs.
 
+## Verification loop
+
+For quick local/agent preflight:
+
+```bash
+./scripts/verify.sh fast
+```
+
+For required final validation before completion:
+
+```bash
+./scripts/verify.sh full
+```
+
 ## Install the CLI
 
 Linux v1 ships a CLI-only installer path. It installs `dbgoracle`; it does not install `openocd`, VS Code, Cortex-Debug, or board-specific tooling.

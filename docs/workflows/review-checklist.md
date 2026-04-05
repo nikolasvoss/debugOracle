@@ -11,8 +11,9 @@
 - [ ] Invariants touched are listed and reviewed
 
 ## Validation Evidence
-- [ ] `pre-commit run --all-files` was run
-- [ ] Output/result is attached in PR description
+- [ ] `./scripts/verify.sh fast` preflight was run (optional)
+- [ ] `./scripts/verify.sh full` was run
+- [ ] `pre-commit run --all-files` output/result is attached in PR description
 
 ## Scope Declaration
 - [ ] PR declares `Behavior Change: yes` or `Behavior Change: no`

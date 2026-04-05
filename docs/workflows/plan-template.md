@@ -22,6 +22,8 @@ Link the task spec file for this plan.
 - Regression:
 
 ## Validation Commands
+- `./scripts/verify.sh fast`
+- `./scripts/verify.sh full`
 - `pre-commit run --all-files`
 
 ## Release / Compatibility Notes
