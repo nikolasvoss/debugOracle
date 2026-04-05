@@ -535,6 +535,45 @@ class FetchRegisterCaptureTests(unittest.TestCase):
         self.assertIn("Continuing without register capture", stderr)
         self.assertEqual(payload["sources"]["registers"]["register_count"], 0)
 
+    def test_fetch_degrades_with_workspace_default_svd_when_no_live_session_exists(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            (workspace / "cortex-debug-shared-mi.log").write_text(
+                (FIXTURES / "sample.mi").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            (workspace / ".vscode").mkdir()
+            (workspace / ".vscode" / "settings.json").write_text(
+                json.dumps({"debugoracle.svdFile": "test.svd"}) + "\n",
+                encoding="utf-8",
+            )
+            (workspace / "test.svd").write_text(_minimal_svd_text(), encoding="utf-8")
+
+            with patch(
+                "debugoracle.cli.commands.evidence.discover_workspace_openocd_session",
+                return_value=OpenOcdDiscoveryResult(status=DISCOVERY_NO_SESSION),
+            ):
+                stdout, stderr = self._run_cli_in_workspace(
+                    workspace,
+                    ["fetch"],
+                    env={
+                        "DEBUGORACLE_OPENOCD_HOST": "127.0.0.1",
+                        "DEBUGORACLE_OPENOCD_PORT": "1",
+                    },
+                    capture_stderr=True,
+                )
+
+            payload = json.loads(
+                (workspace / "latest_snapshot.json").read_text(encoding="utf-8")
+            )
+
+        self.assertIn("Workspace default SVD for fetch:", stderr)
+        self.assertIn("Continuing without register capture", stderr)
+        self.assertIn("Registers: absent", stdout)
+        self.assertEqual(payload["sources"]["registers"]["register_count"], 0)
+
     def test_fetch_uses_latest_launch_section_when_mi_log_contains_multiple_tcl_ports(
         self,
     ) -> None:

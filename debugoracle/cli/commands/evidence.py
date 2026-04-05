@@ -49,6 +49,9 @@ def cmd_fetch(args: argparse.Namespace) -> int:
     resolved_svd_file, svd_discovered, svd_notice = resolve_fetch_svd_file(
         args, workspace_root
     )
+    svd_implicit = (
+        resolved_svd_file is not None and getattr(args, "svd_file", None) is None
+    )
     resolved_openocd_tcl_host, resolved_openocd_tcl_port, tcl_discovered, tcl_notice = (
         resolve_fetch_openocd_tcl_endpoint(
             args,
@@ -139,7 +142,7 @@ def cmd_fetch(args: argparse.Namespace) -> int:
                     state_out=state_out,
                     discovery=discovery,
                 )
-            elif resolved_svd_file and svd_discovered:
+            elif resolved_svd_file and svd_implicit:
                 print(
                     f"Auto-discovered SVD '{resolved_svd_file}' could not be used ({reason}). Continuing without register capture.",
                     file=sys.stderr,
@@ -155,7 +158,7 @@ def cmd_fetch(args: argparse.Namespace) -> int:
                 raise
     except SystemExit as error:
         reason = str(error) or "register enrichment failed"
-        if resolved_svd_file and svd_discovered:
+        if resolved_svd_file and svd_implicit:
             print(
                 f"Auto-discovered SVD '{resolved_svd_file}' could not be used ({reason}). Continuing without register capture.",
                 file=sys.stderr,
@@ -837,11 +840,7 @@ def resolve_fetch_svd_file(
             "Multiple SVD candidates were found in .dbgoracle "
             f"({joined}). Continuing without register capture.",
         )
-    return (
-        None,
-        False,
-        "No SVD candidate was found in .dbgoracle. Continuing without register capture.",
-    )
+    return (None, False, None)
 
 
 def resolve_fetch_openocd_tcl_endpoint(
