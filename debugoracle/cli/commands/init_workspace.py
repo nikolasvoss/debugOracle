@@ -145,6 +145,7 @@ def initialize_workspace(
 
     desired_settings = _settings_payload(
         args,
+        workspace_root=workspace_root,
         attach_mode=attach_mode,
         launch_config_name=launch_config_name,
         launch_config_role=launch_config_role,
@@ -234,6 +235,7 @@ def initialize_workspace(
 def _settings_payload(
     args: argparse.Namespace,
     *,
+    workspace_root: Path,
     attach_mode: bool,
     launch_config_name: str,
     launch_config_role: str,
@@ -253,7 +255,10 @@ def _settings_payload(
     if not attach_mode:
         payload["debugoracle.managedBy"] = MANAGED_BY_VALUE
     if args.svd_file:
-        payload["debugoracle.svdFile"] = args.svd_file
+        svd_file = args.svd_file.replace("${workspaceFolder}", str(workspace_root))
+        payload["debugoracle.svdFile"] = str(
+            _resolve_workspace_dependency_path(svd_file, workspace_root)
+        )
     return payload
 
 
