@@ -10,6 +10,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 
 from debugoracle.artifacts.repository import save_artifact
+from debugoracle.artifacts.models import RttSource
 from debugoracle.builder import build_bundle_from_files
 from debugoracle.cli import main
 
@@ -236,6 +237,42 @@ class ReportModesTests(unittest.TestCase):
         self.assertIn("`fetch --svd-file <file>`", output)
         self.assertIn("GDB embedded source data: present", output)
         self.assertIn("RTT embedded source data: present", output)
+
+    def test_default_report_does_not_repeat_register_capture_guidance_in_register_data_section(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            snapshot_path = self._write_snapshot(Path(tmpdir) / "latest_snapshot.json")
+            output = self._run_cli(["report", "--snapshot-file", str(snapshot_path)])
+
+        self.assertIn("Register Data:", output)
+        self.assertIn("`fetch --svd-file <file>`", output)
+        self.assertNotIn(
+            "Capture it with `fetch --svd-file <file>` if peripheral state matters.",
+            output,
+        )
+
+    def test_default_report_skips_rtt_tail_hint_when_embedded_rtt_has_no_lines(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            snapshot_path = self._write_snapshot(Path(tmpdir) / "latest_snapshot.json")
+            bundle = build_bundle_from_files(
+                str(FIXTURES / "sample.mi"),
+                str(FIXTURES / "sample.rtt"),
+            )
+            bundle.sources.rtt = RttSource(
+                raw_text="[00:00.001] boot start\n",
+                lines=[],
+                line_count=0,
+                embedded=True,
+            )
+            save_artifact(bundle, str(snapshot_path))
+
+            output = self._run_cli(["report", "--snapshot-file", str(snapshot_path)])
+
+        self.assertNotIn("`report --rtt --tail 50`", output)
+        self.assertIn("RTT lines: none were captured in embedded source data.", output)
 
     def _write_snapshot(self, path: Path, live_state: dict | None = None) -> Path:
         bundle = build_bundle_from_files(

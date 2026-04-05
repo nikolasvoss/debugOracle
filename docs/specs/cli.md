@@ -3,7 +3,7 @@
 - Module: `cli`
 - Code Path: `debugoracle/cli/__init__.py`
 - Public Entrypoints: `main`
-- Last Updated: `2026-03-24`
+- Last Updated: `2026-04-05`
 
 # SPEC: DebugOracle CLI
 
@@ -309,6 +309,9 @@ Meaning:
 - `report` never rebuilds from raw evidence.
 - Full embedded source payloads remain inside the snapshot and can be surfaced through inspect modes.
 - `--regs-list` is the discovery surface for captured register catalogs, while `--regs` is the stored-value/status surface.
+- The default text report deduplicates primary evidence gaps into the `Gaps` section and avoids repeating the same remediation line across sections.
+- Default text `Next Useful Commands` are gated by usable embedded data (for example, RTT tail hints appear only when embedded RTT lines are present).
+- Default text source-availability output distinguishes source presence from usable content by including embedded event/line counts when available.
 
 ## Source Resolution
 

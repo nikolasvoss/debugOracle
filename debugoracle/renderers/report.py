@@ -59,6 +59,15 @@ class ReportRenderOptions:
         )
 
 
+@dataclass(frozen=True)
+class _TextReportState:
+    embedded_summary: str
+    gap_lines: list[str]
+    next_commands: list[str]
+    source_availability_lines: str
+    unknown_lines: list[str]
+
+
 def render_report(
     bundle: InvestigationArtifact,
     fmt: str = "text",
@@ -362,6 +371,7 @@ def _render_report_text(
     trust: dict[str, object],
     allow_unsafe: bool,
 ) -> str:
+    state = _build_text_report_state(bundle)
     header = _trust_header_lines(trust)
     if trust.get("verdict") == "unsafe" and not allow_unsafe:
         sections = [
@@ -370,7 +380,7 @@ def _render_report_text(
             *header,
             "",
             "Current State:",
-            render_bullets(_current_state_lines(bundle)),
+            render_bullets(_current_state_lines(bundle, state=state)),
             "",
             "Trust Reasons:",
             render_bullets(cast(list[str], trust.get("reasons") or []) or ["None"]),
@@ -397,13 +407,13 @@ def _render_report_text(
         *header,
         "",
         "Current State:",
-        render_bullets(_current_state_lines(bundle)),
+        render_bullets(_current_state_lines(bundle, state=state)),
         "",
         "Gaps:",
-        render_bullets(_gap_lines(bundle)),
+        render_bullets(state.gap_lines),
         "",
         "Next Useful Commands:",
-        render_bullets(_next_command_lines(bundle)),
+        render_bullets(state.next_commands),
         "",
         "Session Summary:",
         session_summary(bundle, plain=True),
@@ -426,10 +436,10 @@ def _render_report_text(
         _register_availability_lines(bundle),
         "",
         "Unknowns And Gaps:",
-        render_bullets(unknowns(bundle)),
+        render_bullets(state.unknown_lines),
         "",
         "Source Availability:",
-        _source_availability_lines(bundle),
+        state.source_availability_lines,
     ]
     return (
         "\n".join(
@@ -468,12 +478,14 @@ def default_trust_payload() -> dict[str, object]:
     }
 
 
-def _current_state_lines(bundle: InvestigationArtifact) -> list[str]:
+def _current_state_lines(
+    bundle: InvestigationArtifact, *, state: _TextReportState
+) -> list[str]:
     return [
         f"Snapshot ID: {bundle.snapshot_id}",
         f"Stop reason: {bundle.stop_reason or 'unavailable'}",
         f"PC: {bundle.pc or 'unavailable'}",
-        f"Embedded evidence: {_embedded_evidence_summary(bundle)}",
+        f"Embedded evidence: {state.embedded_summary}",
     ]
 
 
@@ -481,8 +493,12 @@ def _gap_lines(bundle: InvestigationArtifact) -> list[str]:
     gaps: list[str] = []
     if not bundle.has_embedded_gdb_source:
         gaps.append("GDB data: absent.")
+    elif not bundle.sources.gdb.events:
+        gaps.append("GDB events: absent in embedded source data.")
     if not bundle.has_embedded_rtt_source:
         gaps.append("RTT data: absent.")
+    elif not bundle.sources.rtt.lines:
+        gaps.append("RTT lines: none were captured in embedded source data.")
     if not bundle.has_embedded_register_source:
         gaps.append(
             "Register data: absent. Use `fetch --svd-file <file>` if peripheral state matters."
@@ -494,9 +510,9 @@ def _gap_lines(bundle: InvestigationArtifact) -> list[str]:
 
 def _next_command_lines(bundle: InvestigationArtifact) -> list[str]:
     commands = ["`report --vars [NAME ...]`"]
-    if bundle.has_embedded_gdb_source:
+    if bundle.has_embedded_gdb_source and bundle.sources.gdb.events:
         commands.append("`report --gdb --tail 50`")
-    if bundle.has_embedded_rtt_source:
+    if bundle.has_embedded_rtt_source and bundle.sources.rtt.lines:
         commands.append("`report --rtt --tail 50`")
     if bundle.has_embedded_register_source:
         commands.append("`report --regs-list`")
@@ -506,10 +522,20 @@ def _next_command_lines(bundle: InvestigationArtifact) -> list[str]:
 
 
 def _embedded_evidence_summary(bundle: InvestigationArtifact) -> str:
+    gdb_count = len(bundle.sources.gdb.events) if bundle.has_embedded_gdb_source else 0
+    rtt_count = len(bundle.sources.rtt.lines) if bundle.has_embedded_rtt_source else 0
     return ", ".join(
         [
-            f"gdb {'present' if bundle.has_embedded_gdb_source else 'absent'}",
-            f"rtt {'present' if bundle.has_embedded_rtt_source else 'absent'}",
+            (
+                f"gdb present ({gdb_count} events)"
+                if bundle.has_embedded_gdb_source
+                else "gdb absent"
+            ),
+            (
+                f"rtt present ({rtt_count} lines)"
+                if bundle.has_embedded_rtt_source
+                else "rtt absent"
+            ),
             f"registers {'present' if bundle.has_embedded_register_source else 'absent'}",
         ]
     )
@@ -520,7 +546,6 @@ def _register_availability_lines(bundle: InvestigationArtifact) -> str:
         return "\n".join(
             [
                 "- Peripheral register data is not available in this snapshot.",
-                "- Capture it with `fetch --svd-file <file>` if peripheral state matters.",
             ]
         )
     source = bundle.sources.registers
@@ -536,9 +561,15 @@ def _register_availability_lines(bundle: InvestigationArtifact) -> str:
 
 
 def _source_availability_lines(bundle: InvestigationArtifact) -> str:
+    gdb_suffix = ""
+    if bundle.has_embedded_gdb_source:
+        gdb_suffix = f" ({len(bundle.sources.gdb.events)} events)"
+    rtt_suffix = ""
+    if bundle.has_embedded_rtt_source:
+        rtt_suffix = f" ({len(bundle.sources.rtt.lines)} lines)"
     lines = [
-        f"- GDB embedded source data: {'present' if bundle.has_embedded_gdb_source else 'absent'}",
-        f"- RTT embedded source data: {'present' if bundle.has_embedded_rtt_source else 'absent'}",
+        f"- GDB embedded source data: {'present' if bundle.has_embedded_gdb_source else 'absent'}{gdb_suffix}",
+        f"- RTT embedded source data: {'present' if bundle.has_embedded_rtt_source else 'absent'}{rtt_suffix}",
         f"- SVD register data: {'present' if bundle.has_embedded_register_source else 'absent'}",
     ]
     return "\n".join(lines)
@@ -546,3 +577,29 @@ def _source_availability_lines(bundle: InvestigationArtifact) -> str:
 
 def _default_variable_options() -> VariableRenderOptions:
     return VariableRenderOptions(scope="all", names=[], detail="compact")
+
+
+def _build_text_report_state(bundle: InvestigationArtifact) -> _TextReportState:
+    gap_lines = _gap_lines(bundle)
+    next_commands = _next_command_lines(bundle)
+    unknown_lines = unknowns(bundle)
+    if "RTT lines: none were captured in embedded source data." in gap_lines:
+        unknown_lines = [
+            line
+            for line in unknown_lines
+            if line != "No RTT lines were available for this snapshot."
+        ]
+    if not unknown_lines:
+        if gap_lines:
+            unknown_lines = ["No additional evidence gaps beyond the Gaps section."]
+        else:
+            unknown_lines = [
+                "No major evidence gaps detected in the captured snapshot."
+            ]
+    return _TextReportState(
+        embedded_summary=_embedded_evidence_summary(bundle),
+        gap_lines=gap_lines,
+        next_commands=next_commands,
+        source_availability_lines=_source_availability_lines(bundle),
+        unknown_lines=unknown_lines,
+    )
