@@ -101,7 +101,6 @@ dbgoracle docs search "<query>" \
   [--workspace-root .] \
   [--file <path> ...] \
   [--limit N] \
-  [--semantic] \
   [--format text|json]
 ```
 
@@ -141,10 +140,10 @@ dbgoracle docs ingest --file doc/STM32F4_Reference_Manual.pdf --parser docling
 dbgoracle docs ingest --file doc/STM32F4_Reference_Manual.pdf --semantic
 ```
 
-2. Search with hybrid ranking:
+2. Search (auto-selects hybrid ranking when embeddings are available):
 
 ```bash
-dbgoracle docs search "serial port speed configuration" --semantic
+dbgoracle docs search "serial port speed configuration"
 ```
 
 If semantic dependencies or embeddings are unavailable, search falls back to BM25 and reports warnings.
@@ -209,5 +208,5 @@ No search results:
 
 - run `dbgoracle docs status` and check for `failed`/`partial`
 - try `--parser docling` for difficult PDFs
-- use exact register/peripheral terms first, then add `--semantic` if installed
+- use exact register/peripheral terms first; search auto-selects hybrid mode when semantic embeddings are available
 - run `dbgoracle docs doctor` to verify parser/semantic dependency readiness

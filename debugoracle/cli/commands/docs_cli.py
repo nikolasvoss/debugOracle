@@ -35,7 +35,6 @@ def cmd_docs_search(args: argparse.Namespace) -> int:
         query=args.query,
         limit=args.limit,
         files=args.file,
-        semantic=args.semantic,
     )
     output = _render_search(result, fmt=args.format)
     emit(output, args.output)
@@ -149,7 +148,7 @@ def _render_ingest(batch: DocsIngestBatch, *, fmt: str) -> str:
 def _render_search(result: DocsSearchResult, *, fmt: str) -> str:
     if fmt == "json":
         return json.dumps(result.to_dict(), indent=2) + "\n"
-    lines = [f"DebugOracle Docs Search: {result.query}"]
+    lines = [f"DebugOracle Docs Search: {result.query}", f"mode={result.search_mode}"]
     if result.warnings:
         lines.append("Warnings:")
         lines.extend(f"- {warning}" for warning in result.warnings)

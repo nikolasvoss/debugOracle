@@ -147,11 +147,14 @@ class DocsCliTests(unittest.TestCase):
 
     def test_render_search_and_status(self) -> None:
         no_hits = docs_cli._render_search(
-            DocsSearchResult(query="timer", hits=[], warnings=["index missing"]),
+            DocsSearchResult(
+                query="timer", hits=[], warnings=["index missing"], search_mode="bm25"
+            ),
             fmt="text",
         )
         self.assertIn("No results.", no_hits)
         self.assertIn("Warnings:", no_hits)
+        self.assertIn("mode=bm25", no_hits)
 
         hit = DocsSearchHit(
             source_pdf="/tmp/doc.pdf",
@@ -164,15 +167,23 @@ class DocsCliTests(unittest.TestCase):
             heading_path="Peripheral > RCC",
         )
         search_text = docs_cli._render_search(
-            DocsSearchResult(query="rcc", hits=[hit], warnings=[]), fmt="text"
+            DocsSearchResult(
+                query="rcc", hits=[hit], warnings=[], search_mode="hybrid"
+            ),
+            fmt="text",
         )
         self.assertIn("heading: Peripheral > RCC", search_text)
         self.assertIn("line1 line2", search_text)
+        self.assertIn("mode=hybrid", search_text)
 
         json_search = docs_cli._render_search(
-            DocsSearchResult(query="rcc", hits=[hit], warnings=[]), fmt="json"
+            DocsSearchResult(
+                query="rcc", hits=[hit], warnings=[], search_mode="hybrid"
+            ),
+            fmt="json",
         )
         self.assertIn('"results"', json_search)
+        self.assertIn('"mode"', json_search)
 
         empty_status = docs_cli._render_status([], fmt="text")
         self.assertIn("No ingested documents found.", empty_status)
@@ -288,9 +299,7 @@ class DocsCliTests(unittest.TestCase):
             patch("debugoracle.cli.commands.docs_cli.emit") as emit_mock,
         ):
             code = docs_cli.cmd_docs_search(
-                SimpleNamespace(
-                    **common_args, query="q", limit=5, file=[], semantic=False
-                )
+                SimpleNamespace(**common_args, query="q", limit=5, file=[])
             )
         self.assertEqual(code, 1)
         emit_mock.assert_called_once()
@@ -303,9 +312,7 @@ class DocsCliTests(unittest.TestCase):
             patch("debugoracle.cli.commands.docs_cli.emit"),
         ):
             code = docs_cli.cmd_docs_search(
-                SimpleNamespace(
-                    **common_args, query="q", limit=5, file=[], semantic=False
-                )
+                SimpleNamespace(**common_args, query="q", limit=5, file=[])
             )
         self.assertEqual(code, 2)
 
@@ -330,9 +337,7 @@ class DocsCliTests(unittest.TestCase):
             patch("debugoracle.cli.commands.docs_cli.emit"),
         ):
             code = docs_cli.cmd_docs_search(
-                SimpleNamespace(
-                    **common_args, query="q", limit=5, file=[], semantic=False
-                )
+                SimpleNamespace(**common_args, query="q", limit=5, file=[])
             )
         self.assertEqual(code, 0)
 
