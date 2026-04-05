@@ -714,7 +714,41 @@ class DebugOracleCliTests(unittest.TestCase):
             )
 
         self.assertEqual(exit_code, 0)
-        self.assertEqual(settings["debugoracle.svdFile"], "boards/sample.svd")
+        self.assertEqual(
+            settings["debugoracle.svdFile"], str(workspace / "boards" / "sample.svd")
+        )
+        self.assertEqual(stderr, "")
+        self.assertIn("init-workspace", stdout)
+
+    def test_init_workspace_expands_workspace_token_in_svd_setting(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            with patch(
+                "debugoracle.cli.commands.init_workspace.shutil.which",
+                return_value="/usr/bin/openocd",
+            ):
+                stdout, stderr, exit_code = self._run_cli_capture(
+                    [
+                        "init-workspace",
+                        "--workspace-root",
+                        str(workspace),
+                        "--executable",
+                        "build/app.elf",
+                        "--openocd-config",
+                        "interface/stlink.cfg",
+                        "--svd-file",
+                        "${workspaceFolder}/boards/sample.svd",
+                    ]
+                )
+
+            settings = json.loads(
+                (workspace / ".vscode" / "settings.json").read_text(encoding="utf-8")
+            )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(
+            settings["debugoracle.svdFile"], str(workspace / "boards" / "sample.svd")
+        )
         self.assertEqual(stderr, "")
         self.assertIn("init-workspace", stdout)
 
