@@ -9,6 +9,7 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
+import debugoracle.docs_sidecar as docs_sidecar_module
 from debugoracle.cli import main
 from debugoracle.cli.commands.docs_cli import _render_ingest, _run_docs_ingest
 from debugoracle.cli.main import build_parser
@@ -71,11 +72,10 @@ class DocsSidecarTests(unittest.TestCase):
         self.assertEqual(parsed.docs_command, "doctor")
         self.assertEqual(parsed.format, "json")
 
-    def test_docs_search_parses_semantic_flag(self) -> None:
+    def test_docs_search_no_longer_accepts_semantic_flag(self) -> None:
         parser = build_parser()
-        parsed = parser.parse_args(["docs", "search", "USART", "--semantic"])
-
-        self.assertTrue(parsed.semantic)
+        with self.assertRaises(SystemExit):
+            parser.parse_args(["docs", "search", "USART", "--semantic"])
 
     def test_ingest_explicit_text_file_writes_extended_sidecar(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -405,17 +405,67 @@ second-page text
                 ],
             )
             save_docs_artifact(artifact, sidecar)
+            (sidecar / "embeddings.npy").write_bytes(b"fake")
 
             with patch(
                 "debugoracle.docs_sidecar._semantic_scores_for_entries",
                 return_value=([0.1, 0.95], []),
             ):
-                result = search_documents(
-                    workspace_root=tmpdir, query="baud", semantic=True
-                )
+                result = search_documents(workspace_root=tmpdir, query="baud")
 
         self.assertEqual(len(result.hits), 2)
+        self.assertEqual(result.search_mode, "hybrid")
         self.assertGreaterEqual(result.hits[0].score, result.hits[1].score)
+
+    def test_search_degrades_to_bm25_when_semantic_runtime_raises(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manual = Path(tmpdir) / "manual.txt"
+            manual.write_text("unused", encoding="utf-8")
+            sidecar = sidecar_dir_for(manual)
+            artifact = DocsArtifact(
+                envelope=DocsEnvelope(
+                    source_pdf=str(manual.resolve()),
+                    parser_used="plain-text",
+                    derived_paths=[
+                        str(sidecar / ENVELOPE_FILENAME),
+                        str(sidecar / "index.json"),
+                        str(sidecar / "embeddings.npy"),
+                    ],
+                    page_count=1,
+                    chunk_count=1,
+                    warning_summary="",
+                    ingest_state="clean",
+                    source_hash="hash",
+                    semantic_indexed=True,
+                    warnings=[],
+                ),
+                index_entries=[
+                    DocsIndexEntry(
+                        chunk_id="a",
+                        source_pdf=str(manual.resolve()),
+                        page_start=1,
+                        page_end=1,
+                        text="USART baud rate register",
+                        tokens=["usart", "baud", "rate", "register"],
+                        token_count=4,
+                        term_freq={"usart": 1, "baud": 1, "rate": 1, "register": 1},
+                    )
+                ],
+            )
+            save_docs_artifact(artifact, sidecar)
+            (sidecar / "embeddings.npy").write_bytes(b"fake")
+
+            with patch(
+                "debugoracle.docs_sidecar._semantic_scores_for_entries",
+                side_effect=RuntimeError("cuda boom"),
+            ):
+                result = search_documents(workspace_root=tmpdir, query="baud")
+
+        self.assertEqual(result.search_mode, "bm25")
+        self.assertEqual(len(result.hits), 1)
+        self.assertTrue(
+            any("Semantic search unavailable" in w for w in result.warnings)
+        )
 
     def test_discovery_returns_doc_and_docs_pdfs_only(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -710,6 +760,238 @@ second-page text
         message = str(ctx.exception)
         self.assertIn("pipx inject debugoracle docling", message)
         self.assertIn("pip install 'debugoracle[docling]'", message)
+
+    def test_docling_collapsed_page_mapping_retries_with_pymupdf(self) -> None:
+        class _FakeParser:
+            def __init__(self, result: DocsParseResult) -> None:
+                self._result = result
+
+            def parse(self, source: Path, *, progress_cb=None) -> DocsParseResult:
+                _ = source, progress_cb
+                return self._result
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manual = Path(tmpdir) / "manual.pdf"
+            manual.write_bytes(b"%PDF-1.4")
+            docling_result = DocsParseResult(
+                chunks=[
+                    DocsChunk(
+                        chunk_id="a",
+                        heading_path="",
+                        chunk_type="prose",
+                        page_start=1,
+                        page_end=1,
+                        text="first",
+                    ),
+                    DocsChunk(
+                        chunk_id="b",
+                        heading_path="",
+                        chunk_type="prose",
+                        page_start=1,
+                        page_end=1,
+                        text="second",
+                    ),
+                ],
+                parser_used="docling",
+                warnings=[],
+                page_count=1,
+            )
+            pymupdf_result = DocsParseResult(
+                chunks=[
+                    DocsChunk(
+                        chunk_id="page-1",
+                        heading_path="",
+                        chunk_type="prose",
+                        page_start=1,
+                        page_end=1,
+                        text="first",
+                    ),
+                    DocsChunk(
+                        chunk_id="page-2",
+                        heading_path="",
+                        chunk_type="prose",
+                        page_start=2,
+                        page_end=2,
+                        text="second",
+                    ),
+                ],
+                parser_used="pymupdf",
+                warnings=[],
+                page_count=2,
+            )
+
+            def fake_make_parser(name: str):  # type: ignore[no-untyped-def]
+                if name == "docling":
+                    return _FakeParser(docling_result)
+                if name == "pymupdf":
+                    return _FakeParser(pymupdf_result)
+                raise AssertionError(name)
+
+            with (
+                patch(
+                    "debugoracle.docs_sidecar.make_parser", side_effect=fake_make_parser
+                ),
+                patch(
+                    "debugoracle.docs_sidecar._pdf_page_count",
+                    return_value=2,
+                    create=True,
+                ),
+            ):
+                batch = ingest_documents(
+                    workspace_root=tmpdir,
+                    files=[str(manual)],
+                    parser_name="docling",
+                )
+
+        self.assertEqual(batch.results[0].parser_used, "pymupdf")
+        self.assertEqual(batch.results[0].ingest_state, "warning")
+        self.assertIn(
+            "docling page mapping untrusted", batch.results[0].warning_summary
+        )
+
+    def test_docling_collapsed_mapping_with_failed_fallback_is_partial(self) -> None:
+        class _FakeParser:
+            def __init__(self, result: DocsParseResult) -> None:
+                self._result = result
+
+            def parse(self, source: Path, *, progress_cb=None) -> DocsParseResult:
+                _ = source, progress_cb
+                return self._result
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manual = Path(tmpdir) / "manual.pdf"
+            manual.write_bytes(b"%PDF-1.4")
+            docling_result = DocsParseResult(
+                chunks=[
+                    DocsChunk(
+                        chunk_id="a",
+                        heading_path="",
+                        chunk_type="prose",
+                        page_start=1,
+                        page_end=1,
+                        text="first",
+                    ),
+                ],
+                parser_used="docling",
+                warnings=[],
+                page_count=1,
+            )
+
+            def fake_make_parser(name: str):  # type: ignore[no-untyped-def]
+                if name == "docling":
+                    return _FakeParser(docling_result)
+                if name == "pymupdf":
+                    raise RuntimeError("fallback boom")
+                raise AssertionError(name)
+
+            with (
+                patch(
+                    "debugoracle.docs_sidecar.make_parser", side_effect=fake_make_parser
+                ),
+                patch(
+                    "debugoracle.docs_sidecar._pdf_page_count",
+                    return_value=2,
+                    create=True,
+                ),
+            ):
+                batch = ingest_documents(
+                    workspace_root=tmpdir,
+                    files=[str(manual)],
+                    parser_name="docling",
+                )
+
+        self.assertEqual(batch.results[0].parser_used, "docling")
+        self.assertEqual(batch.results[0].ingest_state, "partial")
+        self.assertIn("pymupdf fallback failed", batch.results[0].warning_summary)
+
+    def test_docling_collapsed_mapping_with_collapsed_fallback_is_partial(self) -> None:
+        class _FakeParser:
+            def __init__(self, result: DocsParseResult) -> None:
+                self._result = result
+
+            def parse(self, source: Path, *, progress_cb=None) -> DocsParseResult:
+                _ = source, progress_cb
+                return self._result
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manual = Path(tmpdir) / "manual.pdf"
+            manual.write_bytes(b"%PDF-1.4")
+            collapsed_docling = DocsParseResult(
+                chunks=[
+                    DocsChunk(
+                        chunk_id="a",
+                        heading_path="",
+                        chunk_type="prose",
+                        page_start=1,
+                        page_end=1,
+                        text="first",
+                    ),
+                ],
+                parser_used="docling",
+                warnings=[],
+                page_count=1,
+            )
+            collapsed_pymupdf = DocsParseResult(
+                chunks=[
+                    DocsChunk(
+                        chunk_id="page-1",
+                        heading_path="",
+                        chunk_type="prose",
+                        page_start=1,
+                        page_end=1,
+                        text="first",
+                    ),
+                ],
+                parser_used="pymupdf",
+                warnings=[],
+                page_count=1,
+            )
+
+            def fake_make_parser(name: str):  # type: ignore[no-untyped-def]
+                if name == "docling":
+                    return _FakeParser(collapsed_docling)
+                if name == "pymupdf":
+                    return _FakeParser(collapsed_pymupdf)
+                raise AssertionError(name)
+
+            with (
+                patch(
+                    "debugoracle.docs_sidecar.make_parser", side_effect=fake_make_parser
+                ),
+                patch(
+                    "debugoracle.docs_sidecar._pdf_page_count",
+                    return_value=4,
+                    create=True,
+                ),
+            ):
+                batch = ingest_documents(
+                    workspace_root=tmpdir,
+                    files=[str(manual)],
+                    parser_name="docling",
+                )
+
+        self.assertEqual(batch.results[0].parser_used, "pymupdf")
+        self.assertEqual(batch.results[0].ingest_state, "partial")
+        self.assertIn(
+            "fallback page mapping still untrusted", batch.results[0].warning_summary
+        )
+
+    def test_semantic_model_is_lazily_cached(self) -> None:
+        docs_sidecar_module._SEMANTIC_MODEL = None
+        fake_model = object()
+        try:
+            with patch(
+                "debugoracle.docs_sidecar._build_semantic_model",
+                return_value=fake_model,
+            ) as mocked_builder:
+                first = docs_sidecar_module._get_semantic_model()
+                second = docs_sidecar_module._get_semantic_model()
+        finally:
+            docs_sidecar_module._SEMANTIC_MODEL = None
+
+        self.assertIs(first, fake_model)
+        self.assertIs(second, fake_model)
+        self.assertEqual(mocked_builder.call_count, 1)
 
 
 if __name__ == "__main__":

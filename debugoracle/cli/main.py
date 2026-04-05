@@ -365,11 +365,6 @@ def _add_docs_parser(
         help="Maximum number of search results to return",
     )
     docs_search.add_argument(
-        "--semantic",
-        action="store_true",
-        help="Enable hybrid BM25 + semantic search when embeddings are available",
-    )
-    docs_search.add_argument(
         "--format",
         choices=["text", "json"],
         default="text",

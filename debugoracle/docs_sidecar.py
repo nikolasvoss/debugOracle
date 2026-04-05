@@ -26,6 +26,7 @@ CHECKPOINT_FILENAME = "checkpoint.json"
 CHUNKS_FILENAME = "chunks.json"
 STAGED_INDEX_FILENAME = "index.staged.json"
 STAGING_SUFFIX = ".staging"
+_SEMANTIC_MODEL: Any | None = None
 
 ProgressCallback = Callable[[int, int, str], None]
 
@@ -236,10 +237,12 @@ class DocsSearchResult:
     query: str
     hits: list[DocsSearchHit] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    search_mode: str = "bm25"
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "query": self.query,
+            "mode": self.search_mode,
             "results": [item.to_dict() for item in self.hits],
             "warnings": list(self.warnings),
         }
@@ -402,6 +405,7 @@ def ingest_document(
     page_count = 0
     empty_page_count = 0
     semantic_indexed = False
+    page_mapping_untrusted = False
 
     checkpoint = _load_checkpoint(staging_dir)
     checkpoint_compatible = _is_checkpoint_compatible(
@@ -449,6 +453,35 @@ def ingest_document(
             chunks = list(parse_result.chunks)
             page_count = parse_result.page_count
             empty_page_count = parse_result.empty_page_count
+            if parser_used == "docling" and source.suffix.lower() == ".pdf":
+                if _docling_page_mapping_untrusted(source, parse_result):
+                    page_mapping_untrusted = True
+                    warnings.append(
+                        "docling page mapping untrusted; retrying with pymupdf"
+                    )
+                    try:
+                        fallback_result = make_parser("pymupdf").parse(
+                            source, progress_cb=progress_cb
+                        )
+                        parser_used = fallback_result.parser_used
+                        warnings.extend(fallback_result.warnings)
+                        warnings.append(
+                            "docling page mapping untrusted; used pymupdf fallback"
+                        )
+                        chunks = list(fallback_result.chunks)
+                        page_count = fallback_result.page_count
+                        empty_page_count = fallback_result.empty_page_count
+                        page_mapping_untrusted = _docling_page_mapping_untrusted(
+                            source, fallback_result
+                        )
+                        if page_mapping_untrusted:
+                            warnings.append(
+                                "docling page mapping untrusted; pymupdf fallback page mapping still untrusted"
+                            )
+                    except RuntimeError as error:
+                        warnings.append(
+                            f"docling page mapping untrusted; pymupdf fallback failed: {error}"
+                        )
             checkpoint = DocsIngestCheckpoint(
                 source_pdf=str(source),
                 source_hash=source_hash,
@@ -516,6 +549,7 @@ def ingest_document(
             chunk_count=len(index_entries),
             warnings=warnings,
             empty_page_count=empty_page_count,
+            page_mapping_untrusted=page_mapping_untrusted,
         )
 
     publish_dir = _publish_dir_for(sidecar_dir)
@@ -605,7 +639,6 @@ def search_documents(
     query: str,
     limit: int = 5,
     files: list[str] | None = None,
-    semantic: bool = False,
 ) -> DocsSearchResult:
     artifacts, warnings = load_docs_artifacts(
         workspace_root=workspace_root, files=files or []
@@ -616,10 +649,10 @@ def search_documents(
         for index_entry in artifact.index_entries
     ]
     if not entries:
-        return DocsSearchResult(query=query, warnings=warnings)
+        return DocsSearchResult(query=query, warnings=warnings, search_mode="bm25")
     query_tokens = tokenize(query)
     if not query_tokens and not query.strip():
-        return DocsSearchResult(query=query, warnings=warnings)
+        return DocsSearchResult(query=query, warnings=warnings, search_mode="bm25")
 
     document_frequency = Counter()
     for _, index_entry in entries:
@@ -644,16 +677,27 @@ def search_documents(
         bm25_scores.append(score)
 
     final_scores = list(bm25_scores)
-    if semantic:
-        cosine_scores, semantic_warnings = _semantic_scores_for_entries(entries, query)
-        warnings.extend(semantic_warnings)
-        if cosine_scores is not None:
-            normalized_bm25 = _normalize_scores(bm25_scores)
-            normalized_cosine = _normalize_scores(cosine_scores)
-            final_scores = [
-                0.6 * bm25 + 0.4 * cosine
-                for bm25, cosine in zip(normalized_bm25, normalized_cosine)
-            ]
+    search_mode = "bm25"
+    has_semantic_embeddings = any(
+        (sidecar_dir_for(envelope.source_pdf) / EMBEDDINGS_FILENAME).exists()
+        for envelope, _ in entries
+    )
+    if has_semantic_embeddings:
+        try:
+            cosine_scores, semantic_warnings = _semantic_scores_for_entries(
+                entries, query
+            )
+            warnings.extend(semantic_warnings)
+            if cosine_scores is not None:
+                normalized_bm25 = _normalize_scores(bm25_scores)
+                normalized_cosine = _normalize_scores(cosine_scores)
+                final_scores = [
+                    0.6 * bm25 + 0.4 * cosine
+                    for bm25, cosine in zip(normalized_bm25, normalized_cosine)
+                ]
+                search_mode = "hybrid"
+        except Exception as error:
+            warnings.append(f"Semantic search unavailable: {error}")
 
     results: list[DocsSearchHit] = []
     for score, (envelope, index_entry) in zip(final_scores, entries):
@@ -676,7 +720,10 @@ def search_documents(
         key=lambda item: (-item.score, item.source_pdf, item.page_start, item.page_end)
     )
     return DocsSearchResult(
-        query=query, hits=results[: max(1, limit)], warnings=warnings
+        query=query,
+        hits=results[: max(1, limit)],
+        warnings=warnings,
+        search_mode=search_mode,
     )
 
 
@@ -1021,10 +1068,13 @@ def evaluate_ingest_state(
     chunk_count: int,
     warnings: list[str],
     empty_page_count: int = 0,
+    page_mapping_untrusted: bool = False,
 ) -> str:
     if page_count <= 0:
         return "failed"
     if chunk_count <= 0:
+        return "partial"
+    if page_mapping_untrusted:
         return "partial"
     if empty_page_count > 0:
         return "partial"
@@ -1379,15 +1429,12 @@ def parse_markdown_table(text: str) -> list[list[str]] | None:
 
 def encode_embeddings(chunks: list[DocsChunk]) -> Any:
     try:
-        from sentence_transformers import (  # pyright: ignore[reportMissingImports]
-            SentenceTransformer,
-        )
         import numpy as np  # pyright: ignore[reportMissingImports]
     except ImportError as error:
         raise RuntimeError(
             "Install with: pip install 'debugoracle[semantic]'"
         ) from error
-    model = SentenceTransformer("all-MiniLM-L6-v2")
+    model = _get_semantic_model()
     texts = [chunk.text for chunk in chunks]
     embeddings = model.encode(texts, convert_to_numpy=True, show_progress_bar=False)
     if not isinstance(embeddings, np.ndarray):
@@ -1400,14 +1447,11 @@ def _semantic_scores_for_entries(
     query: str,
 ) -> tuple[list[float] | None, list[str]]:
     try:
-        from sentence_transformers import (  # pyright: ignore[reportMissingImports]
-            SentenceTransformer,
-        )
         import numpy as np  # pyright: ignore[reportMissingImports]
     except ImportError as error:
         return None, [f"Semantic search unavailable: {error}"]
 
-    model = SentenceTransformer("all-MiniLM-L6-v2")
+    model = _get_semantic_model()
     query_embedding = model.encode(
         [query], convert_to_numpy=True, show_progress_bar=False
     )
@@ -1454,6 +1498,21 @@ def _normalize_scores(scores: list[float]) -> list[float]:
     if max_score == min_score:
         return [1.0 if score > 0 else 0.0 for score in scores]
     return [(score - min_score) / (max_score - min_score) for score in scores]
+
+
+def _build_semantic_model() -> Any:
+    from sentence_transformers import (  # pyright: ignore[reportMissingImports]
+        SentenceTransformer,
+    )
+
+    return SentenceTransformer("all-MiniLM-L6-v2")
+
+
+def _get_semantic_model() -> Any:
+    global _SEMANTIC_MODEL
+    if _SEMANTIC_MODEL is None:
+        _SEMANTIC_MODEL = _build_semantic_model()
+    return _SEMANTIC_MODEL
 
 
 def _bm25_score(
@@ -1566,6 +1625,34 @@ def _fallback_page_chunks(doc: Any) -> list[DocsChunk]:
             )
         )
     return chunks
+
+
+def _pdf_page_count(source: Path) -> int | None:
+    try:
+        import pymupdf  # pyright: ignore[reportMissingImports]
+    except Exception:
+        return None
+    try:
+        document = pymupdf.open(source)
+        try:
+            return int(len(document))
+        finally:
+            document.close()
+    except Exception:
+        return None
+
+
+def _docling_page_mapping_untrusted(
+    source: Path, parse_result: DocsParseResult
+) -> bool:
+    total_pages = _pdf_page_count(source)
+    if total_pages is None or total_pages <= 1:
+        return False
+    if not parse_result.chunks:
+        return False
+    return all(
+        chunk.page_start == 1 and chunk.page_end == 1 for chunk in parse_result.chunks
+    )
 
 
 def _build_failed_result(

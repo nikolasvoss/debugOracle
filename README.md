@@ -138,7 +138,7 @@ Key points:
 
 - Default parser is `pymupdf` (`pymupdf` + `pymupdf4llm` are installed with base dependencies).
 - Optional parser: `--parser docling` (install with `./scripts/install/linux.sh --docs-tools docling`).
-- Optional hybrid search: ingest with `--semantic`, search with `--semantic` (install with `./scripts/install/linux.sh --docs-tools semantic`).
+- Optional hybrid search: ingest with `--semantic`; `docs search` auto-selects hybrid ranking when embeddings are available (install with `./scripts/install/linux.sh --docs-tools semantic`).
 - Preflight dependency check: `dbgoracle docs doctor`.
 - If you run ingest without `--file`/`--folder`, DebugOracle discovers likely PDFs under `doc/` and `docs/` and requires `--yes` confirmation.
 - In TTY mode, ingest can prompt for discovered-doc confirmation; use `--no-interactive` to disable prompts.
