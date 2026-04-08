@@ -1,3 +1,20 @@
+## [0.1.2] - 2026-04-08
+
+### Added
+- Replay fixture regression suite under `tests/replay/` with scenario-based fixture bundles:
+  `signal_received_stop`, `missing_stop_evidence`, and `conflicting_stop_events`.
+- Shared test helpers in `tests/helpers/` for fixture loading and deterministic artifact comparison.
+- Replay fixtures documented as complete in `docs/plans/TESTING_PLAN_PHASE_3.md`.
+
+### Changed
+- Replay tests now auto-discover fixture bundles from `tests/fixtures/` instead of relying on a hardcoded fixture list.
+- Artifact comparison helper now supports opt-in exclusion of `sources.gdb.events` for save/load round-trip parity checks while keeping determinism checks strict by default.
+- Pre-commit `bandit` hook now runs via `.venv/bin/bandit` for consistent local execution.
+
+### Fixed
+- Fixture metadata loading now supports YAML parsing (with JSON fallback) instead of strict JSON-only parsing.
+- Full validation gate now runs cleanly with `./.venv/bin/pre-commit run --all-files`.
+
 ## [0.1.1] - 2026-04-05
 
 ### Added
