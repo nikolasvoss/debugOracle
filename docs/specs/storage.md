@@ -3,7 +3,7 @@
 - Module: `storage`
 - Code Path: `debugoracle/pipeline/storage.py`
 - Public Entrypoints: `build_artifact_from_sources`
-- Last Updated: `2026-03-20`
+- Last Updated: `2026-04-08`
 
 # SPEC: Artifact Storage Assembly
 
@@ -27,6 +27,7 @@ Assemble the canonical investigation artifact from parsed source inputs.
 - `sources.gdb.raw_text` and ordered `sources.gdb.events`
 - `sources.rtt.raw_text` and `sources.rtt.lines`
 - `sources.registers` for SVD-backed register evidence (embedded or absent)
+- `sources.memory` for explicit memory read evidence (embedded or absent)
 
 ## Compatibility Notes
 

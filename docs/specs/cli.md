@@ -271,6 +271,7 @@ Inputs:
 - Raw evidence, by explicit path or discovery
 - Optional `--state-out`
 - Optional `--svd-file` for embedded register catalog capture
+- Optional repeatable `--mem ADDR:SIZE` for bounded read-only memory capture
 - Optional workspace-default `debugoracle.svdFile` from `.vscode/settings.json` when no explicit SVD flag is provided
 
 Outputs:
@@ -286,6 +287,7 @@ Meaning:
 - It never treats an existing snapshot as the primary source.
 - It overwrites the default latest snapshot when no explicit output path is provided.
 - It remains a capture-only surface; register discovery and inspection happen through `report`.
+- `fetch --mem` persists deterministic per-range success/failure entries and bounded counters in provenance.
 
 ### `report`
 
@@ -303,6 +305,7 @@ Outputs:
   - `--rtt [--tail N]`
   - `--regs-list [PERIPHERAL]`
   - `--regs [SELECTOR ...]`
+  - `--mem [ADDR:SIZE ...]`
   - `--verbose [--tail N]`
 
 Meaning:

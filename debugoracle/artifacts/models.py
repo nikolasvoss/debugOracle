@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any, overload
 
-CURRENT_BUNDLE_SCHEMA_VERSION = "4"
+CURRENT_BUNDLE_SCHEMA_VERSION = "5"
 
 VARIABLE_BUCKET_LOCALS = "locals"
 VARIABLE_BUCKET_GLOBALS = "globals"
@@ -117,10 +117,39 @@ class RegisterSource:
 
 
 @dataclass
+class MemoryReadEntry:
+    status: str
+    address: str
+    size: int
+    data_hex: str = ""
+    failure_reason: str | None = None
+    ascii_preview: str = ""
+
+
+@dataclass
+class MemorySource:
+    embedded: bool = False
+    entries: list[MemoryReadEntry] = field(default_factory=list)
+
+    @property
+    def requested_count(self) -> int:
+        return len(self.entries)
+
+    @property
+    def success_count(self) -> int:
+        return sum(1 for entry in self.entries if entry.status == "success")
+
+    @property
+    def failure_count(self) -> int:
+        return sum(1 for entry in self.entries if entry.status == "failure")
+
+
+@dataclass
 class ArtifactSources:
     gdb: GdbSource = field(default_factory=GdbSource)
     rtt: RttSource = field(default_factory=RttSource)
     registers: RegisterSource = field(default_factory=RegisterSource)
+    memory: MemorySource = field(default_factory=MemorySource)
 
 
 @dataclass
@@ -153,6 +182,10 @@ class InvestigationArtifact:
     def has_embedded_register_source(self) -> bool:
         return self.sources.registers.embedded
 
+    @property
+    def has_embedded_memory_source(self) -> bool:
+        return self.sources.memory.embedded
+
     def require_embedded_gdb_source(self) -> GdbSource:
         if not self.has_embedded_gdb_source:
             raise RuntimeError(
@@ -173,6 +206,13 @@ class InvestigationArtifact:
                 "embedded register source data is unavailable in this snapshot"
             )
         return self.sources.registers
+
+    def require_embedded_memory_source(self) -> MemorySource:
+        if not self.has_embedded_memory_source:
+            raise RuntimeError(
+                "embedded memory source data is unavailable in this snapshot"
+            )
+        return self.sources.memory
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -241,6 +281,8 @@ __all__ = [
     "EvidenceAnswer",
     "GdbSource",
     "InvestigationArtifact",
+    "MemoryReadEntry",
+    "MemorySource",
     "PeripheralRegisterSet",
     "RegisterEntry",
     "RegisterSource",
@@ -316,6 +358,7 @@ def _parse_sources(raw: dict[str, Any]) -> ArtifactSources:
     raw_gdb = payload.get("gdb")
     raw_rtt = payload.get("rtt")
     raw_registers = payload.get("registers")
+    raw_memory = payload.get("memory")
     if not isinstance(raw_gdb, dict):
         raise ValueError(
             "snapshot payload is missing the canonical 'sources.gdb' object"
@@ -327,6 +370,10 @@ def _parse_sources(raw: dict[str, Any]) -> ArtifactSources:
     if not isinstance(raw_registers, dict):
         raise ValueError(
             "snapshot payload is missing the canonical 'sources.registers' object"
+        )
+    if not isinstance(raw_memory, dict):
+        raise ValueError(
+            "snapshot payload is missing the canonical 'sources.memory' object"
         )
 
     gdb_events = _parse_events(raw_gdb.get("events"))
@@ -355,6 +402,7 @@ def _parse_sources(raw: dict[str, Any]) -> ArtifactSources:
             embedded=bool(raw_rtt.get("embedded", False)),
         ),
         registers=_parse_register_source(raw_registers),
+        memory=_parse_memory_source(raw_memory),
     )
 
 
@@ -428,6 +476,32 @@ def _parse_register_source(value: object) -> RegisterSource:
         skipped_count=_to_int(value.get("skipped_count")) or 0,
         peripherals=peripherals,
     )
+
+
+def _parse_memory_source(value: object) -> MemorySource:
+    if not isinstance(value, dict):
+        return MemorySource(embedded=False)
+    embedded = bool(value.get("embedded", False))
+    if not embedded:
+        return MemorySource(embedded=False)
+    entries: list[MemoryReadEntry] = []
+    for raw_entry in _as_list(value.get("entries"), []):
+        if not isinstance(raw_entry, dict):
+            continue
+        status = _as_optional_str(raw_entry.get("status"), "")
+        if status not in {"success", "failure"}:
+            status = "failure"
+        entries.append(
+            MemoryReadEntry(
+                status=status,
+                address=_as_optional_str(raw_entry.get("address"), ""),
+                size=_to_int(raw_entry.get("size")) or 0,
+                data_hex=_as_optional_str(raw_entry.get("data_hex"), ""),
+                failure_reason=_as_optional_str(raw_entry.get("failure_reason")),
+                ascii_preview=_as_optional_str(raw_entry.get("ascii_preview"), ""),
+            )
+        )
+    return MemorySource(embedded=True, entries=entries)
 
 
 def _parse_events(value: object) -> list[SessionEvent]:

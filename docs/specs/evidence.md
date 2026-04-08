@@ -3,7 +3,7 @@
 - Module: `evidence`
 - Code Path: `debugoracle/cli/commands/evidence.py`
 - Public Entrypoints: `cmd_fetch`, `cmd_report`
-- Last Updated: `2026-03-23`
+- Last Updated: `2026-04-08`
 
 # SPEC: DebugOracle Evidence Commands
 
@@ -19,6 +19,7 @@ Own the CLI flows that resolve raw or saved evidence, build or load artifacts, a
 - Save snapshots for `fetch` and render report output for reuse.
 - Keep `fetch` stdout operational by summarizing the saved snapshot as outcome, evidence coverage, and next-step guidance rather than rendering interpretive evidence.
 - Thread `report` inspect-mode flags into the renderer layer without rebuilding from raw evidence.
+- Thread explicit memory capture selectors from `fetch --mem` into artifact persistence.
 
 ## Boundaries
 
@@ -29,6 +30,7 @@ Own the CLI flows that resolve raw or saved evidence, build or load artifacts, a
 ## Command Resolution Contract
 
 - `cmd_fetch` is raw-only and never loads a snapshot as its primary evidence source.
+- `cmd_fetch --mem ADDR:SIZE` performs bounded read-only memory capture and stores canonical `sources.memory` entries.
 - `cmd_fetch --svd-file <file>` is the only explicit CLI path that enables live peripheral capture; it passes an explicit opt-in through the builder instead of relying on `svd_file_path` alone.
 - When no explicit `--svd-file` is provided, `cmd_fetch` may resolve `debugoracle.svdFile` from `.vscode/settings.json` as the workspace default SVD.
 - Workspace-default `debugoracle.svdFile` values may be absolute paths, workspace-relative paths, or `${workspaceFolder}`-prefixed paths; `cmd_fetch` normalizes the workspace token before file resolution.
@@ -50,5 +52,6 @@ Own the CLI flows that resolve raw or saved evidence, build or load artifacts, a
 - `report --rtt [--tail N]` emits a compact JSON object under `rtt`.
 - `report --verbose [--tail N]` emits a compact JSON object containing summary, variables, source
   streams, and provenance metadata.
+- `report --mem [ADDR:SIZE ...]` emits captured memory read entries, or filtered entries matching normalized selectors.
 - Combined inspect flags emit one compact JSON object containing only the requested sections plus a top-level `trust` object.
 - Inspect payloads that include stream or register sections also include compact snapshot metadata for provenance and freshness.

@@ -7,6 +7,7 @@ from pathlib import Path
 from .artifacts.models import (
     CURRENT_BUNDLE_SCHEMA_VERSION,
     InvestigationArtifact,
+    MemorySource,
     RegisterSource,
 )
 from .pipeline.storage import build_artifact_from_sources
@@ -18,6 +19,7 @@ from .sources.debuggers.gdb.peripheral_registers import (
     capture_peripheral_registers_from_svd,
     collect_peripheral_registers_from_svd,
 )
+from .sources.debuggers.gdb.memory import collect_memory_source_from_selectors
 from .sources.debuggers.gdb.transcript import (
     GDB_TRANSCRIPT_SOURCE,
     parse_gdb_transcript,
@@ -55,6 +57,7 @@ def build_bundle_from_files(
     enable_live_peripheral_capture: bool = False,
     openocd_tcl_host: str | None = None,
     openocd_tcl_port: int | None = None,
+    mem_selectors: list[str] | None = None,
 ) -> InvestigationArtifact:
     gdb_text = (
         _read_text_file(gdb_mi_path, errors="replace", required=True)
@@ -74,6 +77,7 @@ def build_bundle_from_files(
         enable_live_peripheral_capture=enable_live_peripheral_capture,
         openocd_tcl_host=openocd_tcl_host,
         openocd_tcl_port=openocd_tcl_port,
+        mem_selectors=mem_selectors,
     )
 
 
@@ -90,6 +94,7 @@ def build_bundle_from_stream(
     enable_live_peripheral_capture: bool = False,
     openocd_tcl_host: str | None = None,
     openocd_tcl_port: int | None = None,
+    mem_selectors: list[str] | None = None,
 ) -> InvestigationArtifact:
     gdb_text = stream.read()
     return build_bundle_from_text(
@@ -104,6 +109,7 @@ def build_bundle_from_stream(
         enable_live_peripheral_capture=enable_live_peripheral_capture,
         openocd_tcl_host=openocd_tcl_host,
         openocd_tcl_port=openocd_tcl_port,
+        mem_selectors=mem_selectors,
     )
 
 
@@ -120,6 +126,7 @@ def build_bundle_from_text(
     enable_live_peripheral_capture: bool = False,
     openocd_tcl_host: str | None = None,
     openocd_tcl_port: int | None = None,
+    mem_selectors: list[str] | None = None,
 ) -> InvestigationArtifact:
     captured_at = utc_now()
     transcript = parse_gdb_transcript(gdb_text, now_text=utc_now)
@@ -136,6 +143,11 @@ def build_bundle_from_text(
         openocd_tcl_host=openocd_tcl_host,
         openocd_tcl_port=openocd_tcl_port,
     )
+    memory_source = _collect_memory_source(
+        mem_selectors=mem_selectors,
+        openocd_tcl_host=openocd_tcl_host,
+        openocd_tcl_port=openocd_tcl_port,
+    )
     artifact = build_artifact_from_sources(
         captured_at=captured_at,
         gdb_text=gdb_text,
@@ -148,6 +160,7 @@ def build_bundle_from_text(
         export_raw=export_raw,
         export_dir=export_dir,
         register_source=register_source,
+        memory_source=memory_source,
     )
     artifact.schema_version = CURRENT_BUNDLE_SCHEMA_VERSION
     artifact.source_context = dict(DEFAULT_SOURCE_CONTEXT)
@@ -172,6 +185,22 @@ def _collect_register_source(
             openocd_tcl_port=openocd_tcl_port,
         )
     return collect_peripheral_registers_from_svd(svd_file_path)
+
+
+def _collect_memory_source(
+    *,
+    mem_selectors: list[str] | None,
+    openocd_tcl_host: str | None = None,
+    openocd_tcl_port: int | None = None,
+) -> MemorySource | None:
+    selectors = list(mem_selectors or [])
+    if not selectors:
+        return None
+    return collect_memory_source_from_selectors(
+        selectors,
+        openocd_tcl_host=openocd_tcl_host,
+        openocd_tcl_port=openocd_tcl_port,
+    )
 
 
 def _read_text_file(

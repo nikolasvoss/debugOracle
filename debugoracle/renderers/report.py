@@ -6,6 +6,7 @@ from typing import cast
 
 from ..artifacts.models import (
     InvestigationArtifact,
+    MemoryReadEntry,
     PeripheralRegisterSet,
     RegisterEntry,
     VariableEntry,
@@ -33,6 +34,7 @@ class ReportRenderOptions:
     tail: int | None = None
     regs_list_selector: str | None = None
     regs_selectors: list[str] | None = None
+    mem_selectors: list[str] | None = None
     allow_unsafe: bool = False
 
     @property
@@ -48,6 +50,10 @@ class ReportRenderOptions:
         return self.regs_selectors is not None
 
     @property
+    def include_mem(self) -> bool:
+        return self.mem_selectors is not None
+
+    @property
     def inspect_mode(self) -> bool:
         return (
             self.include_variables
@@ -56,6 +62,7 @@ class ReportRenderOptions:
             or self.verbose
             or self.include_regs_list
             or self.include_regs
+            or self.include_mem
         )
 
 
@@ -100,6 +107,8 @@ def compose_report_payload(
         payload["rtt"] = rtt_payload(bundle, tail=options.tail)
         if bundle.has_embedded_register_source:
             payload["registers"] = regs_payload(bundle, selectors=[])
+        if bundle.has_embedded_memory_source:
+            payload["memory"] = memory_payload(bundle, selectors=[])
         payload["provenance"] = dict(bundle.provenance)
         payload["parse_warnings"] = list(bundle.parse_warnings)
         return payload
@@ -119,6 +128,10 @@ def compose_report_payload(
         payload["registers"] = regs_payload(
             bundle, selectors=options.regs_selectors or []
         )
+    if options.include_mem:
+        payload["memory"] = memory_payload(
+            bundle, selectors=options.mem_selectors or []
+        )
     return payload
 
 
@@ -129,6 +142,7 @@ def _should_include_metadata(options: ReportRenderOptions) -> bool:
         or options.include_rtt
         or options.include_regs_list
         or options.include_regs
+        or options.include_mem
     )
 
 
@@ -142,6 +156,7 @@ def report_metadata_payload(bundle: InvestigationArtifact) -> dict[str, object]:
             "gdb": "present" if bundle.has_embedded_gdb_source else "absent",
             "rtt": "present" if bundle.has_embedded_rtt_source else "absent",
             "registers": "present" if bundle.has_embedded_register_source else "absent",
+            "memory": "present" if bundle.has_embedded_memory_source else "absent",
         },
     }
 
@@ -163,6 +178,10 @@ def summary_payload(bundle: InvestigationArtifact) -> dict[str, object]:
         payload["svd_device_name"] = source.device_name
         payload["svd_peripheral_count"] = source.peripheral_count
         payload["svd_register_count"] = source.register_count
+    if bundle.has_embedded_memory_source:
+        payload["memory_read_requested_count"] = bundle.sources.memory.requested_count
+        payload["memory_read_success_count"] = bundle.sources.memory.success_count
+        payload["memory_read_failure_count"] = bundle.sources.memory.failure_count
     return payload
 
 
@@ -322,6 +341,23 @@ def regs_payload(
         "device_name": source.device_name,
         "svd_source": source.svd_source,
         "peripherals": matched_peripherals,
+    }
+
+
+def memory_payload(
+    bundle: InvestigationArtifact, *, selectors: list[str]
+) -> dict[str, object]:
+    source = bundle.require_embedded_memory_source()
+    entries = list(source.entries)
+    entries.sort(key=_memory_entry_sort_key)
+    if selectors:
+        wanted = {_parse_selector_pair(selector) for selector in selectors}
+        entries = [entry for entry in entries if _memory_entry_pair(entry) in wanted]
+        if not entries:
+            requested = ", ".join(selectors)
+            raise RuntimeError(f"No matches found for requested memory: {requested}")
+    return {
+        "entries": [_memory_entry_payload(entry) for entry in entries],
     }
 
 
@@ -503,6 +539,12 @@ def _gap_lines(bundle: InvestigationArtifact) -> list[str]:
         gaps.append(
             "Register data: absent. Use `fetch --svd-file <file>` if peripheral state matters."
         )
+    if not bundle.has_embedded_memory_source:
+        gaps.append(
+            "Memory reads: absent. Use `fetch --mem ADDR:SIZE` when memory evidence matters."
+        )
+    elif not bundle.sources.memory.entries:
+        gaps.append("Memory reads: no entries were captured in embedded source data.")
     if bundle.parse_warnings:
         gaps.append(f"Parse warnings: {len(bundle.parse_warnings)} present.")
     return gaps or ["None"]
@@ -518,6 +560,10 @@ def _next_command_lines(bundle: InvestigationArtifact) -> list[str]:
         commands.append("`report --regs-list`")
     else:
         commands.append("`fetch --svd-file <file>`")
+    if bundle.has_embedded_memory_source:
+        commands.append("`report --mem [ADDR:SIZE ...]`")
+    else:
+        commands.append("`fetch --mem ADDR:SIZE`")
     return commands
 
 
@@ -537,6 +583,7 @@ def _embedded_evidence_summary(bundle: InvestigationArtifact) -> str:
                 else "rtt absent"
             ),
             f"registers {'present' if bundle.has_embedded_register_source else 'absent'}",
+            f"memory {'present' if bundle.has_embedded_memory_source else 'absent'}",
         ]
     )
 
@@ -571,8 +618,45 @@ def _source_availability_lines(bundle: InvestigationArtifact) -> str:
         f"- GDB embedded source data: {'present' if bundle.has_embedded_gdb_source else 'absent'}{gdb_suffix}",
         f"- RTT embedded source data: {'present' if bundle.has_embedded_rtt_source else 'absent'}{rtt_suffix}",
         f"- SVD register data: {'present' if bundle.has_embedded_register_source else 'absent'}",
+        f"- Memory read data: {'present' if bundle.has_embedded_memory_source else 'absent'}",
     ]
     return "\n".join(lines)
+
+
+def _memory_entry_payload(entry: MemoryReadEntry) -> dict[str, object]:
+    return {
+        "status": entry.status,
+        "address": entry.address,
+        "size": entry.size,
+        "data_hex": entry.data_hex,
+        "failure_reason": entry.failure_reason,
+        "ascii_preview": entry.ascii_preview,
+    }
+
+
+def _parse_selector_pair(selector: str) -> tuple[int, int]:
+    if ":" not in selector or selector.count(":") != 1:
+        raise RuntimeError(f"Invalid memory selector: {selector}")
+    address_text, size_text = selector.split(":", 1)
+    try:
+        address = int(address_text, 0)
+        size = int(size_text, 10)
+    except ValueError as error:
+        raise RuntimeError(f"Invalid memory selector: {selector}") from error
+    return (address, size)
+
+
+def _memory_entry_pair(entry: MemoryReadEntry) -> tuple[int, int]:
+    try:
+        address = int(entry.address, 0)
+    except ValueError:
+        address = 0
+    return (address, entry.size)
+
+
+def _memory_entry_sort_key(entry: MemoryReadEntry) -> tuple[int, int, str]:
+    address, size = _memory_entry_pair(entry)
+    return (address, size, entry.address)
 
 
 def _default_variable_options() -> VariableRenderOptions:

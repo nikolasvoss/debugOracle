@@ -8,6 +8,7 @@ from ..artifacts.models import (
     ArtifactSources,
     GdbSource,
     InvestigationArtifact,
+    MemorySource,
     RegisterSource,
     RttSource,
     VariableEvidence,
@@ -27,6 +28,7 @@ def build_artifact_from_sources(
     export_raw: bool = False,
     export_dir: str | Path | None = None,
     register_source: RegisterSource | None = None,
+    memory_source: MemorySource | None = None,
 ) -> InvestigationArtifact:
     rtt_window_lines = _select_rtt_window_lines(rtt_text, rtt_window)
 
@@ -108,6 +110,7 @@ def build_artifact_from_sources(
             embedded=has_rtt_source,
         ),
         registers=register_source or RegisterSource(embedded=False),
+        memory=memory_source or MemorySource(embedded=False),
     )
 
     register_provenance: dict[str, Any] = {}
@@ -121,6 +124,13 @@ def build_artifact_from_sources(
             "register_failure_count": sources.registers.failure_count,
             "register_skipped_count": sources.registers.skipped_count,
             "register_capture_mode": _register_capture_mode(sources.registers),
+        }
+    memory_provenance: dict[str, Any] = {}
+    if sources.memory.embedded:
+        memory_provenance = {
+            "memory_read_requested_count": sources.memory.requested_count,
+            "memory_read_success_count": sources.memory.success_count,
+            "memory_read_failure_count": sources.memory.failure_count,
         }
 
     return InvestigationArtifact(
@@ -158,6 +168,7 @@ def build_artifact_from_sources(
             ],
             "raw_line_warning_count": transcript.non_mi_line_count,
             **register_provenance,
+            **memory_provenance,
             **raw_export,
         },
     )

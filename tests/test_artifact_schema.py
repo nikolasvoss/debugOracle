@@ -167,6 +167,9 @@ class ArtifactSchemaTests(unittest.TestCase):
         self.assertEqual(payload["sources"]["rtt"]["raw_text"], "line one\nline two\n")
         self.assertEqual(payload["sources"]["rtt"]["lines"], ["line one", "line two"])
         self.assertEqual(payload["sources"]["rtt"]["line_count"], 2)
+        self.assertIn("memory", payload["sources"])
+        self.assertEqual(payload["sources"]["memory"]["embedded"], False)
+        self.assertEqual(payload["sources"]["memory"]["entries"], [])
         self.assertEqual(loaded.sources.gdb.raw_text, "^done\n")
         self.assertEqual(loaded.sources.rtt.lines, ["line one", "line two"])
 
@@ -185,6 +188,17 @@ class ArtifactSchemaTests(unittest.TestCase):
         bundle = build_bundle_from_text("", "")
         payload = bundle.to_dict()
         payload.pop("sources", None)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "legacy.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            with self.assertRaises(ArtifactLoadError):
+                load_artifact(str(path))
+
+    def test_load_artifact_missing_sources_memory_object_fails(self) -> None:
+        bundle = build_bundle_from_text("", "")
+        payload = bundle.to_dict()
+        payload["sources"].pop("memory", None)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "legacy.json"
@@ -236,12 +250,56 @@ class _FakeOpenOcdHandler(socketserver.BaseRequestHandler):
                 self.request.sendall(response.encode("utf-8") + b"\x1a")
 
 
+class _VirtualOpenOcdSocket:
+    def __init__(self, server: "_FakeOpenOcdServer") -> None:
+        self._server = server
+        self._buffer = bytearray()
+        self._closed = False
+
+    def settimeout(self, _: float) -> None:
+        return
+
+    def sendall(self, payload: bytes) -> None:
+        if self._closed:
+            raise OSError("socket is closed")
+        chunks = payload.split(b"\x1a")
+        for raw_command in chunks:
+            if not raw_command:
+                continue
+            command = raw_command.decode("utf-8", errors="replace").strip()
+            response = self._server.build_response(command)
+            self._buffer.extend(response.encode("utf-8") + b"\x1a")
+
+    def recv(self, size: int) -> bytes:
+        if self._closed:
+            return b""
+        if not self._buffer:
+            return b""
+        take = min(size, len(self._buffer))
+        chunk = bytes(self._buffer[:take])
+        del self._buffer[:take]
+        return chunk
+
+    def close(self) -> None:
+        self._closed = True
+
+
 class _FakeOpenOcdServer(socketserver.ThreadingTCPServer):
     allow_reuse_address = True
 
     def __init__(self, *, values: dict[int, str]) -> None:
-        super().__init__(("127.0.0.1", 0), _FakeOpenOcdHandler)
         self._values = values
+        self._init_error: PermissionError | None = None
+        self._virtual_mode = False
+        self._create_connection_patcher = None
+        try:
+            super().__init__(("127.0.0.1", 0), _FakeOpenOcdHandler)
+        except PermissionError as error:
+            self._init_error = error
+            self._virtual_mode = True
+            self._thread = None
+            self.server_address = ("127.0.0.1", 65535)
+            return
         self._thread = threading.Thread(target=self.serve_forever, daemon=True)
 
     @property
@@ -253,10 +311,23 @@ class _FakeOpenOcdServer(socketserver.ThreadingTCPServer):
         return int(self.server_address[1])
 
     def __enter__(self) -> "_FakeOpenOcdServer":
+        if self._virtual_mode:
+            self._create_connection_patcher = patch(
+                "socket.create_connection",
+                side_effect=self._create_virtual_connection,
+            )
+            self._create_connection_patcher.start()
+            return self
+        assert self._thread is not None
         self._thread.start()
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:
+        if self._virtual_mode:
+            if self._create_connection_patcher is not None:
+                self._create_connection_patcher.stop()
+            return
+        assert self._thread is not None
         self.shutdown()
         self.server_close()
         self._thread.join(timeout=1)
@@ -270,6 +341,17 @@ class _FakeOpenOcdServer(socketserver.ThreadingTCPServer):
         if count != 1 or address not in self._values:
             return "error"
         return self._values[address]
+
+    def _create_virtual_connection(self, *args, **_kwargs) -> _VirtualOpenOcdSocket:
+        endpoint = args[0] if args else None
+        if not isinstance(endpoint, tuple) or len(endpoint) < 2:
+            raise OSError("Connection refused")
+        host = str(endpoint[0])
+        port = int(endpoint[1])
+        allowed_hosts = {self.host, "127.0.0.1", "localhost"}
+        if host not in allowed_hosts or port != self.port:
+            raise OSError("Connection refused")
+        return _VirtualOpenOcdSocket(self)
 
 
 if __name__ == "__main__":

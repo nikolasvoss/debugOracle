@@ -33,6 +33,15 @@ class DebugOracleCliTests(unittest.TestCase):
 
         self.assertEqual(parsed.command, "fetch")
 
+    def test_fetch_command_parses_repeatable_mem_selectors(self) -> None:
+        parser = build_parser()
+        parsed = parser.parse_args(
+            ["fetch", "--mem", "0x20002000:4", "--mem", "8192:2"]
+        )
+
+        self.assertEqual(parsed.command, "fetch")
+        self.assertEqual(parsed.mem, ["0x20002000:4", "8192:2"])
+
     def test_find_tcl_port_command_parses(self) -> None:
         parser = build_parser()
         parsed = parser.parse_args(
@@ -1209,6 +1218,20 @@ class DebugOracleCliTests(unittest.TestCase):
         self.assertNotEqual(code, 0)
         self.assertIn("invalid register selector", stdout + stderr)
 
+    def test_report_rejects_invalid_mem_selector(self) -> None:
+        code, stdout, stderr = self._run_cli_expect_system_exit(
+            ["report", "--mem", "GPIOA:"]
+        )
+        self.assertNotEqual(code, 0)
+        self.assertIn("invalid memory selector", (stdout + stderr).lower())
+
+    def test_fetch_rejects_invalid_mem_selector(self) -> None:
+        code, stdout, stderr = self._run_cli_expect_system_exit(
+            ["fetch", "--mem", "GPIOA:"]
+        )
+        self.assertNotEqual(code, 0)
+        self.assertIn("invalid memory selector", (stdout + stderr).lower())
+
     def test_report_tail_requires_positive_integer(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             snapshot_path = self._write_snapshot(Path(tmpdir) / "latest_snapshot.json")
@@ -1243,6 +1266,202 @@ class DebugOracleCliTests(unittest.TestCase):
         self.assertNotEqual(code, 0)
         self.assertIn("definitely_missing", stdout + stderr)
         self.assertIn("no matches", (stdout + stderr).lower())
+
+    def test_fetch_with_mem_captures_entries_and_prints_memory_guidance(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            (workspace / "cortex-debug-shared-mi.log").write_text(
+                (FIXTURES / "sample.mi").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            byte_values = {
+                0x20002000: "0x41",
+                0x20002001: "0x42",
+                0x20002002: "0x43",
+                0x00002000: "0xde",
+                0x00002001: "0xad",
+            }
+            try:
+                with _FakeOpenOcdServer(values=byte_values) as server:
+                    stdout, _ = self._run_cli_in_workspace(
+                        workspace,
+                        [
+                            "fetch",
+                            "--mem",
+                            "0x20002000:3",
+                            "--mem",
+                            "8192:2",
+                            "--openocd-tcl-host",
+                            server.host,
+                            "--openocd-tcl-port",
+                            str(server.port),
+                        ],
+                        capture_stderr=True,
+                    )
+            except PermissionError:
+                self.skipTest("sandbox blocks loopback socket creation")
+            payload = json.loads(
+                (workspace / "latest_snapshot.json").read_text(encoding="utf-8")
+            )
+
+        self.assertIn("Memory: present", stdout)
+        self.assertIn("--mem [ADDR:SIZE ...]", stdout)
+        self.assertEqual(payload["provenance"]["memory_read_requested_count"], 2)
+        self.assertEqual(payload["provenance"]["memory_read_success_count"], 2)
+        self.assertEqual(payload["provenance"]["memory_read_failure_count"], 0)
+        entries = payload["sources"]["memory"]["entries"]
+        self.assertEqual(
+            [entry["address"] for entry in entries], ["8192", "0x20002000"]
+        )
+        self.assertEqual(entries[0]["data_hex"], "de ad")
+        self.assertEqual(entries[1]["data_hex"], "41 42 43")
+
+    def test_fetch_with_mem_all_failures_writes_snapshot_then_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            (workspace / "cortex-debug-shared-mi.log").write_text(
+                (FIXTURES / "sample.mi").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            try:
+                with _FakeOpenOcdServer(values={}) as server:
+                    code, stdout, stderr = (
+                        self._run_cli_expect_system_exit_in_workspace(
+                            workspace,
+                            [
+                                "fetch",
+                                "--mem",
+                                "0x20002000:3",
+                                "--openocd-tcl-host",
+                                server.host,
+                                "--openocd-tcl-port",
+                                str(server.port),
+                            ],
+                        )
+                    )
+            except PermissionError:
+                self.skipTest("sandbox blocks loopback socket creation")
+
+            payload = json.loads(
+                (workspace / "latest_snapshot.json").read_text(encoding="utf-8")
+            )
+
+        self.assertNotEqual(code, 0)
+        self.assertIn(
+            "no memory ranges were captured successfully", (stdout + stderr).lower()
+        )
+        self.assertEqual(payload["provenance"]["memory_read_requested_count"], 1)
+        self.assertEqual(payload["provenance"]["memory_read_success_count"], 0)
+        self.assertEqual(payload["provenance"]["memory_read_failure_count"], 1)
+        self.assertEqual(
+            payload["sources"]["memory"]["entries"][0]["status"], "failure"
+        )
+
+    def test_report_mem_outputs_all_entries_sorted_by_address_then_size(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            snapshot_path = self._write_snapshot(Path(tmpdir) / "latest_snapshot.json")
+            payload = json.loads(snapshot_path.read_text(encoding="utf-8"))
+            payload["sources"]["memory"] = {
+                "embedded": True,
+                "entries": [
+                    {
+                        "status": "success",
+                        "address": "0x20002000",
+                        "size": 3,
+                        "data_hex": "41 42 43",
+                        "failure_reason": None,
+                        "ascii_preview": "ABC",
+                    },
+                    {
+                        "status": "success",
+                        "address": "8192",
+                        "size": 2,
+                        "data_hex": "de ad",
+                        "failure_reason": None,
+                        "ascii_preview": "..",
+                    },
+                ],
+            }
+            snapshot_path.write_text(json.dumps(payload), encoding="utf-8")
+            output = self._run_cli(
+                ["report", "--snapshot-file", str(snapshot_path), "--mem"]
+            )
+
+        rendered = json.loads(output)
+        self.assertEqual(
+            [entry["address"] for entry in rendered["memory"]["entries"]],
+            ["8192", "0x20002000"],
+        )
+        self.assertEqual(
+            rendered["metadata"]["source_availability"]["memory"],
+            "present",
+        )
+
+    def test_report_mem_selectors_use_normalized_matching(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            snapshot_path = self._write_snapshot(Path(tmpdir) / "latest_snapshot.json")
+            payload = json.loads(snapshot_path.read_text(encoding="utf-8"))
+            payload["sources"]["memory"] = {
+                "embedded": True,
+                "entries": [
+                    {
+                        "status": "success",
+                        "address": "8192",
+                        "size": 2,
+                        "data_hex": "de ad",
+                        "failure_reason": None,
+                        "ascii_preview": "..",
+                    }
+                ],
+            }
+            snapshot_path.write_text(json.dumps(payload), encoding="utf-8")
+            output = self._run_cli(
+                [
+                    "report",
+                    "--snapshot-file",
+                    str(snapshot_path),
+                    "--mem",
+                    "0x2000:2",
+                ]
+            )
+
+        rendered = json.loads(output)
+        self.assertEqual(len(rendered["memory"]["entries"]), 1)
+        self.assertEqual(rendered["memory"]["entries"][0]["address"], "8192")
+
+    def test_report_mem_fails_when_no_matches_found(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            snapshot_path = self._write_snapshot(Path(tmpdir) / "latest_snapshot.json")
+            payload = json.loads(snapshot_path.read_text(encoding="utf-8"))
+            payload["sources"]["memory"] = {
+                "embedded": True,
+                "entries": [
+                    {
+                        "status": "success",
+                        "address": "8192",
+                        "size": 2,
+                        "data_hex": "de ad",
+                        "failure_reason": None,
+                        "ascii_preview": "..",
+                    }
+                ],
+            }
+            snapshot_path.write_text(json.dumps(payload), encoding="utf-8")
+            code, stdout, stderr = self._run_cli_expect_system_exit(
+                [
+                    "report",
+                    "--snapshot-file",
+                    str(snapshot_path),
+                    "--mem",
+                    "0x20002000:1",
+                ]
+            )
+
+        self.assertNotEqual(code, 0)
+        self.assertIn(
+            "no matches found for requested memory", (stdout + stderr).lower()
+        )
+        self.assertIn("0x20002000:1", stdout + stderr)
 
     def test_fetch_discovery_failure_lists_checked_candidates(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1369,6 +1588,21 @@ class DebugOracleCliTests(unittest.TestCase):
         finally:
             os.chdir(previous)
 
+    def _run_cli_expect_system_exit_in_workspace(
+        self,
+        workspace: Path,
+        argv: list[str],
+        *,
+        env: dict[str, str] | None = None,
+    ) -> tuple[int, str, str]:
+        previous = os.getcwd()
+        try:
+            os.chdir(workspace)
+            with patch.dict(os.environ, env or {}, clear=False):
+                return self._run_cli_expect_system_exit(argv)
+        finally:
+            os.chdir(previous)
+
 
 class _FakeOpenOcdHandler(socketserver.BaseRequestHandler):
     def handle(self) -> None:
@@ -1385,12 +1619,56 @@ class _FakeOpenOcdHandler(socketserver.BaseRequestHandler):
                 self.request.sendall(response.encode("utf-8") + b"\x1a")
 
 
+class _VirtualOpenOcdSocket:
+    def __init__(self, server: "_FakeOpenOcdServer") -> None:
+        self._server = server
+        self._buffer = bytearray()
+        self._closed = False
+
+    def settimeout(self, _: float) -> None:
+        return
+
+    def sendall(self, payload: bytes) -> None:
+        if self._closed:
+            raise OSError("socket is closed")
+        chunks = payload.split(b"\x1a")
+        for raw_command in chunks:
+            if not raw_command:
+                continue
+            command = raw_command.decode("utf-8", errors="replace").strip()
+            response = self._server.build_response(command)
+            self._buffer.extend(response.encode("utf-8") + b"\x1a")
+
+    def recv(self, size: int) -> bytes:
+        if self._closed:
+            return b""
+        if not self._buffer:
+            return b""
+        take = min(size, len(self._buffer))
+        chunk = bytes(self._buffer[:take])
+        del self._buffer[:take]
+        return chunk
+
+    def close(self) -> None:
+        self._closed = True
+
+
 class _FakeOpenOcdServer(socketserver.ThreadingTCPServer):
     allow_reuse_address = True
 
     def __init__(self, *, values: dict[int, str]) -> None:
-        super().__init__(("127.0.0.1", 0), _FakeOpenOcdHandler)
         self._values = values
+        self._init_error: PermissionError | None = None
+        self._virtual_mode = False
+        self._create_connection_patcher = None
+        try:
+            super().__init__(("127.0.0.1", 0), _FakeOpenOcdHandler)
+        except PermissionError as error:
+            self._init_error = error
+            self._virtual_mode = True
+            self._thread = None
+            self.server_address = ("127.0.0.1", 65535)
+            return
         self._thread = threading.Thread(target=self.serve_forever, daemon=True)
 
     @property
@@ -1402,10 +1680,23 @@ class _FakeOpenOcdServer(socketserver.ThreadingTCPServer):
         return int(self.server_address[1])
 
     def __enter__(self) -> "_FakeOpenOcdServer":
+        if self._virtual_mode:
+            self._create_connection_patcher = patch(
+                "socket.create_connection",
+                side_effect=self._create_virtual_connection,
+            )
+            self._create_connection_patcher.start()
+            return self
+        assert self._thread is not None
         self._thread.start()
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:
+        if self._virtual_mode:
+            if self._create_connection_patcher is not None:
+                self._create_connection_patcher.stop()
+            return
+        assert self._thread is not None
         self.shutdown()
         self.server_close()
         self._thread.join(timeout=1)
@@ -1419,6 +1710,17 @@ class _FakeOpenOcdServer(socketserver.ThreadingTCPServer):
         if count != 1 or address not in self._values:
             return "error"
         return self._values[address]
+
+    def _create_virtual_connection(self, *args, **_kwargs) -> _VirtualOpenOcdSocket:
+        endpoint = args[0] if args else None
+        if not isinstance(endpoint, tuple) or len(endpoint) < 2:
+            raise OSError("Connection refused")
+        host = str(endpoint[0])
+        port = int(endpoint[1])
+        allowed_hosts = {self.host, "127.0.0.1", "localhost"}
+        if host not in allowed_hosts or port != self.port:
+            raise OSError("Connection refused")
+        return _VirtualOpenOcdSocket(self)
 
 
 if __name__ == "__main__":

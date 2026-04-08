@@ -2,8 +2,8 @@
 
 - Module: `models`
 - Code Path: `debugoracle/artifacts/models.py`
-- Public Entrypoints: `InvestigationArtifact`, `ArtifactSources`, `GdbSource`, `RttSource`, `RegisterSource`, `VariableEvidence`, `VariableEntry`
-- Last Updated: `2026-03-22`
+- Public Entrypoints: `InvestigationArtifact`, `ArtifactSources`, `GdbSource`, `RttSource`, `RegisterSource`, `MemorySource`, `VariableEvidence`, `VariableEntry`
+- Last Updated: `2026-04-08`
 
 # SPEC: Artifact Models
 
@@ -43,10 +43,12 @@ Embedded source fields live under `sources`:
 - `sources.rtt.raw_text`
 - `sources.rtt.lines`
 - `sources.rtt.line_count`
+- `sources.memory.embedded`
+- `sources.memory.entries[]` (`status`, `address`, `size`, `data_hex`, `failure_reason`, `ascii_preview`)
 
 ## Compatibility Contract
 
-- Current schema version: `4`
+- Current schema version: `5`
 - New snapshots mark embedded source sections explicitly.
 - Snapshots without canonical `sources` payloads are rejected during load.
 - Unsupported schema versions are rejected during load.

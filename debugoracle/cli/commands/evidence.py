@@ -98,6 +98,8 @@ def cmd_fetch(args: argparse.Namespace) -> int:
                 recovery_error = fallback_error
             except SystemExit as fallback_error:
                 reason = str(fallback_error) or "register enrichment failed"
+                if _is_memory_capture_error(reason):
+                    raise
                 print(
                     f"Auto-discovered OpenOCD Tcl endpoint '{endpoint}' could not be used ({reason}). Continuing without register capture.",
                     file=sys.stderr,
@@ -110,11 +112,11 @@ def cmd_fetch(args: argparse.Namespace) -> int:
                     discovery=discovery,
                 )
             else:
-                save_artifact(bundle, state_out)
-                emit_fetch_summary(
-                    bundle, state_out, workspace_root=str(workspace_root)
+                return _finalize_fetch_result(
+                    bundle=bundle,
+                    state_out=state_out,
+                    workspace_root=workspace_root,
                 )
-                return 0
         try:
             bundle = attempt_fetch_openocd_recovery(
                 args,
@@ -129,6 +131,8 @@ def cmd_fetch(args: argparse.Namespace) -> int:
             )
         except SystemExit as recovery_error:
             reason = str(recovery_error) or "register enrichment failed"
+            if _is_memory_capture_error(reason):
+                raise
             if resolved_svd_file and tcl_discovered:
                 endpoint = f"{resolved_openocd_tcl_host or '127.0.0.1'}:{resolved_openocd_tcl_port}"
                 print(
@@ -158,6 +162,8 @@ def cmd_fetch(args: argparse.Namespace) -> int:
                 raise
     except SystemExit as error:
         reason = str(error) or "register enrichment failed"
+        if _is_memory_capture_error(reason):
+            raise
         if resolved_svd_file and svd_implicit:
             print(
                 f"Auto-discovered SVD '{resolved_svd_file}' could not be used ({reason}). Continuing without register capture.",
@@ -185,6 +191,8 @@ def cmd_fetch(args: argparse.Namespace) -> int:
                     resolved_openocd_tcl_port=None,
                 )
             except SystemExit:
+                if _is_memory_capture_error(reason):
+                    raise
                 print(
                     f"Auto-discovered OpenOCD Tcl endpoint '{endpoint}' could not be used ({reason}). Continuing without register capture.",
                     file=sys.stderr,
@@ -198,9 +206,11 @@ def cmd_fetch(args: argparse.Namespace) -> int:
                 )
         else:
             raise
-    save_artifact(bundle, state_out)
-    emit_fetch_summary(bundle, state_out, workspace_root=str(workspace_root))
-    return 0
+    return _finalize_fetch_result(
+        bundle=bundle,
+        state_out=state_out,
+        workspace_root=workspace_root,
+    )
 
 
 def cmd_report(args: argparse.Namespace) -> int:
@@ -220,6 +230,7 @@ def cmd_report(args: argparse.Namespace) -> int:
         tail=getattr(args, "tail", None),
         regs_list_selector=getattr(args, "regs_list", None),
         regs_selectors=list(args.regs or []) if args.regs is not None else None,
+        mem_selectors=list(args.mem or []) if args.mem is not None else None,
         allow_unsafe=bool(getattr(args, "allow_unsafe", False)),
     )
     try:
@@ -378,7 +389,12 @@ def _validate_fetch_live_capture_arguments(
         raise SystemExit("--openocd-tcl-host must not be empty.")
     if openocd_tcl_host is None and openocd_tcl_port is None:
         return
-    if resolved_svd_file is None and not getattr(args, "svd_file", None):
+    has_memory_requests = bool(getattr(args, "mem", None))
+    if (
+        resolved_svd_file is None
+        and not getattr(args, "svd_file", None)
+        and not has_memory_requests
+    ):
         print(
             "OpenOCD Tcl overrides were provided, but no SVD file was resolved. Continuing without register capture.",
             file=sys.stderr,
@@ -426,6 +442,16 @@ def emit_fetch_summary(
         )
     else:
         print("- Registers: absent")
+    if bundle.has_embedded_memory_source:
+        memory_source = bundle.sources.memory
+        print(
+            "- Memory: "
+            f"present, {memory_source.requested_count} requested, "
+            f"{memory_source.success_count} success, "
+            f"{memory_source.failure_count} failure"
+        )
+    else:
+        print("- Memory: absent")
     print("Next:")
     print(f"- dbgoracle report {workspace_arg}")
     print(f"- dbgoracle report {workspace_arg} --vars [NAME ...]")
@@ -435,6 +461,8 @@ def emit_fetch_summary(
         print(f"- dbgoracle report {workspace_arg} --rtt --tail 50")
     if bundle.has_embedded_register_source:
         print(f"- dbgoracle report {workspace_arg} --regs-list")
+    if bundle.has_embedded_memory_source:
+        print(f"- dbgoracle report {workspace_arg} --mem [ADDR:SIZE ...]")
 
 
 def resolve_bundle(
@@ -638,6 +666,7 @@ def _build_bundle_from_resolved_inputs(
             ),
             openocd_tcl_host=resolved_openocd_tcl_host,
             openocd_tcl_port=resolved_openocd_tcl_port,
+            mem_selectors=list(getattr(args, "mem", []) or []),
         )
     except OpenOcdReachabilityError:
         raise
@@ -721,6 +750,30 @@ class _FetchInputs(TypedDict):
     rtt_discovered: bool
     gdb_mi_explicit: bool
     rtt_explicit: bool
+
+
+def _finalize_fetch_result(
+    *,
+    bundle: InvestigationArtifact,
+    state_out: str,
+    workspace_root: Path,
+) -> int:
+    save_artifact(bundle, state_out)
+    emit_fetch_summary(bundle, state_out, workspace_root=str(workspace_root))
+    if bundle.has_embedded_memory_source and bundle.sources.memory.success_count == 0:
+        raise SystemExit(
+            "No memory ranges were captured successfully. Snapshot was still saved with failure entries."
+        )
+    return 0
+
+
+def _is_memory_capture_error(message: str) -> bool:
+    lowered = message.lower()
+    return (
+        "memory selector" in lowered
+        or "memory address" in lowered
+        or "memory read size" in lowered
+    )
 
 
 def resolve_fetch_inputs(

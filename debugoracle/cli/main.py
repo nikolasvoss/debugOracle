@@ -3,6 +3,10 @@ from __future__ import annotations
 import argparse
 
 from ..builder import DEFAULT_RTT_WINDOW
+from ..sources.debuggers.gdb.memory import (
+    MAX_FETCH_MEMORY_READ_BYTES,
+    normalize_memory_selector,
+)
 from ..session import DEFAULT_STALE_AFTER_SECONDS
 from ..sources.streams.rtt import (
     DEFAULT_RTT_CONNECT_TIMEOUT,
@@ -39,7 +43,7 @@ from .commands.status_capture import cmd_capture_rtt, cmd_status
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    validate_report_arguments(parser, args)
+    validate_command_arguments(parser, args)
     return args.func(args)
 
 
@@ -446,12 +450,21 @@ def _add_fetch_parser(
     )
     fetch.add_argument(
         "--openocd-tcl-host",
-        help="Optional OpenOCD Tcl host override used only for live peripheral capture with --svd-file",
+        help="Optional OpenOCD Tcl host override used for live peripheral capture and memory reads",
     )
     fetch.add_argument(
         "--openocd-tcl-port",
         type=int,
-        help="Optional OpenOCD Tcl port override used only for live peripheral capture with --svd-file",
+        help="Optional OpenOCD Tcl port override used for live peripheral capture and memory reads",
+    )
+    fetch.add_argument(
+        "--mem",
+        action="append",
+        metavar="ADDR:SIZE",
+        help=(
+            "Capture explicit memory ranges as ADDR:SIZE; repeatable, "
+            f"size limit {MAX_FETCH_MEMORY_READ_BYTES} bytes per selector"
+        ),
     )
     fetch.set_defaults(func=cmd_fetch)
 
@@ -502,6 +515,12 @@ def _add_report_parser(
         nargs="*",
         metavar="SELECTOR",
         help="Emit captured register data as compact JSON; selectors are PERIPHERAL or PERIPHERAL:REGISTER",
+    )
+    report.add_argument(
+        "--mem",
+        nargs="*",
+        metavar="ADDR:SIZE",
+        help="Emit captured memory reads as compact JSON; optionally filter by selectors",
     )
     report.add_argument(
         "--tail",
@@ -669,9 +688,14 @@ def positive_int(value: str) -> int:
     return parsed
 
 
-def validate_report_arguments(
+def validate_command_arguments(
     parser: argparse.ArgumentParser, args: argparse.Namespace
 ) -> None:
+    if getattr(args, "command", None) == "fetch":
+        for selector in getattr(args, "mem", None) or []:
+            if not _is_valid_memory_selector(selector):
+                parser.error(f"invalid memory selector: {selector}")
+        return
     if getattr(args, "command", None) != "report":
         return
     if getattr(args, "tail", None) is not None and not (
@@ -692,6 +716,9 @@ def validate_report_arguments(
     for selector in getattr(args, "regs", None) or []:
         if not _is_valid_register_selector(selector):
             parser.error(f"invalid register selector: {selector}")
+    for selector in getattr(args, "mem", None) or []:
+        if not _is_valid_memory_selector(selector):
+            parser.error(f"invalid memory selector: {selector}")
 
 
 def add_session_arguments(parser: argparse.ArgumentParser) -> None:
@@ -767,3 +794,13 @@ def _is_valid_register_selector(value: str) -> bool:
         return bool(value.strip())
     peripheral, register = value.split(":", 1)
     return bool(peripheral.strip()) and bool(register.strip())
+
+
+def _is_valid_memory_selector(value: str) -> bool:
+    if not value or value.count(":") != 1:
+        return False
+    try:
+        normalize_memory_selector(value, max_bytes=MAX_FETCH_MEMORY_READ_BYTES)
+    except ValueError:
+        return False
+    return True
