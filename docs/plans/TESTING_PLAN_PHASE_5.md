@@ -2,7 +2,7 @@
 
 **Status:** Not started
 **Phase:** 5 (Adversarial & Metamorphic Tests)
-**Source plan:** `docs/plans/testing_rework.md §7`
+**Source plan:** Legacy `docs/plans/testing_rework.md §7` (file removed; phased docs are canonical)
 **Reviewed by:** `/plan-eng-review` 2026-03-27
 **Gate:** Phase 3 fixtures must exist (raw data + expected.json)
 

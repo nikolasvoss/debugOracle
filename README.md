@@ -34,6 +34,8 @@ For quick local/agent preflight:
 ./scripts/verify.sh fast
 ```
 
+`fast` skips `coverage` and `pytest-fast` for faster iteration.
+
 For required final validation before completion:
 
 ```bash

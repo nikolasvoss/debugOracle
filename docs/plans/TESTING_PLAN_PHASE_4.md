@@ -2,7 +2,7 @@
 
 **Status:** Not started
 **Phase:** 4 (LLM Eval Tests)
-**Source plan:** `docs/plans/testing_rework.md §6`
+**Source plan:** Legacy `docs/plans/testing_rework.md §6` (file removed; phased docs are canonical)
 **Reviewed by:** `/plan-eng-review` 2026-03-27
 **Gate:** Phase 3 fixtures must exist with `metadata.yaml` before proceeding
 

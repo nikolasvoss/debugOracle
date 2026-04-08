@@ -1,0 +1,76 @@
+{
+  "snapshot_id": "snap-576f4a76f78a",
+  "captured_at": "2024-01-01T00:00:00Z",
+  "stop_reason": null,
+  "pc": null,
+  "lr": null,
+  "sp": null,
+  "schema_version": "4",
+  "frames": [],
+  "registers": {},
+  "variable_evidence": {
+    "locals": [],
+    "globals": [],
+    "watchpoints": [],
+    "unknown": []
+  },
+  "sources": {
+    "gdb": {
+      "raw_text": null,
+      "events": [],
+      "event_count": 0,
+      "embedded": false
+    },
+    "rtt": {
+      "raw_text": "[INFO] Boot started\n[INFO] Loop heartbeat\n",
+      "lines": [
+        "[INFO] Boot started",
+        "[INFO] Loop heartbeat"
+      ],
+      "line_count": 2,
+      "embedded": true
+    },
+    "registers": {
+      "embedded": false,
+      "svd_source": null,
+      "device_name": null,
+      "peripheral_count": 0,
+      "register_count": 0,
+      "success_count": 0,
+      "failure_count": 0,
+      "skipped_count": 0,
+      "peripherals": []
+    }
+  },
+  "parse_warnings": [
+    "No GDB/MI input was provided before building this snapshot."
+  ],
+  "live_state": {},
+  "source_context": {},
+  "provenance": {
+    "gdb_mi_source": "<stdin>",
+    "rtt_source": null,
+    "gdb_event_count": 0,
+    "rtt_line_count": 2,
+    "rtt_total_line_count": 2,
+    "rtt_window": 40,
+    "parse_warning_count": 1,
+    "mi_record_count": 0,
+    "non_mi_line_count": 0,
+    "mi_parse_error_count": 0,
+    "evidence_quality_score": 15,
+    "parse_event_counts": {
+      "critical-missing-input": 1
+    },
+    "parse_event_severity_counts": {
+      "warn": 1
+    },
+    "critical_warnings": [
+      "No GDB/MI input was provided before building this snapshot.",
+      "Could not recover a stop context from the transcript."
+    ],
+    "critical_warning_count": 2,
+    "non_mi_pattern_counts": [],
+    "raw_line_warning_count": 0
+  }
+}

@@ -1,7 +1,7 @@
 # DebugOracle Testing Plan — Engineering Review Results
 
 **Date:** 2026-03-26
-**Reviewed Plan:** `docs/plans/testing_rework.md`
+**Reviewed Plan:** Legacy `docs/plans/testing_rework.md` (file removed; phased docs are canonical)
 **Review Status:** ✅ CLEARED for Phase 1 implementation
 **Scope Reduction:** Phases 2-5 deferred; Phase 1 only in this cycle
 

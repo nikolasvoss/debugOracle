@@ -32,15 +32,16 @@ This plan uses canonical schema extension, not ad-hoc metadata.
 
 - New flag: `--mem ADDR:SIZE` (repeatable).
 - Address must parse as integer (`0x...` or decimal).
-- Size must be positive and within bounded memory-read policy limit.
+- Size must be positive and within bounded memory-read policy limit (`256` bytes max per selector).
 - If zero requested ranges succeed: fetch fails clearly.
 - If at least one range succeeds: fetch succeeds and records per-range failures.
+- Address display in persisted entries preserves user-provided format.
 
 ### Report
 
 - New flag: `--mem [ADDR:SIZE ...]`.
 - No selectors: return all captured memory entries.
-- With selectors: return exact matching captured ranges only.
+- With selectors: return exact matching captured ranges only, using normalized `(address_int, size)` matching semantics.
 - No matches: fail clearly with actionable message.
 
 ## Architecture Changes
@@ -55,23 +56,27 @@ This plan uses canonical schema extension, not ad-hoc metadata.
 
 - Bump `CURRENT_BUNDLE_SCHEMA_VERSION` from `4` to `5`.
 - Loader remains strict: only supported versions load.
-- v4 snapshots are not auto-upgraded; users must re-run `fetch`.
-- Error text must explicitly state migration path: manual re-fetch.
+- No backward-compatibility requirement for older snapshot schemas.
 
 ### 3) Fetch Pipeline
 
 - Thread requested memory selectors from CLI into evidence command and builder/pipeline.
-- Use existing read-only OpenOCD memory-read path.
+- Use read-only OpenOCD memory-read path with robust bounded chunking:
+  - issue `read_memory` in byte-width mode (`width_bits=8`) for deterministic byte payloads
+  - split requests into `32`-byte chunks and concatenate in-order
 - Preserve deterministic per-range outcomes:
   - `success`: includes captured hex payload.
   - `failure`: includes failure reason.
 - Persist aggregate provenance counters (requested/success/failure).
+- On zero-success fetch, persist failure entries and counters, then exit failure.
 
 ### 4) Report Rendering
 
 - Extend `ReportRenderOptions` with memory inspect selectors.
 - Add memory inspect payload section in `debugoracle/renderers/report.py`.
 - Include memory availability in metadata/source availability outputs.
+- Memory inspect entries expose: `status`, `address`, `size`, `data_hex`, `failure_reason`, `ascii_preview`.
+- Deterministic ordering: sort by normalized address ascending, then size ascending.
 - Keep default report concise and backward-consistent in style.
 
 ## Error and Rescue Rules
@@ -80,7 +85,7 @@ This plan uses canonical schema extension, not ad-hoc metadata.
 - OpenOCD/read failures: recorded per range.
 - Fetch exit behavior:
   - `>=1 success` -> success exit.
-  - `0 success` -> failure exit.
+  - `0 success` -> failure exit (after persisting failure entries).
 - Report selector miss: failure with requested selector echo.
 
 ## Security and Safety
@@ -97,12 +102,13 @@ This plan uses canonical schema extension, not ad-hoc metadata.
 
 - Accept single and multiple valid `ADDR:SIZE`.
 - Reject malformed selectors and out-of-bound sizes.
+- Selector matching normalizes to `(address_int, size)`; stored display address preserves input text.
 
 ### Fetch Integration
 
 - All-success path stores all requested ranges.
 - Partial-success path stores mixed statuses and succeeds.
-- Zero-success path fails with clear message.
+- Zero-success path stores failure entries, then fails with clear message.
 
 ### Report Integration
 
@@ -141,4 +147,3 @@ pre-commit run --all-files
 - `debugoracle/renderers/report.py`
 - memory/read helpers under `debugoracle/sources/debuggers/gdb/` as needed
 - specs/docs and focused tests
-

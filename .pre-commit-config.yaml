@@ -43,6 +43,6 @@ repos:
       # ---- Security (Bandit via pipx) ----
       - id: bandit
         name: bandit
-        entry: bandit -c pyproject.toml -r debugoracle/
+        entry: .venv/bin/bandit -c pyproject.toml -r debugoracle/
         language: system
         pass_filenames: false

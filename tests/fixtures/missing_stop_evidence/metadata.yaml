@@ -1,0 +1,13 @@
+{
+  "name": "missing_stop_evidence",
+  "description": "RTT-only capture with no MI stop event; evidence is insufficient for a stop reason.",
+  "questions": [
+    {
+      "id": "q1",
+      "prompt": "Can we determine why execution stopped?",
+      "expected_conclusion": "unknown",
+      "required_evidence": [],
+      "forbidden_behaviors": ["guessing stop_reason without MI evidence"]
+    }
+  ]
+}

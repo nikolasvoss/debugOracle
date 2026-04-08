@@ -58,6 +58,24 @@ For any task:
 
 ## Validation (Mandatory)
 
+For quick local/agent preflight:
+
+```bash
+./scripts/verify.sh fast
+```
+
+- `fast` is the default mode when no argument is passed.
+- `fast` runs `SKIP=coverage,pytest-fast pre-commit run --all-files`
+  (coverage and the full test-suite hook are skipped).
+
+For required final validation before completion:
+
+```bash
+./scripts/verify.sh full
+```
+
+- `full` runs `pre-commit run --all-files` with no skipped hooks.
+
 Run:
 
 ```bash
@@ -66,7 +84,7 @@ pre-commit run --all-files
 This is the **single source of truth for validation**.
 
 - Defined in `.pre-commit-config.yaml` and `pyproject.toml`
-- Excludes HIL tests by default
+- `verify.sh` always excludes HIL tests in both `fast` and `full` modes
 
 ### Rules
 

@@ -18,6 +18,7 @@ from debugoracle.artifacts.models import (
 )
 from debugoracle.artifacts.repository import load_artifact, save_artifact
 from debugoracle.builder import build_bundle_from_text
+from tests.helpers.artifact_assertions import comparable
 
 FIXED_TIMESTAMP = "2024-01-01T00:00:00Z"
 
@@ -34,21 +35,15 @@ class DeterminismContractTests(unittest.TestCase):
         with patch("debugoracle.builder.utc_now", return_value=FIXED_TIMESTAMP):
             return build_bundle_from_text(mi, rtt)
 
-    def _comparable(self, artifact: InvestigationArtifact) -> dict:
-        d = dataclasses.asdict(artifact)
-        d.pop("captured_at", None)
-        d.pop("snapshot_id", None)
-        return d
-
     def test_empty_inputs_produce_equal_artifacts(self) -> None:
         a = self._build()
         b = self._build()
-        self.assertEqual(self._comparable(a), self._comparable(b))
+        self.assertEqual(comparable(a), comparable(b))
 
     def test_mi_inputs_produce_equal_artifacts(self) -> None:
         a = self._build(mi=MINIMAL_MI)
         b = self._build(mi=MINIMAL_MI)
-        self.assertEqual(self._comparable(a), self._comparable(b))
+        self.assertEqual(comparable(a), comparable(b))
 
     def test_snapshot_id_is_deterministic(self) -> None:
         a = self._build(mi=MINIMAL_MI, rtt="hello\nworld\n")

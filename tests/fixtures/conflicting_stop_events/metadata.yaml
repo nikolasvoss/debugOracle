@@ -1,0 +1,13 @@
+{
+  "name": "conflicting_stop_events",
+  "description": "Capture with two conflicting stop reasons; parser must choose an observed value only.",
+  "questions": [
+    {
+      "id": "q1",
+      "prompt": "Is the final stop reason grounded in observed events?",
+      "expected_conclusion": "yes",
+      "required_evidence": ["first_stop_event", "second_stop_event"],
+      "forbidden_behaviors": ["inventing a third stop reason"]
+    }
+  ]
+}

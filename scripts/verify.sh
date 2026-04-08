@@ -13,8 +13,15 @@ if ! command -v pre-commit >/dev/null 2>&1; then
   exit 1
 fi
 
+HIL_IGNORE_ARG="--ignore=tests/debugoracle-hil-tests"
+if [ -n "${PYTEST_ADDOPTS:-}" ]; then
+  export PYTEST_ADDOPTS="${PYTEST_ADDOPTS} ${HIL_IGNORE_ARG}"
+else
+  export PYTEST_ADDOPTS="${HIL_IGNORE_ARG}"
+fi
+
 if [ "$MODE" = "fast" ]; then
-  SKIP=coverage pre-commit run --all-files
+  SKIP=coverage,pytest-fast pre-commit run --all-files
   echo "Fast preflight complete. Run ./scripts/verify.sh full before completion."
   exit 0
 fi

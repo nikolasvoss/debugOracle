@@ -1,29 +1,29 @@
 # DebugOracle — Testing Plan Phase 2: Contract Tests
 
-**Status:** Gap-fill in progress
+**Status:** Complete (Phase 2 closed)
 **Phase:** 2 (Contract Tests)
-**Source plan:** `docs/plans/testing_rework.md §4`
-**Reviewed by:** `/plan-eng-review` 2026-03-27
+**Source plan:** Legacy `docs/plans/testing_rework.md §4` (file removed; this phase doc is canonical)
+**Eng reviewed by:** `/plan-eng-review` 2026-03-27
+**CEO reviewed by:** `/plan-ceo-review` 2026-04-08 (`HOLD_SCOPE`)
 
 ---
 
 ## Context
 
 Phase 1 (requirements) is complete. Three locked spec documents exist:
-- [docs/specs/testing-requirements.md](testing-requirements.md)
-- [docs/specs/testing-contracts.md](testing-contracts.md)
-- [docs/specs/testing-architecture.md](testing-architecture.md)
+- [docs/specs/testing-requirements.md](../specs/testing-requirements.md)
+- [docs/specs/testing-contracts.md](../specs/testing-contracts.md)
+- [docs/specs/testing-architecture.md](../specs/testing-architecture.md)
 
-Phase 2 target: 5–10 high-value contract tests covering 6 invariant families in
-`tests/contracts/`. Current state: **24 tests, all passing** in
-`tests/contracts/test_core_invariants.py`. Phase 2 is ~80% done.
+Phase 2 target was 5–10 high-value contract tests covering 6 invariant families in
+`tests/contracts/`.
 
-This plan documents the gap analysis and the 6 remaining tests needed to declare
-Phase 2 complete, which gates Phase 3 (replay fixtures).
+This document records the historical gap analysis plus implemented fixes used to
+declare Phase 2 complete, which unblocks Phase 3 (replay fixtures).
 
 ---
 
-## Step 0 — Scope Challenge
+## Step 0 — Historical Gap Analysis (At Phase Start)
 
 ### What already exists
 
@@ -143,7 +143,7 @@ QUALITY: ★★★: 18  ★★: 2  ★: 0
 
 ---
 
-## Implementation — Remaining Tests
+## Implemented Gap-Fill (Completed)
 
 All tests go into `tests/contracts/test_core_invariants.py` (or a second file in
 `tests/contracts/` if path safety needs its own import surface).
@@ -327,15 +327,25 @@ class ArtifactImmutabilityContractTests(unittest.TestCase):
 
 **Phase 2 COMPLETE — Phase 3 (replay fixtures) is now unblocked.**
 
+Validation note: local verification output is environment-dependent (for example,
+`pytest` availability). Treat CI/pre-commit as the authoritative execution record.
+
 ---
 
 ## GSTACK REVIEW REPORT
 
 | Review | Trigger | Why | Runs | Status | Findings |
 |--------|---------|-----|------|--------|----------|
-| CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 1 | HOLD_SCOPE | Plan hygiene cleanup only; no scope expansion |
 | Codex Review | `/codex review` | Independent 2nd opinion | 0 | — | — |
 | Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | CLEAR (PLAN) | 8 gaps, 2 critical |
 | Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | N/A (no UI) |
 
-**VERDICT:** ENG CLEARED — ready to implement Phase 2 gap-fill.
+**VERDICT:** PHASE 2 COMPLETE — ready to proceed with Phase 3 implementation.
+
+---
+
+## Open Questions
+
+- No blocking open questions remain for Phase 2.
+- No non-blocking follow-up questions are currently tracked in this phase doc.

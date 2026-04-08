@@ -1186,14 +1186,23 @@ class PyMuPDFParser:
             progress_cb(
                 0, total_pages, f"{source.name} (extracting markdown; may take minutes)"
             )
-        md = pymupdf4llm.to_markdown(doc)
+        md_raw = pymupdf4llm.to_markdown(doc)
+        warnings: list[str] = []
+        if isinstance(md_raw, str):
+            md = md_raw
+        else:
+            md = ""
+            warnings.append(
+                f"PyMuPDF markdown extraction returned non-text output ({type(md_raw).__name__})."
+            )
         if progress_cb:
             progress_cb(0, total_pages, f"{source.name} (validating extracted pages)")
 
         empty_page_count = 0
-        warnings: list[str] = []
         for page_index in range(total_pages):
-            text = normalize_text(doc[page_index].get_text("text") or "")
+            page_text_raw = doc[page_index].get_text("text")
+            page_text = page_text_raw if isinstance(page_text_raw, str) else ""
+            text = normalize_text(page_text)
             if not text:
                 warnings.append(f"Page {page_index + 1} extracted no text.")
                 empty_page_count += 1
@@ -1275,8 +1284,17 @@ class DoclingParser:
             if heartbeat_thread is not None:
                 heartbeat_thread.join(timeout=0.2)
 
-        md = result.document.export_to_markdown()
-        chunks, warnings = split_markdown_by_headings(md, source, doc=None)
+        md_raw = result.document.export_to_markdown()
+        warnings: list[str] = []
+        if isinstance(md_raw, str):
+            md = md_raw
+        else:
+            md = ""
+            warnings.append(
+                f"Docling markdown export returned non-text output ({type(md_raw).__name__})."
+            )
+        chunks, split_warnings = split_markdown_by_headings(md, source, doc=None)
+        warnings.extend(split_warnings)
         if not chunks:
             chunks = [
                 DocsChunk(

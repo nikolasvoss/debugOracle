@@ -9,7 +9,9 @@ from pathlib import Path
 
 
 class VerifyScriptTests(unittest.TestCase):
-    def test_default_mode_runs_fast_pass_with_skip_coverage(self) -> None:
+    def test_default_mode_runs_fast_pass_with_skip_coverage_and_pytest_fast(
+        self,
+    ) -> None:
         script_path = Path("scripts/verify.sh")
         with tempfile.TemporaryDirectory() as tmp:
             bin_dir = Path(tmp) / "bin"
@@ -20,7 +22,7 @@ class VerifyScriptTests(unittest.TestCase):
             pre_commit.write_text(
                 "#!/usr/bin/env bash\n"
                 "set -euo pipefail\n"
-                f'echo "SKIP=${{SKIP-}} ARGS:$*" > {log_path}\n',
+                f'echo "SKIP=${{SKIP-}} PYTEST_ADDOPTS=${{PYTEST_ADDOPTS-}} ARGS:$*" > {log_path}\n',
                 encoding="utf-8",
             )
             pre_commit.chmod(pre_commit.stat().st_mode | stat.S_IXUSR)
@@ -39,7 +41,10 @@ class VerifyScriptTests(unittest.TestCase):
             self.assertEqual(completed.returncode, 0, completed.stderr)
             self.assertTrue(log_path.exists(), "expected fake pre-commit to run")
             log_text = log_path.read_text(encoding="utf-8")
-            self.assertIn("SKIP=coverage", log_text)
+            self.assertIn("SKIP=coverage,pytest-fast", log_text)
+            self.assertIn(
+                "PYTEST_ADDOPTS=--ignore=tests/debugoracle-hil-tests", log_text
+            )
             self.assertIn("ARGS:run --all-files", log_text)
             self.assertIn(
                 "Fast preflight complete. Run ./scripts/verify.sh full before completion.",
@@ -57,7 +62,7 @@ class VerifyScriptTests(unittest.TestCase):
             pre_commit.write_text(
                 "#!/usr/bin/env bash\n"
                 "set -euo pipefail\n"
-                f'echo "SKIP=${{SKIP-}} ARGS:$*" > {log_path}\n',
+                f'echo "SKIP=${{SKIP-}} PYTEST_ADDOPTS=${{PYTEST_ADDOPTS-}} ARGS:$*" > {log_path}\n',
                 encoding="utf-8",
             )
             pre_commit.chmod(pre_commit.stat().st_mode | stat.S_IXUSR)
@@ -78,6 +83,10 @@ class VerifyScriptTests(unittest.TestCase):
             log_text = log_path.read_text(encoding="utf-8")
             self.assertIn("SKIP=", log_text)
             self.assertNotIn("SKIP=coverage", log_text)
+            self.assertNotIn("SKIP=pytest-fast", log_text)
+            self.assertIn(
+                "PYTEST_ADDOPTS=--ignore=tests/debugoracle-hil-tests", log_text
+            )
             self.assertIn("ARGS:run --all-files", log_text)
 
     def test_invalid_mode_returns_usage_error(self) -> None:

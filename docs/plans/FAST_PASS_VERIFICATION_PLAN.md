@@ -2,14 +2,14 @@
 
 ## Summary
 Lock a minimal, deterministic 2-tier verification flow for agents:
-1. `fast` preflight for quick iteration (`coverage` skipped).
+1. `fast` preflight for quick iteration (`coverage` and `pytest-fast` skipped).
 2. `full` gate for completion (`pre-commit run --all-files`, unchanged source of truth).
 
 Step 0 verdict: scope is good, no scope reduction needed (small diff, no new services/classes).
 
 ## Key Implementation Changes
 - Add one wrapper command: `scripts/verify.sh` with modes:
-  - `fast` (default): `SKIP=coverage pre-commit run --all-files`
+  - `fast` (default): `SKIP=coverage,pytest-fast pre-commit run --all-files`
   - `full`: `pre-commit run --all-files`
 - Keep `.pre-commit-config.yaml` unchanged (no hook churn, no threshold changes).
 - Add clear failure guidance in wrapper output:
@@ -23,7 +23,7 @@ Step 0 verdict: scope is good, no scope reduction needed (small diff, no new ser
 ## Architecture, Quality, and Performance Review
 - Architecture: good reuse of existing quality stack (`.pre-commit-config.yaml`), no parallel verification system.
 - Code quality: keep logic centralized in one script to avoid duplicated shell snippets across docs/agents.
-- Performance: expected faster loop from skipping coverage while preserving lint/type/test/security checks.
+- Performance: expected faster loop from skipping coverage and full-test hook while preserving lint/type/security checks.
 - Risk to control: false confidence from fast-pass; mitigated by explicit docs/checklist language that full gate is mandatory.
 
 ## Test Plan
@@ -32,7 +32,7 @@ Step 0 verdict: scope is good, no scope reduction needed (small diff, no new ser
 ENTRY: scripts/verify.sh
   |
   +-- mode=fast (default)
-  |    -> run SKIP=coverage pre-commit run --all-files
+  |    -> run SKIP=coverage,pytest-fast pre-commit run --all-files
   |    -> non-zero on any remaining hook failure
   |
   +-- mode=full
@@ -44,7 +44,7 @@ ENTRY: scripts/verify.sh
 ```
 
 Required tests:
-1. `fast` mode invokes `SKIP=coverage` and `--all-files`.
+1. `fast` mode invokes `SKIP=coverage,pytest-fast` and `--all-files`.
 2. `full` mode invokes plain `pre-commit run --all-files`.
 3. invalid mode returns non-zero with usage text.
 4. missing `pre-commit` path returns non-zero with actionable install hint.
@@ -53,6 +53,6 @@ Required tests:
 ## Assumptions and Defaults
 - Target plan is the fast-pass plan from this chat.
 - Default mode is `fast`.
-- Coverage is the only skipped hook in fast mode.
+- Coverage and `pytest-fast` are skipped hooks in fast mode.
 - Full verification remains mandatory before declaring work complete.
 - No CI/branch-protection changes in this slice.
