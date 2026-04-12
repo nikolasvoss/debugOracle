@@ -834,12 +834,10 @@ class DebugOracleCliTests(unittest.TestCase):
             self.assertIn("GDB: present", stdout)
             self.assertIn("RTT: present", stdout)
             self.assertIn("Registers: absent", stdout)
-            self.assertIn(
-                f"dbgoracle report --workspace-root {workspace.resolve()}", stdout
-            )
+            self.assertIn("dbgoracle report --workspace-root .", stdout)
             self.assertIn("Auto-discovered input paths for fetch:", stderr)
 
-    def test_fetch_next_commands_use_resolved_workspace_root(self) -> None:
+    def test_fetch_next_commands_use_portable_workspace_root(self) -> None:
         with (
             tempfile.TemporaryDirectory() as tmpdir,
             tempfile.TemporaryDirectory() as otherdir,
@@ -863,10 +861,10 @@ class DebugOracleCliTests(unittest.TestCase):
             finally:
                 os.chdir(previous)
 
-        self.assertIn(
+        self.assertIn("dbgoracle report --workspace-root .", stdout)
+        self.assertNotIn(
             f"dbgoracle report --workspace-root {workspace.resolve()}", stdout
         )
-        self.assertNotIn("dbgoracle report --workspace-root .", stdout)
 
     def test_report_notes_when_svd_register_data_is_unavailable(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1101,10 +1099,7 @@ class DebugOracleCliTests(unittest.TestCase):
             )
 
         self.assertIn("Registers: present", stdout)
-        self.assertIn(
-            f"dbgoracle report --workspace-root {workspace.resolve()} --regs-list",
-            stdout,
-        )
+        self.assertIn("dbgoracle report --workspace-root . --regs-list", stdout)
         self.assertEqual(
             payload["sources"]["registers"]["device_name"], "STM32L432KCTest"
         )

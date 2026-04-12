@@ -406,7 +406,7 @@ def emit_fetch_summary(
 ) -> None:
     gdb_source = bundle.sources.gdb
     rtt_source = bundle.sources.rtt
-    workspace_arg = f"--workspace-root {workspace_root}"
+    workspace_arg = "--workspace-root ."
 
     print("DebugOracle Fetch Summary")
     print("")

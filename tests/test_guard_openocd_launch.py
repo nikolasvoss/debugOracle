@@ -79,6 +79,46 @@ class GuardOpenOcdLaunchTests(unittest.TestCase):
         self.assertIn("workspace setup is not finished", stderr.getvalue())
         self.assertIn("Run `dbgoracle init-workspace --attach", stderr.getvalue())
 
+    def test_guard_openocd_launch_fails_early_when_workspace_setup_is_degraded(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            self._write_attach_workspace(workspace)
+            (workspace / ".vscode" / "tasks.json").write_text(
+                json.dumps(
+                    {
+                        "version": "2.0.0",
+                        "tasks": [
+                            {
+                                "label": "Prepare debug logs",
+                                "type": "shell",
+                                "command": "mkdir -p .dbgoracle",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with (
+                patch(
+                    "debugoracle.cli.commands.guard_openocd_launch.discover_openocd_processes",
+                ) as discover_mock,
+                redirect_stdout(stdout),
+                redirect_stderr(stderr),
+            ):
+                exit_code = main(
+                    ["guard-openocd-launch", "--workspace-root", str(workspace)]
+                )
+
+        self.assertEqual(exit_code, 2)
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertIn("workspace setup is not finished", stderr.getvalue())
+        self.assertIn("task is missing", stderr.getvalue())
+        discover_mock.assert_not_called()
+
     def test_guard_openocd_launch_passes_when_no_matching_process_exists(self) -> None:
         with (
             tempfile.TemporaryDirectory() as tmpdir,
