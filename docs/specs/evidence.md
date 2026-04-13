@@ -3,7 +3,7 @@
 - Module: `evidence`
 - Code Path: `debugoracle/cli/commands/evidence.py`
 - Public Entrypoints: `cmd_fetch`, `cmd_report`
-- Last Updated: `2026-04-08`
+- Last Updated: `2026-04-13`
 
 # SPEC: DebugOracle Evidence Commands
 
@@ -31,6 +31,7 @@ Own the CLI flows that resolve raw or saved evidence, build or load artifacts, a
 
 - `cmd_fetch` is raw-only and never loads a snapshot as its primary evidence source.
 - `cmd_fetch --mem ADDR:SIZE` performs bounded read-only memory capture and stores canonical `sources.memory` entries.
+- `cmd_fetch` next-step guidance should stay portable for the active workspace (for example `--workspace-root .`) instead of host-specific absolute workspace paths.
 - `cmd_fetch --svd-file <file>` is the only explicit CLI path that enables live peripheral capture; it passes an explicit opt-in through the builder instead of relying on `svd_file_path` alone.
 - When no explicit `--svd-file` is provided, `cmd_fetch` may resolve `debugoracle.svdFile` from `.vscode/settings.json` as the workspace default SVD.
 - Workspace-default `debugoracle.svdFile` values may be absolute paths, workspace-relative paths, or `${workspaceFolder}`-prefixed paths; `cmd_fetch` normalizes the workspace token before file resolution.

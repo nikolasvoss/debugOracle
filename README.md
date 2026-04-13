@@ -258,10 +258,10 @@ See full sample config and step-by-step checklist in [`examples/cortex-debug/REA
 Typical Cortex-Debug flow:
 
 ```bash
-./dbgoracle run --detach --workspace-root /path/to/workspace --port 60001 --output /path/to/session.rtt
-./dbgoracle fetch --workspace-root /path/to/workspace
-./dbgoracle report --workspace-root /path/to/workspace
-./dbgoracle stop --workspace-root /path/to/workspace
+./dbgoracle run --detach --workspace-root . --port 60001 --output .dbgoracle/session.rtt
+./dbgoracle fetch --workspace-root .
+./dbgoracle report --workspace-root .
+./dbgoracle stop --workspace-root .
 ./dbgoracle --version
 ```
 
