@@ -45,18 +45,21 @@ Near-term, DebugOracle is:
    Let a session collect or render only the evidence streams that matter without weakening the default path.
 10. Redaction and trust-boundary controls
    Add memory, RTT, and serial scrubbing before broader artifact sharing becomes a routine workflow.
+11. Capture and diagnostic hardening
+   Improve no-evidence remediation, detect incompatible target/SVD pairings, harden halt detection,
+   expand live OpenOCD coverage, and revisit stream capture from observed failures.
 
 ## Later
 
-11. Shareable debug bundles
+12. Shareable debug bundles
    Package portable evidence bundles for handoff, bug reports, and offline reuse once trust-boundary controls are in place.
-12. VS Code-specific workflow improvements
+13. VS Code-specific workflow improvements
    Reduce setup friction and make the in-editor path smoother after the CLI workflow is boringly reliable.
-13. Multi-session and multi-target support
+14. Multi-session and multi-target support
    Expand beyond the single-session default without making the common case harder to understand or operate.
-14. Recorded replay and offline investigation
+15. Recorded replay and offline investigation
    Reuse the same evidence surfaces with saved sessions when hardware is unavailable.
-15. Advanced live views
+16. Advanced live views
    Add higher-level live inspection such as watch expressions, structured fault decoding, and RTOS-aware views after safety and trust are mature.
 
 ## Current milestone

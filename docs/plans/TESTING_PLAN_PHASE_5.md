@@ -1,10 +1,13 @@
 # DebugOracle — Testing Plan Phase 5: Adversarial & Metamorphic Tests
 
-**Status:** Not started
+**Status:** Proposal — future, non-binding
 **Phase:** 5 (Adversarial & Metamorphic Tests)
 **Source plan:** Legacy `docs/plans/testing_rework.md §7` (file removed; phased docs are canonical)
 **Reviewed by:** `/plan-eng-review` 2026-03-27
 **Gate:** Phase 3 fixtures must exist (raw data + expected.json)
+
+This is a design proposal, not a current delivery commitment. Prioritize work through
+[`ROADMAP.md`](../../ROADMAP.md) before treating it as implementation scope.
 
 ---
 

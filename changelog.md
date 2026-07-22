@@ -4,7 +4,8 @@
 - Replay fixture regression suite under `tests/replay/` with scenario-based fixture bundles:
   `signal_received_stop`, `missing_stop_evidence`, and `conflicting_stop_events`.
 - Shared test helpers in `tests/helpers/` for fixture loading and deterministic artifact comparison.
-- Replay fixtures documented as complete in `docs/plans/TESTING_PLAN_PHASE_3.md`.
+- Replay fixture track completed; durable requirements and contracts live in
+  `docs/specs/testing-*.md`.
 
 ### Changed
 - Replay tests now auto-discover fixture bundles from `tests/fixtures/` instead of relying on a hardcoded fixture list.
