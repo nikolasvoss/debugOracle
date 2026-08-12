@@ -44,6 +44,26 @@ For required final validation before completion:
 
 ## Install the CLI
 
+### Set up with a coding agent
+
+After cloning this repository, open it in a coding agent and paste:
+
+```text
+Install DebugOracle globally for this user. Read AGENTS.md and README.md first.
+Use the supported installer and ask before changing anything outside this
+repository. Confirm when `dbgoracle --version` works.
+```
+
+### Connect a firmware project
+
+Open your **firmware project** in a new coding-agent session, then paste:
+
+```text
+Set up DebugOracle for this firmware project. Read the project instructions,
+inspect what is needed, and ask me before changing project files or installing
+anything. Do not guess missing board or debug settings.
+```
+
 Linux v1 ships a CLI-only installer path. It installs `dbgoracle`; it does not install `openocd`, VS Code, Cortex-Debug, or board-specific tooling.
 
 Prerequisites for the installer itself:

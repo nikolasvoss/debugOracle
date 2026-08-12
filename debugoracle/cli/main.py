@@ -38,6 +38,7 @@ from .commands.run_stop import (
     cmd_stop,
 )
 from .commands.status_capture import cmd_capture_rtt, cmd_status
+from .commands.readiness import cmd_doctor_host, cmd_session_doctor, cmd_workspace_plan
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -63,6 +64,69 @@ def build_parser() -> argparse.ArgumentParser:
         version=cli_version,
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    doctor = subparsers.add_parser(
+        "doctor",
+        help="Inspect DebugOracle setup readiness without changing host or target state",
+    )
+    doctor_subparsers = doctor.add_subparsers(dest="doctor_command", required=True)
+    doctor_host = doctor_subparsers.add_parser(
+        "host",
+        help="Inspect local debug-host prerequisites without installing or probing hardware",
+    )
+    doctor_host.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="Output format",
+    )
+    doctor_host.set_defaults(func=cmd_doctor_host)
+
+    workspace = subparsers.add_parser(
+        "workspace",
+        help="Inspect workspace debug inputs without writing configuration",
+    )
+    workspace_subparsers = workspace.add_subparsers(
+        dest="workspace_command", required=True
+    )
+    workspace_plan = workspace_subparsers.add_parser(
+        "plan",
+        help="Discover candidate debug inputs and report unresolved choices",
+    )
+    workspace_plan.add_argument(
+        "--workspace-root",
+        default=".",
+        help="Workspace root to inspect",
+    )
+    workspace_plan.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="Output format",
+    )
+    workspace_plan.set_defaults(func=cmd_workspace_plan)
+
+    session = subparsers.add_parser(
+        "session",
+        help="Inspect local debug-session configuration without contacting hardware",
+    )
+    session_subparsers = session.add_subparsers(dest="session_command", required=True)
+    session_doctor = session_subparsers.add_parser(
+        "doctor",
+        help="Validate local workspace configuration without starting OpenOCD",
+    )
+    session_doctor.add_argument(
+        "--workspace-root",
+        default=".",
+        help="Workspace root to inspect",
+    )
+    session_doctor.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="Output format",
+    )
+    session_doctor.set_defaults(func=cmd_session_doctor)
 
     status = subparsers.add_parser(
         "status",

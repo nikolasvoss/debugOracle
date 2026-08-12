@@ -56,6 +56,7 @@ The CLI has six behavioral layers:
    Commands: internal `install-cli` and `uninstall-cli` entrypoints used by Linux launchers
 2. Workspace bootstrap
    Command: `init-workspace`
+   Readiness commands: `doctor host`, `workspace plan`, `session doctor`
 3. Local reference-manual sidecar
    Commands: `docs ingest`, `docs search`, `docs status`
 4. Transport and workspace health

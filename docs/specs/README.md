@@ -41,4 +41,5 @@ during this refactor. It is intentionally curated rather than a flat dump of eve
 | `rtt` | `debugoracle/rtt.py` | [`rtt.md`](rtt.md) |
 | `session` | `debugoracle/session.py` | [`session.md`](session.md) |
 | `trust` | `debugoracle/policy/trust.py` | [`trust.md`](trust.md) |
+| `readiness` | `debugoracle/readiness.py` | [`readiness.md`](readiness.md) |
 | `transcript` | `debugoracle/sources/debuggers/gdb/transcript.py` | [`transcript.md`](transcript.md) |

@@ -28,6 +28,7 @@ Own the top-level CLI parser, shared argument groups, and command dispatch wirin
 - `install-cli` -> `debugoracle/cli/commands/install_cli.py`
 - `uninstall-cli` -> `debugoracle/cli/commands/uninstall_cli.py`
 - `init-workspace` -> `debugoracle/cli/commands/init_workspace.py`
+- `doctor host`, `workspace plan`, `session doctor` -> `debugoracle/cli/commands/readiness.py`
 - `observe`, `snapshot`, and `prompt` are not exposed on the public CLI surface.
 
 ## Init-Workspace Parser Contract

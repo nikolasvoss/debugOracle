@@ -17,6 +17,7 @@ from debugoracle.builder import build_bundle_from_files
 from debugoracle.cli import main
 from debugoracle.cli.commands.find_tcl_port import OpenOcdCandidate
 from debugoracle.cli.main import build_parser
+from debugoracle.readiness import ReadinessState, collect_host_readiness
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -27,6 +28,233 @@ DEFAULT_OPENOCD_VALUES = {
 
 
 class DebugOracleCliTests(unittest.TestCase):
+    def test_host_readiness_detects_supported_cortex_debug_extension(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            home = Path(tmpdir)
+            extension = home / ".vscode" / "extensions" / "marus25.cortex-debug-1.12.1"
+            extension.mkdir(parents=True)
+
+            report = collect_host_readiness(path="", home=home)
+
+        cortex_debug = next(item for item in report.items if item.key == "cortex_debug")
+        self.assertEqual(cortex_debug.state, ReadinessState.READY)
+
+    def test_doctor_host_reports_read_only_json_readiness(self) -> None:
+        stdout, stderr, exit_code = self._run_cli_capture(
+            ["doctor", "host", "--format", "json"]
+        )
+
+        payload = json.loads(stdout)
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stderr, "")
+        self.assertEqual(payload["schema_version"], "1")
+        self.assertEqual(payload["scope"], "host")
+        self.assertIn(payload["status"], {"ready", "needs_host_dependency", "blocked"})
+        self.assertEqual(
+            [item["key"] for item in payload["items"]],
+            [
+                "platform",
+                "python",
+                "pipx",
+                "openocd",
+                "arm_gdb",
+                "vscode",
+                "cortex_debug",
+            ],
+        )
+        self.assertTrue(
+            all(item["requires_approval"] is False for item in payload["items"])
+        )
+
+    def test_workspace_plan_reports_ambiguous_elf_candidates_without_writing(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            (workspace / "build").mkdir()
+            (workspace / "build" / "app-a.elf").write_bytes(b"elf-a")
+            (workspace / "build" / "app-b.elf").write_bytes(b"elf-b")
+            (workspace / "board.svd").write_text("<device />\n", encoding="utf-8")
+
+            stdout, stderr, exit_code = self._run_cli_capture(
+                [
+                    "workspace",
+                    "plan",
+                    "--workspace-root",
+                    str(workspace),
+                    "--format",
+                    "json",
+                ]
+            )
+
+            payload = json.loads(stdout)
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stderr, "")
+        self.assertEqual(payload["status"], "needs_user_choice")
+        self.assertEqual(
+            payload["candidates"]["executables"],
+            [
+                str(workspace / "build" / "app-a.elf"),
+                str(workspace / "build" / "app-b.elf"),
+            ],
+        )
+        self.assertEqual(
+            payload["candidates"]["svd_files"], [str(workspace / "board.svd")]
+        )
+        self.assertFalse((workspace / ".dbgoracle").exists())
+
+    def test_workspace_plan_ignores_elf_outside_known_directories(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            (workspace / "vendor").mkdir()
+            (workspace / "vendor" / "ignored.elf").write_bytes(b"elf")
+            (workspace / "build").mkdir()
+            (workspace / "build" / "app.elf").write_bytes(b"elf")
+
+            stdout, _stderr, exit_code = self._run_cli_capture(
+                [
+                    "workspace",
+                    "plan",
+                    "--workspace-root",
+                    str(workspace),
+                    "--format",
+                    "json",
+                ]
+            )
+
+        payload = json.loads(stdout)
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(payload["status"], "ready")
+        self.assertEqual(
+            payload["candidates"]["executables"], [str(workspace / "build" / "app.elf")]
+        )
+
+    def test_workspace_plan_reports_truncation_at_directory_limit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            build = workspace / "build"
+            build.mkdir()
+            for index in range(4097):
+                (build / f"part-{index}.elf").write_bytes(b"elf")
+
+            stdout, _stderr, exit_code = self._run_cli_capture(
+                [
+                    "workspace",
+                    "plan",
+                    "--workspace-root",
+                    str(workspace),
+                    "--format",
+                    "json",
+                ]
+            )
+
+        payload = json.loads(stdout)
+        self.assertEqual(exit_code, 0)
+        self.assertTrue(payload["truncated"])
+        self.assertEqual(payload["status"], "blocked")
+
+    def test_session_doctor_reports_missing_local_config_without_socket_access(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            with patch(
+                "socket.create_connection", side_effect=AssertionError("socket used")
+            ):
+                stdout, stderr, exit_code = self._run_cli_capture(
+                    [
+                        "session",
+                        "doctor",
+                        "--workspace-root",
+                        str(workspace),
+                        "--format",
+                        "json",
+                    ]
+                )
+
+        payload = json.loads(stdout)
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stderr, "")
+        self.assertEqual(payload["scope"], "session")
+        self.assertEqual(payload["status"], "blocked")
+        self.assertEqual(payload["target_contact"], "not_attempted")
+        self.assertIn("settings", payload["checks"])
+        self.assertIn("launch", payload["checks"])
+
+    def test_session_doctor_accepts_jsonc_and_rejects_missing_executable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            vscode = workspace / ".vscode"
+            vscode.mkdir()
+            (vscode / "settings.json").write_text(
+                '{\n  // DebugOracle settings\n  "debugoracle.executable": "build/app.elf",\n'
+                '  "debugoracle.miLogPath": "${workspaceFolder}/.dbgoracle/session.mi",\n}\n',
+                encoding="utf-8",
+            )
+            (vscode / "launch.json").write_text(
+                '{"configurations": [{"type": "cortex-debug", "configFiles": ["board.cfg"]}]}\n',
+                encoding="utf-8",
+            )
+            (vscode / "tasks.json").write_text(
+                '{"version": "2.0.0"}\n', encoding="utf-8"
+            )
+
+            stdout, stderr, exit_code = self._run_cli_capture(
+                [
+                    "session",
+                    "doctor",
+                    "--workspace-root",
+                    str(workspace),
+                    "--format",
+                    "json",
+                ]
+            )
+
+        payload = json.loads(stdout)
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stderr, "")
+        self.assertEqual(payload["checks"]["settings"], "ready")
+        self.assertEqual(payload["checks"]["executable"], "missing")
+        self.assertEqual(payload["status"], "blocked")
+
+    def test_session_doctor_rejects_workspace_config_paths_outside_workspace(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            vscode = workspace / ".vscode"
+            vscode.mkdir()
+            (vscode / "settings.json").write_text(
+                '{"debugoracle.executable": "/etc/passwd", "debugoracle.miLogPath": "/tmp/session.mi"}\n',
+                encoding="utf-8",
+            )
+            (vscode / "launch.json").write_text(
+                '{"configurations": []}\n', encoding="utf-8"
+            )
+            (vscode / "tasks.json").write_text(
+                '{"version": "2.0.0"}\n', encoding="utf-8"
+            )
+
+            stdout, _stderr, exit_code = self._run_cli_capture(
+                [
+                    "session",
+                    "doctor",
+                    "--workspace-root",
+                    str(workspace),
+                    "--format",
+                    "json",
+                ]
+            )
+
+        payload = json.loads(stdout)
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(payload["checks"]["executable"], "outside_workspace")
+        self.assertEqual(payload["checks"]["mi_log_destination"], "outside_workspace")
+        self.assertEqual(payload["status"], "blocked")
+
     def test_fetch_command_parses(self) -> None:
         parser = build_parser()
         parsed = parser.parse_args(["fetch"])
