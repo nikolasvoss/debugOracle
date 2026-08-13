@@ -3,6 +3,11 @@ __pycache__/
 .pytest_cache/
 .coverage
 .dbgoracle/
+*.dbgoracle-docs/
+*.dbgoracle-docs.staging/
 build/
 *.egg-info/
 .venv/
+
+# Private hardware-in-the-loop repository is not part of the public tree.
+/tests/debugoracle-hil-tests/

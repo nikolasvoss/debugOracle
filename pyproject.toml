@@ -1,12 +1,23 @@
 [build-system]
-requires = ["setuptools>=61"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "debugoracle"
 dynamic = ["version"]
 description = "Passive embedded debug evidence packager for ChatGPT"
+readme = "README.md"
+license = "Apache-2.0"
 requires-python = ">=3.10"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Topic :: Software Development :: Debuggers",
+]
 dependencies = [
     "pymupdf>=1.24,<2",
     "pymupdf4llm>=0.0.17",
@@ -16,6 +27,11 @@ dependencies = [
 docling = ["docling>=2.0"]
 semantic = ["sentence-transformers>=2.7", "numpy>=1.26"]
 dev = ["pyright", "pytest"]
+
+[project.urls]
+Changelog = "https://github.com/nikolasvoss/debugoracle/blob/main/changelog.md"
+Issues = "https://github.com/nikolasvoss/debugoracle/issues"
+Repository = "https://github.com/nikolasvoss/debugoracle"
 
 [project.scripts]
 dbgoracle = "debugoracle:main"
