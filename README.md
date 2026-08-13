@@ -50,8 +50,10 @@ After cloning this repository, open it in a coding agent and paste:
 
 ```text
 Install DebugOracle globally for this user. Read AGENTS.md and README.md first.
-Use the supported installer and ask before changing anything outside this
-repository. Confirm when `dbgoracle --version` works.
+Use the supported installer. Proceed with routine per-user setup without
+asking; ask only before privileged or system-wide changes, destructive actions,
+project-file changes, or an explicit PEP 668 override. Confirm when
+`dbgoracle --version` works.
 ```
 
 ### Connect a firmware project

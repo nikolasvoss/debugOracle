@@ -23,3 +23,12 @@ Provide a narrow CLI surface that a Linux launcher can call to reuse the package
 - Hidden from normal user-facing help.
 - Must not broaden the ordinary debug-evidence workflow surface.
 - Must preserve structured outcome mapping from the installer core instead of flattening failures into generic text.
+
+## Version Consistency Contract
+
+- The package build version and `dbgoracle --version` derive from the canonical
+  `debugoracle.version.__version__` value.
+- The checkout manifest's `version` and pinned `source_url` must match that
+  canonical version.
+- A regression test must reject drift among these release metadata surfaces
+  before a checkout installer run can report a false verification failure.
