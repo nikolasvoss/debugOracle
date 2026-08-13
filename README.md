@@ -50,10 +50,14 @@ After cloning this repository, open it in a coding agent and paste:
 
 ```text
 Install DebugOracle globally for this user. Read AGENTS.md and README.md first.
-Use the supported installer. Proceed with routine per-user setup without
-asking; ask only before privileged or system-wide changes, destructive actions,
-project-file changes, or an explicit PEP 668 override. Confirm when
-`dbgoracle --version` works.
+Use the supported installer. Before running it, summarize every optional
+installation component and ask which ones I want; do not silently select or
+skip optional components. For the current docs profile, offer `none` (base
+only), `docling` (better PDF extraction), `semantic` (semantic search), or
+`all` (both), then pass my answer as `--docs-tools <profile>`. Proceed with
+required routine per-user setup without asking; ask only before privileged or
+system-wide changes, destructive actions, project-file changes, or an explicit
+PEP 668 override. Confirm when `dbgoracle --version` works.
 ```
 
 ### Connect a firmware project
