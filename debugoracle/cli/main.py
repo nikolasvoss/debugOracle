@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import argparse
 
+from debugoracle.version import __version__
+
 from ..builder import DEFAULT_RTT_WINDOW
 from ..sources.debuggers.gdb.memory import (
     MAX_FETCH_MEMORY_READ_BYTES,
@@ -49,8 +51,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    cli_version = "0.1.0"
-
     parser = argparse.ArgumentParser(
         prog="dbgoracle",
         description=(
@@ -61,7 +61,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--version",
         action="version",
-        version=cli_version,
+        version=__version__,
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
