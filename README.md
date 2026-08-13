@@ -44,12 +44,13 @@ For required final validation before completion:
 
 ## Install the CLI
 
-### Set up with a coding agent
+### Set up with Codex or Claude Code
 
-After cloning this repository, open it in a coding agent and paste:
+After cloning this repository, open it in Codex or Claude Code and paste:
 
 ```text
-Install DebugOracle globally for this user. Read AGENTS.md and README.md first.
+Install DebugOracle globally for this user. Read the project instructions and
+README.md first.
 Use the supported installer. Before running it, summarize every optional
 installation component and ask which ones I want; do not silently select or
 skip optional components. For the current docs profile, offer `none` (base
@@ -62,7 +63,7 @@ PEP 668 override. Confirm when `dbgoracle --version` works.
 
 ### Connect a firmware project
 
-Open your **firmware project** in a new coding-agent session, then paste:
+Open your **firmware project** in a new Codex or Claude Code session, then paste:
 
 ```text
 Set up DebugOracle for this firmware project. Read the project instructions,
