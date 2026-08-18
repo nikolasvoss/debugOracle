@@ -2,9 +2,9 @@
   "schema_version": "1",
   "channel": "stable",
   "package_name": "debugoracle",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "python_requires": ">=3.10",
   "installer_min_version": "0.1.0",
-  "release_notes_url": "https://github.com/nikolasvoss/ai-debugger-v2",
-  "source_url": "debugoracle==0.1.1"
+  "release_notes_url": "https://github.com/nikolasvoss/debugoracle/releases/tag/v0.2.0",
+  "source_url": "https://github.com/nikolasvoss/debugoracle/archive/refs/tags/v0.2.0.tar.gz"
 }

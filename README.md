@@ -73,6 +73,10 @@ anything. Do not guess missing board or debug settings.
 
 Linux v1 ships a CLI-only installer path. It installs `dbgoracle`; it does not install `openocd`, VS Code, Cortex-Debug, or board-specific tooling.
 
+Verified alpha environment: Ubuntu 24.04 LTS x86-64, Python 3.12, and `pipx`.
+All other environments are unverified, including other Linux distributions,
+architectures, and Python versions.
+
 Prerequisites for the installer itself:
 
 - Linux

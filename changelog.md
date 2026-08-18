@@ -1,3 +1,13 @@
+## [Unreleased]
+
+## [0.2.0] - 2026-08-13
+
+### Changed
+- Prepared the first public alpha release from audited, clean repository snapshots.
+- Aligned CLI, package, installer-manifest, changelog, and release-tag version metadata.
+- Defined Ubuntu 24.04 LTS x86-64, Python 3.12, and `pipx` as the verified alpha environment; other environments remain unverified.
+- Pointed installer release metadata at the public DebugOracle repository while preserving the checkout-local package override.
+
 ## [0.1.2] - 2026-04-08
 
 ### Added
