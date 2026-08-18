@@ -23,7 +23,7 @@ from debugoracle.docs_sidecar import (
 def _ingest_result(
     *,
     state: str = "ok",
-    parser: str = "pymupdf",
+    parser: str = "pypdf",
     warning_summary: str = "",
     skipped: bool = False,
 ) -> DocsIngestResult:
@@ -121,7 +121,7 @@ class DocsCliTests(unittest.TestCase):
             results=[
                 _ingest_result(
                     state="warning",
-                    parser="pymupdf",
+                    parser="pypdf",
                     warning_summary="warn",
                     skipped=True,
                 )
@@ -193,7 +193,7 @@ class DocsCliTests(unittest.TestCase):
             sidecar_dir="/tmp/.docs/doc",
             envelope_path="/tmp/.docs/doc/envelope.json",
             ingest_state="failed",
-            parser_used="pymupdf",
+            parser_used="pypdf",
             page_count=1,
             chunk_count=1,
             warning_summary="bad parse",
@@ -210,7 +210,7 @@ class DocsCliTests(unittest.TestCase):
             file=[],
             folder=[],
             yes=False,
-            parser="pymupdf",
+            parser="pypdf",
             semantic=False,
             force=False,
             no_interactive=False,
@@ -359,7 +359,7 @@ class DocsCliTests(unittest.TestCase):
                         sidecar_dir="/tmp/.docs/doc",
                         envelope_path="/tmp/.docs/doc/envelope.json",
                         ingest_state="failed",
-                        parser_used="pymupdf",
+                        parser_used="pypdf",
                         page_count=1,
                         chunk_count=1,
                         warning_summary="warn",
@@ -386,7 +386,7 @@ class DocsCliTests(unittest.TestCase):
                     file=[],
                     folder=[],
                     yes=False,
-                    parser="pymupdf",
+                    parser="pypdf",
                     semantic=False,
                     force=False,
                     no_interactive=True,
@@ -397,11 +397,11 @@ class DocsCliTests(unittest.TestCase):
 
         checks_blocked = [
             DiagnosticCheck(
-                key="pymupdf",
+                key="pypdf",
                 required=True,
                 ready=False,
                 detail="missing",
-                remedy="pip install pymupdf",
+                remedy="pip install pypdf",
             )
         ]
         with (
@@ -437,7 +437,7 @@ class DocsCliTests(unittest.TestCase):
 
         checks_ready = [
             DiagnosticCheck(
-                key="pymupdf",
+                key="pypdf",
                 required=True,
                 ready=True,
                 detail="installed",

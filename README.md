@@ -183,7 +183,7 @@ dbgoracle docs status
 
 Key points:
 
-- Default parser is `pymupdf` (`pymupdf` + `pymupdf4llm` are installed with base dependencies).
+- Default parser is `pypdf` (`pypdf` is installed with base dependencies).
 - Optional parser: `--parser docling` (install with `./scripts/install/linux.sh --docs-tools docling`).
 - Optional hybrid search: ingest with `--semantic`; `docs search` auto-selects hybrid ranking when embeddings are available (install with `./scripts/install/linux.sh --docs-tools semantic`).
 - Preflight dependency check: `dbgoracle docs doctor`.
