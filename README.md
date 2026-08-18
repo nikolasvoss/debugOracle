@@ -24,7 +24,7 @@ Templates and review guides:
 - [`docs/workflows/review-checklist.md`](docs/workflows/review-checklist.md)
 - [`docs/workflows/AGENT_WORKFLOW_RULES.md`](docs/workflows/AGENT_WORKFLOW_RULES.md)
 
-CI runs `pre-commit run --all-files` and a traceability gate on PRs.
+CI runs `./scripts/verify.sh full` and a traceability gate on PRs.
 
 ## Verification loop
 
@@ -34,7 +34,7 @@ For quick local/agent preflight:
 ./scripts/verify.sh fast
 ```
 
-`fast` skips `coverage` and `pytest-fast` for faster iteration.
+`fast` runs the non-HIL test suite and skips only coverage reporting.
 
 For required final validation before completion:
 

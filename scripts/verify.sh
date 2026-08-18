@@ -21,12 +21,12 @@ else
 fi
 
 if [ "$MODE" = "fast" ]; then
-  SKIP=coverage,pytest-fast pre-commit run --all-files
+  SKIP=coverage pre-commit run --all-files
   echo "Fast preflight complete. Run ./scripts/verify.sh full before completion."
   exit 0
 fi
 
 if [ "$MODE" = "full" ]; then
-  pre-commit run --all-files
+  SKIP=pytest-fast pre-commit run --all-files
   exit 0
 fi
