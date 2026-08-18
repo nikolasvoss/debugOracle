@@ -22,11 +22,15 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install pre-commit
-        run: python -m pip install --upgrade pip pre-commit
+      - name: Create verification environment
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/python -m pip install pre-commit bandit pytest-cov
+          .venv/bin/python -m pip install -e ".[dev]"
 
       - name: Run quality gate
-        run: pre-commit run --all-files
+        run: PATH="$PWD/.venv/bin:$PATH" timeout 3m ./scripts/verify.sh full
 
   traceability-gate:
     runs-on: ubuntu-latest

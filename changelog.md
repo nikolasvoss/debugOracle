@@ -1,3 +1,9 @@
+## [Unreleased]
+
+### Changed
+- The fast verification preflight now runs the non-HIL test suite without
+  coverage, while the required full gate runs the same suite once with the
+  existing coverage threshold and has a three-minute CI timeout.
 ## [0.1.2] - 2026-04-08
 
 ### Added

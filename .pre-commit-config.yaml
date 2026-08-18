@@ -27,7 +27,7 @@ repos:
         language: system
         pass_filenames: false
 
-      # ---- Coverage gate ----
+      # ---- Authoritative test gate (no HIL) ----
       - id: coverage
         name: coverage
         entry: >
