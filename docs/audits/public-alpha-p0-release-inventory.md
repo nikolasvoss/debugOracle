@@ -107,9 +107,10 @@ same notice copies at capture time:
    URL are known, but its license file and recursive submodule set were not
    locally present. The public clean-clone gate must verify them at the pinned
    commit.
-5. **Dependency inventory deferred.** Python direct/optional dependency and
-   model-asset licensing belongs to public-alpha plan step 5. No optional
-   profile is cleared by this source-asset audit.
+5. **Optional Python profiles fail closed.** The completed dependency audit is
+   recorded in `public-alpha-p0-python-dependency-licenses.json`; `docling`,
+   `semantic`, and composed `all` remain disabled until their package and model
+   licensing is resolved.
 
 No blocked item may be converted to "verified" without adding traceable source
 evidence. Missing evidence is not permission to infer provenance or licensing.
