@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import configparser
+import json
 import os
 import re
 import subprocess
@@ -28,6 +29,79 @@ def _tracked_paths(repository: Path) -> set[str]:
 
 
 class PublicReleaseContractTests(unittest.TestCase):
+    def test_base_dependency_is_the_audited_pypdf_release(self) -> None:
+        pyproject = tomllib.loads(
+            (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        )
+
+        self.assertEqual(pyproject["project"]["dependencies"], ["pypdf==6.9.2"])
+
+    def test_direct_dependency_license_inventory_matches_package_config(self) -> None:
+        pyproject = tomllib.loads(
+            (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        )
+        inventory = json.loads(
+            (
+                REPO_ROOT
+                / "docs/audits/public-alpha-p0-python-dependency-licenses.json"
+            ).read_text(encoding="utf-8")
+        )
+
+        configured = {
+            "base": pyproject["project"]["dependencies"],
+            **pyproject["project"]["optional-dependencies"],
+        }
+        inventoried = {
+            profile["name"]: [item["requirement"] for item in profile["dependencies"]]
+            for profile in inventory["profiles"]
+        }
+        self.assertEqual(inventoried, configured)
+        self.assertEqual(inventory["schema_version"], 1)
+
+        profile_status = {
+            profile["name"]: profile["installer_status"]
+            for profile in inventory["profiles"]
+        }
+        self.assertEqual(profile_status["base"], "supported")
+        self.assertEqual(profile_status["docling"], "disabled_unresolved_license")
+        self.assertEqual(profile_status["semantic"], "disabled_unresolved_license")
+        self.assertEqual(profile_status["dev"], "not_an_installer_profile")
+        self.assertEqual(
+            inventory["composed_installer_profiles"],
+            [
+                {
+                    "name": "all",
+                    "members": ["docling", "semantic"],
+                    "installer_status": "disabled_unresolved_license",
+                }
+            ],
+        )
+
+        for profile in inventory["profiles"]:
+            unresolved_dependencies = [
+                item
+                for item in profile["dependencies"]
+                if item["audit_status"] == "unresolved"
+            ]
+            if unresolved_dependencies:
+                self.assertEqual(
+                    profile["installer_status"], "disabled_unresolved_license"
+                )
+                self.assertTrue(profile["unresolved"])
+
+    def test_third_party_notices_records_python_dependency_decisions(self) -> None:
+        notices = (REPO_ROOT / "THIRD_PARTY_NOTICES.md").read_text(encoding="utf-8")
+
+        self.assertIn("pypdf 6.9.2", notices)
+        self.assertIn("BSD-3-Clause", notices)
+        self.assertRegex(
+            notices,
+            r"Docling, semantic, and all are disabled for the 0\.2\.0 supported\s+installer",
+        )
+        self.assertIn(
+            "docs/audits/public-alpha-p0-python-dependency-licenses.json", notices
+        )
+
     def test_required_public_governance_files_exist(self) -> None:
         for filename in ("LICENSE", "SECURITY.md"):
             with self.subTest(filename=filename):

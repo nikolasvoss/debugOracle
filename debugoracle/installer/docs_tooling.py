@@ -23,6 +23,16 @@ _SELECTION_REQUIREMENTS: dict[str, list[str]] = {
     DOCS_MODE_ALL: ["docling", "sentence-transformers", "numpy"],
 }
 
+_DISABLED_LICENSE_PROFILES = {
+    DOCS_MODE_DOCLING,
+    DOCS_MODE_SEMANTIC,
+    DOCS_MODE_ALL,
+}
+
+LICENSE_AUDIT_REMEDIATION = (
+    "Use --docs-tools none; see the 0.2.0 dependency license inventory."
+)
+
 
 @dataclass(slots=True)
 class DocsToolingOutcome:
@@ -45,6 +55,10 @@ class DocsToolingOutcome:
 
 
 def remediation_for_selection(selection: str) -> str:
+    if selection == DOCS_MODE_NONE:
+        return "No optional docs tooling is required for the base CLI."
+    if selection in _DISABLED_LICENSE_PROFILES:
+        return LICENSE_AUDIT_REMEDIATION
     requirements = _SELECTION_REQUIREMENTS.get(selection, [])
     if not requirements:
         return "pipx inject debugoracle docling sentence-transformers numpy"
@@ -70,6 +84,20 @@ def install_docs_tooling(
             selection=selection,
             requirements=[],
             remediation="Use one of: none, docling, semantic, all.",
+        )
+
+    if selection in _DISABLED_LICENSE_PROFILES:
+        return DocsToolingOutcome(
+            code="blocked_license_audit",
+            success=False,
+            message=(
+                f"The {selection} docs-tools profile is not supported for the "
+                "0.2.0 public alpha because its dependency and model license "
+                "audit is incomplete."
+            ),
+            selection=selection,
+            requirements=[],
+            remediation=LICENSE_AUDIT_REMEDIATION,
         )
 
     if selection == DOCS_MODE_NONE:

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import unittest
-from types import SimpleNamespace
 from unittest.mock import Mock
 
 from debugoracle.installer.docs_tooling import (
@@ -15,77 +14,37 @@ from debugoracle.installer.docs_tooling import (
 
 
 class InstallDocsToolingTests(unittest.TestCase):
-    def test_docling_profile_success_returns_structured_outcome(self) -> None:
-        runner = Mock(
-            side_effect=[
-                SimpleNamespace(
-                    returncode=0,
-                    stdout='{"venvs":{"debugoracle":{"metadata":{}}}}',
-                    stderr="",
-                ),
-                SimpleNamespace(returncode=0, stdout="", stderr=""),
-            ]
-        )
+    def test_docling_profile_is_disabled_before_pipx_access(self) -> None:
+        runner = Mock()
         which = Mock(return_value="/usr/bin/pipx")
 
         outcome = install_docs_tooling(
             DOCS_MODE_DOCLING, runner=runner, which=which, env={}
         )
 
-        self.assertTrue(outcome.success)
-        self.assertEqual(outcome.code, "success_installed")
+        self.assertFalse(outcome.success)
+        self.assertEqual(outcome.code, "blocked_license_audit")
         self.assertEqual(outcome.selection, DOCS_MODE_DOCLING)
-        self.assertEqual(outcome.requirements, ["docling"])
-        self.assertEqual(outcome.remediation, "pipx inject debugoracle docling")
+        self.assertEqual(outcome.requirements, [])
+        self.assertIn("not supported for the 0.2.0 public alpha", outcome.message)
+        self.assertIn("dependency license inventory", outcome.remediation)
+        runner.assert_not_called()
+        which.assert_not_called()
 
-    def test_profile_requirement_mapping(self) -> None:
-        cases: list[tuple[str, list[str]]] = [
-            (DOCS_MODE_NONE, []),
-            (DOCS_MODE_DOCLING, ["docling"]),
-            (DOCS_MODE_SEMANTIC, ["sentence-transformers", "numpy"]),
-            (DOCS_MODE_ALL, ["docling", "sentence-transformers", "numpy"]),
-        ]
-        for selection, requirements in cases:
+    def test_all_optional_profiles_are_disabled_by_license_audit(self) -> None:
+        for selection in (DOCS_MODE_DOCLING, DOCS_MODE_SEMANTIC, DOCS_MODE_ALL):
             with self.subTest(selection=selection):
-                runner = Mock(
-                    side_effect=[
-                        SimpleNamespace(
-                            returncode=0,
-                            stdout='{"venvs":{"debugoracle":{"metadata":{}}}}',
-                            stderr="",
-                        ),
-                        SimpleNamespace(returncode=0, stdout="", stderr=""),
-                    ]
-                )
+                runner = Mock()
                 which = Mock(return_value="/usr/bin/pipx")
                 outcome = install_docs_tooling(
                     selection, runner=runner, which=which, env={}
                 )
-                self.assertEqual(outcome.requirements, requirements)
+                self.assertFalse(outcome.success)
+                self.assertEqual(outcome.code, "blocked_license_audit")
+                self.assertEqual(outcome.requirements, [])
                 self.assertEqual(outcome.selection, selection)
-                if selection == DOCS_MODE_NONE:
-                    self.assertEqual(runner.call_count, 0)
-
-    def test_missing_pipx_is_blocked(self) -> None:
-        outcome = install_docs_tooling(
-            "docling", runner=Mock(), which=Mock(return_value=None), env={}
-        )
-
-        self.assertFalse(outcome.success)
-        self.assertEqual(outcome.code, "blocked_missing_pipx")
-        self.assertEqual(outcome.remediation, "Install pipx first, then retry.")
-
-    def test_missing_debugoracle_install_is_blocked(self) -> None:
-        runner = Mock(
-            return_value=SimpleNamespace(returncode=0, stdout='{"venvs":{}}', stderr="")
-        )
-        which = Mock(return_value="/usr/bin/pipx")
-
-        outcome = install_docs_tooling("semantic", runner=runner, which=which, env={})
-
-        self.assertFalse(outcome.success)
-        self.assertEqual(outcome.code, "blocked_missing_debugoracle")
-        self.assertEqual(outcome.remediation, "Run ./scripts/install/linux.sh first.")
+                runner.assert_not_called()
+                which.assert_not_called()
 
     def test_none_profile_skips_without_pipx(self) -> None:
         runner = Mock()
@@ -100,33 +59,9 @@ class InstallDocsToolingTests(unittest.TestCase):
         self.assertEqual(outcome.code, "success_skipped")
         self.assertEqual(
             outcome.remediation,
-            "pipx inject debugoracle docling sentence-transformers numpy",
+            "No optional docs tooling is required for the base CLI.",
         )
         runner.assert_not_called()
-
-    def test_inject_failure_returns_remediation(self) -> None:
-        runner = Mock(
-            side_effect=[
-                SimpleNamespace(
-                    returncode=0,
-                    stdout='{"venvs":{"debugoracle":{"metadata":{}}}}',
-                    stderr="",
-                ),
-                SimpleNamespace(returncode=1, stdout="", stderr="boom"),
-            ]
-        )
-        which = Mock(return_value="/usr/bin/pipx")
-
-        outcome = install_docs_tooling(
-            DOCS_MODE_SEMANTIC, runner=runner, which=which, env={}
-        )
-
-        self.assertFalse(outcome.success)
-        self.assertEqual(outcome.code, "failed_inject")
-        self.assertEqual(
-            outcome.remediation, "pipx inject debugoracle sentence-transformers numpy"
-        )
-        self.assertEqual(outcome.message, "boom")
 
     def test_outcome_dict_has_stable_keys(self) -> None:
         outcome = DocsToolingOutcome(

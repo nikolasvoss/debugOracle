@@ -9,20 +9,17 @@ Base requirements:
 - Python 3.10+
 - Installed `dbgoracle` CLI
 
-If you installed with `./scripts/install/linux.sh`, setup offers an interactive optional docs-tooling step (`docling`, `semantic`, or both).
+The Linux installer uses the base profile. Docling, semantic, and combined
+profiles are disabled for the 0.2.0 supported installer because their direct
+dependency and model license audits are incomplete.
 
 Included by default in packaged installs (no extra install needed for normal PDF ingest):
 
 - `pypdf`
 
-Optional extras:
-
-- Docling parser (better extraction on hard PDFs, scanned docs):
-  - primary: `./scripts/install/linux.sh --docs-tools docling`
-  - fallback: `pipx inject debugoracle docling`
-- Semantic search embeddings:
-  - primary: `./scripts/install/linux.sh --docs-tools semantic`
-  - fallback: `pipx inject debugoracle sentence-transformers numpy`
+Optional package extras remain declared for downstream experimentation, but
+they are outside the 0.2.0 supported install path. See the Python dependency
+inventory linked from `THIRD_PARTY_NOTICES.md` before selecting them manually.
 
 If your distro enforces PEP 668 (`error: externally-managed-environment`), install into an isolated environment:
 
@@ -33,7 +30,8 @@ python3 -m pip install -U pip
 python3 -m pip install debugoracle pypdf
 ```
 
-Docling first run can download large models. For offline/CI usage, pre-populate and point `DOCLING_CACHE_HOME` at a prepared cache.
+Docling can download model assets. No Docling/model combination is selected by
+the supported installer until its licenses have been inventoried and reviewed.
 
 ## Quick Start
 
@@ -204,15 +202,13 @@ pypdf import/install issue:
 
 Docling not installed:
 
-- primary: `./scripts/install/linux.sh --docs-tools docling`
-- if using pipx directly: `pipx inject debugoracle docling`
-- otherwise install `debugoracle[docling]` in the active environment
+- the Docling profile is intentionally unavailable in the 0.2.0 supported installer
+- use the base `pypdf` parser
 
 Semantic mode not available:
 
-- primary: `./scripts/install/linux.sh --docs-tools semantic`
-- if using pipx directly: `pipx inject debugoracle sentence-transformers numpy`
-- otherwise install `debugoracle[semantic]` in the active environment
+- the semantic profile is intentionally unavailable in the 0.2.0 supported installer
+- base BM25 search remains available
 
 No search results:
 

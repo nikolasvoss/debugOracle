@@ -22,7 +22,18 @@ def _load_bootstrap_module():
 
 
 class InstallBootstrapTests(unittest.TestCase):
-    def test_docs_tools_none_prints_linux_reinstall_hint(self) -> None:
+    def test_interactive_prompt_does_not_offer_disabled_profiles(self) -> None:
+        bootstrap_module = _load_bootstrap_module()
+        stdout = StringIO()
+        with redirect_stdout(stdout), patch("builtins.input") as input_mock:
+            selection = bootstrap_module._ask_docs_tools_choice()
+
+        self.assertEqual(selection, bootstrap_module.DOCS_MODE_NONE)
+        self.assertIn("disabled for the 0.2.0 public alpha", stdout.getvalue())
+        self.assertNotIn("Install docling", stdout.getvalue())
+        input_mock.assert_not_called()
+
+    def test_docs_tools_none_reports_optional_profiles_disabled(self) -> None:
         bootstrap_module = _load_bootstrap_module()
         success = bootstrap_module.DocsToolingOutcome(
             code="success_skipped",
@@ -45,9 +56,9 @@ class InstallBootstrapTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         output = stdout.getvalue()
         self.assertIn(
-            "Install later with: ./scripts/install/linux.sh --docs-tools all", output
+            "Optional profiles will return after their license audits close.", output
         )
-        self.assertNotIn("install-docs-tools.sh", output)
+        self.assertNotIn("--docs-tools all", output)
 
     def test_bootstrap_passes_local_package_source_override(self) -> None:
         bootstrap_module = _load_bootstrap_module()

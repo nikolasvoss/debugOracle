@@ -1,0 +1,107 @@
+{
+  "schema_version": 1,
+  "release": "0.2.0",
+  "audit_basis": {
+    "configuration": "pyproject.toml",
+    "lockfile": null,
+    "local_metadata_api": "importlib.metadata",
+    "environment": "repository development environment",
+    "limitation": "No dependency lockfile is present. Observed versions and licenses are evidence for locally installed direct packages only; they do not prove the transitive closure of an unpinned extra."
+  },
+  "profiles": [
+    {
+      "name": "base",
+      "installer_status": "supported",
+      "dependencies": [
+        {
+          "requirement": "pypdf==6.9.2",
+          "observed_version": "6.9.2",
+          "license": "BSD-3-Clause",
+          "source": "https://github.com/py-pdf/pypdf",
+          "evidence": "Installed pypdf 6.9.2 core metadata License-Expression and retained dist-info LICENSE",
+          "audit_status": "compatible"
+        }
+      ],
+      "unresolved": []
+    },
+    {
+      "name": "docling",
+      "installer_status": "disabled_unresolved_license",
+      "dependencies": [
+        {
+          "requirement": "docling>=2.0",
+          "observed_version": null,
+          "license": null,
+          "source": null,
+          "evidence": "Package is not installed in the audit environment and no repository lockfile or vendored package metadata is available",
+          "audit_status": "unresolved"
+        }
+      ],
+      "unresolved": [
+        "Direct package license and version are not established from local evidence.",
+        "The model artifacts selected or downloaded by Docling and their licenses are not inventoried."
+      ]
+    },
+    {
+      "name": "semantic",
+      "installer_status": "disabled_unresolved_license",
+      "dependencies": [
+        {
+          "requirement": "sentence-transformers>=2.7",
+          "observed_version": null,
+          "license": null,
+          "source": null,
+          "evidence": "Package is not installed in the audit environment and no repository lockfile or vendored package metadata is available",
+          "audit_status": "unresolved"
+        },
+        {
+          "requirement": "numpy>=1.26",
+          "observed_version": "1.26.4",
+          "license": "BSD-3-Clause",
+          "source": "https://github.com/numpy/numpy",
+          "evidence": "Installed NumPy 1.26.4 core metadata License text and BSD classifier",
+          "audit_status": "compatible_but_unlocked"
+        }
+      ],
+      "unresolved": [
+        "sentence-transformers direct package license and version are not established from local evidence.",
+        "No embedding model is pinned and no model license is inventoried."
+      ]
+    },
+    {
+      "name": "dev",
+      "installer_status": "not_an_installer_profile",
+      "dependencies": [
+        {
+          "requirement": "pyright",
+          "observed_version": "1.1.408",
+          "license": "MIT",
+          "source": "https://github.com/RobertCraigie/pyright-python",
+          "evidence": "Installed pyright 1.1.408 core metadata License and retained dist-info LICENSE",
+          "audit_status": "development_only_unlocked"
+        },
+        {
+          "requirement": "pytest",
+          "observed_version": "7.4.4",
+          "license": "MIT",
+          "source": "https://github.com/pytest-dev/pytest",
+          "evidence": "Installed pytest 7.4.4 core metadata License and MIT classifier",
+          "audit_status": "development_only_unlocked"
+        }
+      ],
+      "unresolved": [
+        "Development requirements are unpinned and are excluded from the supported runtime installer."
+      ]
+    }
+  ],
+  "composed_installer_profiles": [
+    {
+      "name": "all",
+      "members": [
+        "docling",
+        "semantic"
+      ],
+      "installer_status": "disabled_unresolved_license"
+    }
+  ]
+}

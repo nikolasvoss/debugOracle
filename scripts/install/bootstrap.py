@@ -41,31 +41,18 @@ def _parse_bootstrap_args(argv: list[str]) -> tuple[str, list[str]]:
 
 
 def _render_docs_tools_intro() -> None:
-    print("Optional docs tooling can improve manual/datasheet ingest quality.")
+    print("Optional docs tooling is disabled for the 0.2.0 public alpha.")
     print(
-        "  - docling: better extraction on hard or scanned PDFs (heavier dependency)."
-    )
-    print(
-        "  - semantic: hybrid semantic search over ingested docs (installs embedding deps)."
+        "The direct dependency and model license audit is incomplete; "
+        "the base pypdf CLI remains supported."
     )
 
 
 def _ask_docs_tools_choice() -> str:
     print()
     _render_docs_tools_intro()
-    print("Choose optional docs tooling:")
-    print("  [1] Skip for now (fastest setup)")
-    print("  [2] Install docling only")
-    print("  [3] Install semantic search only")
-    print("  [4] Install both docling + semantic search")
-    selected = input("Selection [1-4, default 1]: ").strip()
-    mapping = {
-        "1": DOCS_MODE_NONE,
-        "2": DOCS_MODE_DOCLING,
-        "3": DOCS_MODE_SEMANTIC,
-        "4": DOCS_MODE_ALL,
-    }
-    return mapping.get(selected, DOCS_MODE_NONE)
+    print("Continuing with the supported base install.")
+    return DOCS_MODE_NONE
 
 
 def _handle_optional_install_failure(remediation: str) -> int:
@@ -90,13 +77,13 @@ def _install_docs_tools(selection: str) -> int:
     if selection != DOCS_MODE_NONE:
         print()
         _render_docs_tools_intro()
-        print("Installing selected docs tooling...")
+        print("Checking selected docs tooling profile...")
 
     outcome: DocsToolingOutcome = install_docs_tooling(selection)
     if outcome.success:
         print(outcome.message)
         if selection == DOCS_MODE_NONE:
-            print("Install later with: ./scripts/install/linux.sh --docs-tools all")
+            print("Optional profiles will return after their license audits close.")
         return 0
 
     return _handle_optional_install_failure(outcome.remediation)
@@ -146,7 +133,7 @@ def bootstrap(argv: list[str] | None = None) -> int:
             print(
                 "Skipping optional docs tooling prompt because stdin is non-interactive."
             )
-            print("Install later with: ./scripts/install/linux.sh --docs-tools all")
+            print("Optional profiles are disabled for the 0.2.0 public alpha.")
     return _install_docs_tools(selected_mode)
 
 

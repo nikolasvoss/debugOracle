@@ -85,6 +85,23 @@ DebugOracle project license.
 
 ## Python dependencies
 
-Python package and optional-profile licensing is intentionally not asserted
-here yet. Public-alpha plan step 5 requires a separately generated dependency
-license inventory; unresolved optional dependencies must remain disabled.
+The deterministic direct-dependency audit is retained at
+[`docs/audits/public-alpha-p0-python-dependency-licenses.json`](docs/audits/public-alpha-p0-python-dependency-licenses.json).
+It records the package configuration, locally observed authoritative package
+metadata, and unresolved evidence separately; it is not a transitive software
+bill of materials.
+
+The supported base install contains **pypdf 6.9.2**, sourced from
+<https://github.com/py-pdf/pypdf>, under the **BSD-3-Clause** license. Its
+installed core metadata declares `BSD-3-Clause` and retains the upstream
+`LICENSE` in the distribution metadata.
+
+The declared `docling`, `semantic`, and development extras remain visible in
+package configuration so downstream experimentation does not require hidden
+dependencies. Docling, semantic, and all are disabled for the 0.2.0 supported
+installer: the local audit has no authoritative Docling or
+sentence-transformers package metadata, no dependency lockfile exists, and no
+Docling or embedding model/license selection is recorded. NumPy 1.26.4 was
+locally observed under BSD-3-Clause, but that evidence does not close the
+semantic profile. The `dev` extra is not an installer profile; its locally
+observed direct packages are recorded in the audit and remain unpinned.

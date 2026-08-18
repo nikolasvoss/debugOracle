@@ -19,8 +19,7 @@ classifiers = [
     "Topic :: Software Development :: Debuggers",
 ]
 dependencies = [
-    "pymupdf>=1.24,<2",
-    "pymupdf4llm>=0.0.17",
+    "pypdf==6.9.2",
 ]
 
 [project.optional-dependencies]
