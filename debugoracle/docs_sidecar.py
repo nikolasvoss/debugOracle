@@ -265,8 +265,8 @@ class DocsStatusEntry:
 
 
 def make_parser(parser_name: str) -> DocsParser:
-    if parser_name == "pymupdf":
-        return PyMuPDFParser()
+    if parser_name == "pypdf":
+        return PyPDFParser()
     if parser_name == "docling":
         return DoclingParser()
     if parser_name == "plaintext":
@@ -292,7 +292,7 @@ def ingest_documents(
     files: list[str] | None = None,
     folders: list[str] | None = None,
     confirm_discovered: bool = False,
-    parser_name: str = "pymupdf",
+    parser_name: str = "pypdf",
     semantic: bool = False,
     force: bool = False,
     progress_cb: ProgressCallback | None = None,
@@ -363,7 +363,7 @@ def ingest_documents(
 def ingest_document(
     path: str | Path,
     *,
-    parser_name: str = "pymupdf",
+    parser_name: str = "pypdf",
     semantic: bool = False,
     force: bool = False,
     progress_cb: ProgressCallback | None = None,
@@ -439,7 +439,7 @@ def ingest_document(
             elif source.suffix.lower() == ".pdf":
                 if parser_name == "plaintext":
                     raise RuntimeError(
-                        "Parser 'plaintext' is not supported for PDF ingestion. Use --parser=pymupdf or --parser=docling."
+                        "Parser 'plaintext' is not supported for PDF ingestion. Use --parser=pypdf or --parser=docling."
                     )
                 parse_result = make_parser(parser_name).parse(
                     source, progress_cb=progress_cb
@@ -457,16 +457,16 @@ def ingest_document(
                 if _docling_page_mapping_untrusted(source, parse_result):
                     page_mapping_untrusted = True
                     warnings.append(
-                        "docling page mapping untrusted; retrying with pymupdf"
+                        "docling page mapping untrusted; retrying with pypdf"
                     )
                     try:
-                        fallback_result = make_parser("pymupdf").parse(
+                        fallback_result = make_parser("pypdf").parse(
                             source, progress_cb=progress_cb
                         )
                         parser_used = fallback_result.parser_used
                         warnings.extend(fallback_result.warnings)
                         warnings.append(
-                            "docling page mapping untrusted; used pymupdf fallback"
+                            "docling page mapping untrusted; used pypdf fallback"
                         )
                         chunks = list(fallback_result.chunks)
                         page_count = fallback_result.page_count
@@ -476,11 +476,11 @@ def ingest_document(
                         )
                         if page_mapping_untrusted:
                             warnings.append(
-                                "docling page mapping untrusted; pymupdf fallback page mapping still untrusted"
+                                "docling page mapping untrusted; pypdf fallback page mapping still untrusted"
                             )
                     except RuntimeError as error:
                         warnings.append(
-                            f"docling page mapping untrusted; pymupdf fallback failed: {error}"
+                            f"docling page mapping untrusted; pypdf fallback failed; preserved docling evidence: {error}"
                         )
             checkpoint = DocsIngestCheckpoint(
                 source_pdf=str(source),
@@ -1164,7 +1164,7 @@ class PlainTextParser:
         )
 
 
-class PyMuPDFParser:
+class PyPDFParser:
     def parse(
         self,
         source: Path,
@@ -1172,52 +1172,61 @@ class PyMuPDFParser:
         progress_cb: ProgressCallback | None = None,
     ) -> DocsParseResult:
         try:
-            import fitz  # pyright: ignore[reportMissingImports]
-            import pymupdf4llm  # pyright: ignore[reportMissingImports]
+            from pypdf import PdfReader  # pyright: ignore[reportMissingImports]
         except ImportError as error:
             raise RuntimeError(
-                "Install PyMuPDF deps in your tool environment "
-                "(venv/pipx), e.g. `python3 -m pip install pymupdf pymupdf4llm`."
+                "pypdf is not installed in this DebugOracle environment. "
+                f"Install it with: {shlex.quote(sys.executable)} -m pip install pypdf"
             ) from error
 
-        doc = fitz.open(str(source))
-        total_pages = len(doc)
-        if progress_cb:
-            progress_cb(
-                0, total_pages, f"{source.name} (extracting markdown; may take minutes)"
-            )
-        md_raw = pymupdf4llm.to_markdown(doc)
-        warnings: list[str] = []
-        if isinstance(md_raw, str):
-            md = md_raw
-        else:
-            md = ""
-            warnings.append(
-                f"PyMuPDF markdown extraction returned non-text output ({type(md_raw).__name__})."
-            )
-        if progress_cb:
-            progress_cb(0, total_pages, f"{source.name} (validating extracted pages)")
+        try:
+            reader = PdfReader(source)
+        except Exception as error:
+            raise RuntimeError(f"pypdf could not read PDF: {error}") from error
+        if reader.is_encrypted:
+            raise RuntimeError("pypdf cannot ingest encrypted PDFs without a password.")
 
+        total_pages = len(reader.pages)
+        if progress_cb:
+            progress_cb(0, total_pages, f"{source.name} (extracting text)")
+        warnings: list[str] = []
+        chunks: list[DocsChunk] = []
         empty_page_count = 0
-        for page_index in range(total_pages):
-            page_text_raw = doc[page_index].get_text("text")
+        for page_index, page in enumerate(reader.pages):
+            try:
+                page_text_raw = page.extract_text()
+            except Exception as error:
+                raise RuntimeError(
+                    f"pypdf could not extract page {page_index + 1}: {error}"
+                ) from error
             page_text = page_text_raw if isinstance(page_text_raw, str) else ""
             text = normalize_text(page_text)
             if not text:
-                warnings.append(f"Page {page_index + 1} extracted no text.")
+                page_kind = "image-only" if _pdf_page_contains_image(page) else "empty"
+                warnings.append(
+                    f"Page {page_index + 1} is {page_kind}; extracted no text."
+                )
                 empty_page_count += 1
+            else:
+                page_number = page_index + 1
+                rows = parse_markdown_table(text)
+                chunks.append(
+                    DocsChunk(
+                        chunk_id=f"page-{page_number}",
+                        heading_path="",
+                        chunk_type=_classify_chunk_type(text, rows),
+                        page_start=page_number,
+                        page_end=page_number,
+                        text=text,
+                        table_rows=rows,
+                    )
+                )
             if progress_cb:
                 progress_cb(page_index + 1, total_pages, source.name)
 
-        chunks, split_warnings = split_markdown_by_headings(md, source, doc=doc)
-        warnings.extend(split_warnings)
-
-        if not chunks:
-            chunks = _fallback_page_chunks(doc)
-
         return DocsParseResult(
             chunks=chunks,
-            parser_used="pymupdf",
+            parser_used="pypdf",
             warnings=warnings,
             page_count=total_pages,
             empty_page_count=empty_page_count,
@@ -1605,7 +1614,7 @@ def _slugify(heading_path: str) -> str:
 
 
 def _parse_page_marker(line: str) -> int | None:
-    # pymupdf4llm commonly emits markers like: <!-- Page 3 -->
+    # Optional adapters may emit markers like: <!-- Page 3 -->
     match = re.search(r"<!--\s*Page\s+(\d+)\s*-->", line, flags=re.IGNORECASE)
     if match:
         return max(1, int(match.group(1)))
@@ -1647,17 +1656,24 @@ def _fallback_page_chunks(doc: Any) -> list[DocsChunk]:
 
 def _pdf_page_count(source: Path) -> int | None:
     try:
-        import pymupdf  # pyright: ignore[reportMissingImports]
+        from pypdf import PdfReader  # pyright: ignore[reportMissingImports]
     except Exception:
         return None
     try:
-        document = pymupdf.open(source)
-        try:
-            return int(len(document))
-        finally:
-            document.close()
+        return int(len(PdfReader(source).pages))
     except Exception:
         return None
+
+
+def _pdf_page_contains_image(page: Any) -> bool:
+    try:
+        resources = page.get("/Resources") or {}
+        xobjects = resources.get("/XObject") or {}
+        return any(
+            item.get_object().get("/Subtype") == "/Image" for item in xobjects.values()
+        )
+    except (AttributeError, KeyError, TypeError):
+        return False
 
 
 def _docling_page_mapping_untrusted(

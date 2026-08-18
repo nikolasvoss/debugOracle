@@ -9,12 +9,11 @@ Base requirements:
 - Python 3.10+
 - Installed `dbgoracle` CLI
 
-If you installed with `./scripts/install/linux.sh`, setup now offers an interactive optional docs-tooling step (`docling`, `semantic`, or both).
+If you installed with `./scripts/install/linux.sh`, setup offers an interactive optional docs-tooling step (`docling`, `semantic`, or both).
 
 Included by default in packaged installs (no extra install needed for normal PDF ingest):
 
-- `pymupdf`
-- `pymupdf4llm`
+- `pypdf`
 
 Optional extras:
 
@@ -31,7 +30,7 @@ If your distro enforces PEP 668 (`error: externally-managed-environment`), insta
 python3 -m venv .venv
 source .venv/bin/activate
 python3 -m pip install -U pip
-python3 -m pip install debugoracle pymupdf pymupdf4llm
+python3 -m pip install debugoracle pypdf
 ```
 
 Docling first run can download large models. For offline/CI usage, pre-populate and point `DOCLING_CACHE_HOME` at a prepared cache.
@@ -87,7 +86,7 @@ dbgoracle docs ingest \
   [--file <path> ...] \
   [--folder <path> ...] \
   [--yes] \
-  [--parser pymupdf|docling] \
+  [--parser pypdf|docling] \
   [--semantic] \
   [--force] \
   [--no-interactive] \
@@ -123,7 +122,7 @@ dbgoracle docs doctor [--format text|json]
 
 `docs ingest` supports:
 
-- `--parser pymupdf` (default)
+- `--parser pypdf` (default)
 - `--parser docling` (optional extra)
 
 Example:
@@ -131,6 +130,17 @@ Example:
 ```bash
 dbgoracle docs ingest --file doc/STM32F4_Reference_Manual.pdf --parser docling
 ```
+
+The default `pypdf` backend extracts normalized text page-by-page in source
+order and records one-based page provenance. Empty and image-only pages are
+reported explicitly and make an otherwise usable ingest `partial`. Encrypted
+or malformed PDFs fail explicitly without switching parsers or fabricating
+text.
+
+Docling is an audited optional backend for difficult, scanned, or
+layout-heavy PDFs. When its page mapping cannot be trusted, DebugOracle reports
+the condition and explicitly retries with `pypdf`. If that fallback fails, the
+original Docling evidence is retained with a warning describing the failure.
 
 ## Semantic Search
 
@@ -188,9 +198,9 @@ doc/STM32F4_Reference_Manual.pdf.dbgoracle-docs/
 
 ## Troubleshooting
 
-PyMuPDF import/install issue:
+pypdf import/install issue:
 
-- install/reinstall base deps (`pymupdf`, `pymupdf4llm`) in your active venv/pipx environment
+- install/reinstall `pypdf` in your active venv/pipx environment
 
 Docling not installed:
 

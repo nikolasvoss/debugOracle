@@ -9,6 +9,14 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
+from pypdf import PdfWriter
+from pypdf.generic import (
+    DecodedStreamObject,
+    DictionaryObject,
+    NameObject,
+    NumberObject,
+)
+
 import debugoracle.docs_sidecar as docs_sidecar_module
 from debugoracle.cli import main
 from debugoracle.cli.commands.docs_cli import _render_ingest, _run_docs_ingest
@@ -23,6 +31,7 @@ from debugoracle.docs_sidecar import (
     DocsIngestResult,
     DocsIndexEntry,
     DocsParseResult,
+    PyPDFParser,
     PlainTextParser,
     DoclingParser,
     compute_source_hash,
@@ -40,6 +49,36 @@ from debugoracle.docs_sidecar import (
 
 
 class DocsSidecarTests(unittest.TestCase):
+    @staticmethod
+    def _write_text_pdf(path: Path, page_texts: list[str | None]) -> None:
+        writer = PdfWriter()
+        font = DictionaryObject(
+            {
+                NameObject("/Type"): NameObject("/Font"),
+                NameObject("/Subtype"): NameObject("/Type1"),
+                NameObject("/BaseFont"): NameObject("/Helvetica"),
+                NameObject("/Encoding"): NameObject("/WinAnsiEncoding"),
+            }
+        )
+        font_ref = writer._add_object(font)
+        for text in page_texts:
+            page = writer.add_blank_page(width=300, height=200)
+            if text is None:
+                continue
+            page[NameObject("/Resources")] = DictionaryObject(
+                {NameObject("/Font"): DictionaryObject({NameObject("/F1"): font_ref})}
+            )
+            stream = DecodedStreamObject()
+            escaped_text = (
+                text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+            )
+            stream.set_data(
+                f"BT /F1 12 Tf 20 100 Td ({escaped_text}) Tj ET".encode("latin-1")
+            )
+            page[NameObject("/Contents")] = writer._add_object(stream)
+        with path.open("wb") as output:
+            writer.write(output)
+
     def test_docs_command_parses_new_flags(self) -> None:
         parser = build_parser()
         parsed = parser.parse_args(
@@ -49,7 +88,7 @@ class DocsSidecarTests(unittest.TestCase):
                 "--file",
                 "manual.txt",
                 "--parser",
-                "pymupdf",
+                "pypdf",
                 "--semantic",
                 "--force",
                 "--no-interactive",
@@ -59,10 +98,117 @@ class DocsSidecarTests(unittest.TestCase):
         self.assertEqual(parsed.command, "docs")
         self.assertEqual(parsed.docs_command, "ingest")
         self.assertEqual(parsed.file, ["manual.txt"])
-        self.assertEqual(parsed.parser, "pymupdf")
+        self.assertEqual(parsed.parser, "pypdf")
         self.assertTrue(parsed.semantic)
         self.assertTrue(parsed.force)
         self.assertTrue(parsed.no_interactive)
+
+    def test_docs_ingest_defaults_to_pypdf_and_rejects_removed_backend(self) -> None:
+        parser = build_parser()
+
+        parsed = parser.parse_args(["docs", "ingest", "--file", "manual.pdf"])
+
+        self.assertEqual(parsed.parser, "pypdf")
+        with self.assertRaises(SystemExit):
+            parser.parse_args(
+                ["docs", "ingest", "--file", "manual.pdf", "--parser", "pymupdf"]
+            )
+        help_stdout = StringIO()
+        with patch("sys.stdout", help_stdout), self.assertRaises(SystemExit):
+            parser.parse_args(["docs", "ingest", "--help"])
+        help_text = help_stdout.getvalue()
+        self.assertIn("--parser {pypdf,docling}", help_text)
+        self.assertIn("default: pypdf", help_text)
+
+    def test_pypdf_extracts_normalized_pages_in_source_order_with_provenance(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "manual.pdf"
+            self._write_text_pdf(
+                source,
+                ["First   page", "USART1 µs 0x4001100C"],
+            )
+
+            result = PyPDFParser().parse(source)
+            repeated = PyPDFParser().parse(source)
+
+        self.assertEqual(result.parser_used, "pypdf")
+        self.assertEqual(result.page_count, 2)
+        self.assertEqual(
+            [(chunk.page_start, chunk.page_end, chunk.text) for chunk in result.chunks],
+            [(1, 1, "First page"), (2, 2, "USART1 µs 0x4001100C")],
+        )
+        self.assertEqual(result, repeated)
+
+    def test_pypdf_reports_empty_pages_explicitly(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "empty.pdf"
+            self._write_text_pdf(source, [None])
+
+            result = PyPDFParser().parse(source)
+
+        self.assertEqual(result.page_count, 1)
+        self.assertEqual(result.empty_page_count, 1)
+        self.assertEqual(result.chunks, [])
+        self.assertEqual(result.warnings, ["Page 1 is empty; extracted no text."])
+
+    def test_pypdf_reports_image_only_pages_explicitly(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "scan.pdf"
+            writer = PdfWriter()
+            page = writer.add_blank_page(width=100, height=100)
+            image = DecodedStreamObject()
+            image.set_data(b"\x00")
+            image.update(
+                {
+                    NameObject("/Type"): NameObject("/XObject"),
+                    NameObject("/Subtype"): NameObject("/Image"),
+                    NameObject("/Width"): NumberObject(1),
+                    NameObject("/Height"): NumberObject(1),
+                    NameObject("/ColorSpace"): NameObject("/DeviceGray"),
+                    NameObject("/BitsPerComponent"): NumberObject(8),
+                }
+            )
+            page[NameObject("/Resources")] = DictionaryObject(
+                {
+                    NameObject("/XObject"): DictionaryObject(
+                        {NameObject("/Im1"): writer._add_object(image)}
+                    )
+                }
+            )
+            with source.open("wb") as output:
+                writer.write(output)
+
+            result = PyPDFParser().parse(source)
+
+        self.assertEqual(result.empty_page_count, 1)
+        self.assertEqual(result.warnings, ["Page 1 is image-only; extracted no text."])
+
+    def test_pypdf_rejects_encrypted_pdfs_explicitly(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "encrypted.pdf"
+            writer = PdfWriter()
+            writer.add_blank_page(width=100, height=100)
+            writer.encrypt("secret")
+            with source.open("wb") as output:
+                writer.write(output)
+
+            with self.assertRaisesRegex(RuntimeError, "encrypted PDF"):
+                PyPDFParser().parse(source)
+
+    def test_pypdf_malformed_input_becomes_failed_ingest_with_original_reason(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "malformed.pdf"
+            source.write_bytes(b"not a pdf")
+
+            batch = ingest_documents(workspace_root=tmpdir, files=[str(source)])
+
+        self.assertEqual(batch.results[0].parser_used, "pypdf")
+        self.assertEqual(batch.results[0].ingest_state, "failed")
+        self.assertIn("pypdf could not read PDF", batch.results[0].warning_summary)
 
     def test_docs_doctor_command_parses(self) -> None:
         parser = build_parser()
@@ -183,7 +329,7 @@ class DocsSidecarTests(unittest.TestCase):
             )
             (sidecar / "index.json").write_text("[]", encoding="utf-8")
 
-            fresh = is_ingest_fresh(source.resolve(), sidecar, parser_name="pymupdf")
+            fresh = is_ingest_fresh(source.resolve(), sidecar, parser_name="pypdf")
 
         self.assertFalse(fresh)
 
@@ -195,7 +341,7 @@ class DocsSidecarTests(unittest.TestCase):
             sidecar.mkdir(parents=True)
             envelope = {
                 "source_pdf": str(source.resolve()),
-                "parser_used": "pymupdf",
+                "parser_used": "pypdf",
                 "derived_paths": [
                     str(sidecar / ENVELOPE_FILENAME),
                     str(sidecar / "index.json"),
@@ -210,7 +356,7 @@ class DocsSidecarTests(unittest.TestCase):
             )
             (sidecar / "index.json").write_text("[]", encoding="utf-8")
 
-            fresh = is_ingest_fresh(source.resolve(), sidecar, parser_name="pymupdf")
+            fresh = is_ingest_fresh(source.resolve(), sidecar, parser_name="pypdf")
 
         self.assertFalse(fresh)
 
@@ -222,7 +368,7 @@ class DocsSidecarTests(unittest.TestCase):
             sidecar.mkdir(parents=True)
             envelope = {
                 "source_pdf": str(source.resolve()),
-                "parser_used": "pymupdf",
+                "parser_used": "pypdf",
                 "derived_paths": [
                     str(sidecar / ENVELOPE_FILENAME),
                     str(sidecar / "index.json"),
@@ -239,7 +385,7 @@ class DocsSidecarTests(unittest.TestCase):
             )
             (sidecar / "index.json").write_text("[]", encoding="utf-8")
 
-            fresh = is_ingest_fresh(source.resolve(), sidecar, parser_name="pymupdf")
+            fresh = is_ingest_fresh(source.resolve(), sidecar, parser_name="pypdf")
 
         self.assertFalse(fresh)
 
@@ -580,13 +726,13 @@ second-page text
         self.assertEqual(stderr, "")
         self.assertEqual(payload["results"][0]["source_pdf"], str(manual.resolve()))
 
-    def test_cli_docs_ingest_docling_hint_on_pymupdf_warning(self) -> None:
+    def test_cli_docs_ingest_docling_hint_on_pypdf_warning(self) -> None:
         batch = DocsIngestBatch(
             results=[
                 DocsIngestResult(
                     source_pdf="/tmp/ref.pdf",
                     sidecar_dir="/tmp/ref.pdf.dbgoracle-docs",
-                    parser_used="pymupdf",
+                    parser_used="pypdf",
                     page_count=2,
                     chunk_count=2,
                     ingest_state="warning",
@@ -631,7 +777,7 @@ second-page text
                 DocsIngestResult(
                     source_pdf="/tmp/a.pdf",
                     sidecar_dir="/tmp/a.pdf.dbgoracle-docs",
-                    parser_used="pymupdf",
+                    parser_used="pypdf",
                     page_count=1,
                     chunk_count=1,
                     ingest_state="clean",
@@ -761,7 +907,7 @@ second-page text
         self.assertIn("pipx inject debugoracle docling", message)
         self.assertIn("pip install 'debugoracle[docling]'", message)
 
-    def test_docling_collapsed_page_mapping_retries_with_pymupdf(self) -> None:
+    def test_docling_collapsed_page_mapping_retries_with_pypdf(self) -> None:
         class _FakeParser:
             def __init__(self, result: DocsParseResult) -> None:
                 self._result = result
@@ -796,7 +942,7 @@ second-page text
                 warnings=[],
                 page_count=1,
             )
-            pymupdf_result = DocsParseResult(
+            pypdf_result = DocsParseResult(
                 chunks=[
                     DocsChunk(
                         chunk_id="page-1",
@@ -815,7 +961,7 @@ second-page text
                         text="second",
                     ),
                 ],
-                parser_used="pymupdf",
+                parser_used="pypdf",
                 warnings=[],
                 page_count=2,
             )
@@ -823,8 +969,8 @@ second-page text
             def fake_make_parser(name: str):  # type: ignore[no-untyped-def]
                 if name == "docling":
                     return _FakeParser(docling_result)
-                if name == "pymupdf":
-                    return _FakeParser(pymupdf_result)
+                if name == "pypdf":
+                    return _FakeParser(pypdf_result)
                 raise AssertionError(name)
 
             with (
@@ -843,7 +989,7 @@ second-page text
                     parser_name="docling",
                 )
 
-        self.assertEqual(batch.results[0].parser_used, "pymupdf")
+        self.assertEqual(batch.results[0].parser_used, "pypdf")
         self.assertEqual(batch.results[0].ingest_state, "warning")
         self.assertIn(
             "docling page mapping untrusted", batch.results[0].warning_summary
@@ -880,7 +1026,7 @@ second-page text
             def fake_make_parser(name: str):  # type: ignore[no-untyped-def]
                 if name == "docling":
                     return _FakeParser(docling_result)
-                if name == "pymupdf":
+                if name == "pypdf":
                     raise RuntimeError("fallback boom")
                 raise AssertionError(name)
 
@@ -899,10 +1045,13 @@ second-page text
                     files=[str(manual)],
                     parser_name="docling",
                 )
+            artifact = load_docs_artifact(sidecar_dir_for(manual))
 
         self.assertEqual(batch.results[0].parser_used, "docling")
         self.assertEqual(batch.results[0].ingest_state, "partial")
-        self.assertIn("pymupdf fallback failed", batch.results[0].warning_summary)
+        self.assertIn("pypdf fallback failed", batch.results[0].warning_summary)
+        self.assertIn("preserved docling evidence", batch.results[0].warning_summary)
+        self.assertEqual([entry.text for entry in artifact.index_entries], ["first"])
 
     def test_docling_collapsed_mapping_with_collapsed_fallback_is_partial(self) -> None:
         class _FakeParser:
@@ -931,7 +1080,7 @@ second-page text
                 warnings=[],
                 page_count=1,
             )
-            collapsed_pymupdf = DocsParseResult(
+            collapsed_pypdf = DocsParseResult(
                 chunks=[
                     DocsChunk(
                         chunk_id="page-1",
@@ -942,7 +1091,7 @@ second-page text
                         text="first",
                     ),
                 ],
-                parser_used="pymupdf",
+                parser_used="pypdf",
                 warnings=[],
                 page_count=1,
             )
@@ -950,8 +1099,8 @@ second-page text
             def fake_make_parser(name: str):  # type: ignore[no-untyped-def]
                 if name == "docling":
                     return _FakeParser(collapsed_docling)
-                if name == "pymupdf":
-                    return _FakeParser(collapsed_pymupdf)
+                if name == "pypdf":
+                    return _FakeParser(collapsed_pypdf)
                 raise AssertionError(name)
 
             with (
@@ -970,7 +1119,7 @@ second-page text
                     parser_name="docling",
                 )
 
-        self.assertEqual(batch.results[0].parser_used, "pymupdf")
+        self.assertEqual(batch.results[0].parser_used, "pypdf")
         self.assertEqual(batch.results[0].ingest_state, "partial")
         self.assertIn(
             "fallback page mapping still untrusted", batch.results[0].warning_summary

@@ -3,7 +3,7 @@
 - Module: `docs_cli`
 - Code Path: `debugoracle/cli/commands/docs_cli.py`
 - Public Entrypoints: `cmd_docs_ingest`, `cmd_docs_search`, `cmd_docs_status`, `cmd_docs_doctor`
-- Last Updated: `2026-03-27`
+- Last Updated: `2026-08-13`
 
 # SPEC: Docs CLI Commands
 
@@ -20,8 +20,21 @@ Expose local docs sidecar ingest/search/status workflows with deterministic text
   - ingest: `--parser`, `--semantic`, `--force`, `--no-interactive`
   - search: `--semantic`
 - Show ingest progress in text mode, including long-run heartbeat labels for coarse parser phases.
-- Surface Docling install/use hints when PyMuPDF quality is degraded.
+- Accept `--parser pypdf|docling`, default to `pypdf`, and reject removed parser names.
+- Surface Docling install/use hints when pypdf quality is degraded.
 - Surface deterministic docs dependency diagnostics via `docs doctor`.
+
+## Acceptance Criteria
+
+- `AC-DOCS-CLI-001`: `docs ingest` defaults to `pypdf`, accepts optional `docling`, and rejects removed parser choices.
+- `AC-DOCS-CLI-002`: `docs doctor` reports `pypdf` as the sole required base PDF dependency and contains no removed dependency guidance.
+
+## Validation Mapping
+
+| Acceptance Criterion | Validation |
+|---|---|
+| `AC-DOCS-CLI-001` | `tests.test_docs_sidecar.DocsSidecarTests.test_docs_ingest_defaults_to_pypdf_and_rejects_removed_backend` |
+| `AC-DOCS-CLI-002` | `tests.test_diagnostics.DocsDiagnosticsTests.test_docs_doctor_requires_pypdf_as_the_only_base_pdf_dependency` |
 
 ## Exit Code Contract
 

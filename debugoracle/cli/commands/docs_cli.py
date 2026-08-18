@@ -126,7 +126,8 @@ def _render_ingest(batch: DocsIngestBatch, *, fmt: str) -> str:
                 lines.append(f"  warnings: {result.warning_summary}")
             if (
                 result.ingest_state in ("partial", "warning")
-                and result.parser_used == "pymupdf"
+                and result.source_pdf.lower().endswith(".pdf")
+                and result.parser_used != "docling"
                 and not _docling_installed()
             ):
                 lines.append("  hint: extraction quality may improve with Docling")

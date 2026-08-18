@@ -40,16 +40,9 @@ def collect_docs_doctor_checks(
 
     checks.append(
         _module_check(
-            key="pymupdf",
+            key="pypdf",
             required=True,
-            remedy=f"{quoted_executable} -m pip install pymupdf",
-        )
-    )
-    checks.append(
-        _module_check(
-            key="pymupdf4llm",
-            required=True,
-            remedy=f"{quoted_executable} -m pip install pymupdf4llm",
+            remedy=f"{quoted_executable} -m pip install pypdf",
         )
     )
     checks.append(

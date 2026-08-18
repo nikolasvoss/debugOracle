@@ -383,9 +383,9 @@ def _add_docs_parser(
     )
     docs_ingest.add_argument(
         "--parser",
-        choices=["pymupdf", "docling"],
-        default="pymupdf",
-        help="Parser backend for PDF ingestion",
+        choices=["pypdf", "docling"],
+        default="pypdf",
+        help="Parser backend for PDF ingestion (default: pypdf)",
     )
     docs_ingest.add_argument(
         "--semantic",
