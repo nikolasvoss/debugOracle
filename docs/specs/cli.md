@@ -110,6 +110,37 @@ Snapshot completeness is defined by embedded source sections, not by raw sidecar
 
 ## Command Contracts
 
+### `init-workspace`
+
+Purpose:
+- Initialize local DebugOracle workspace capabilities without contacting a
+  debugger or target.
+
+Explicit mode:
+- Requires `--executable` and at least one `--openocd-config`.
+- Creates the existing owned Cortex-Debug scaffold or emits attach/merge actions
+  under the established ownership and `--force` rules.
+
+Automatic mode:
+- `--auto` makes executable, SVD, and OpenOCD flags optional and consumes the
+  bounded local workspace-plan inventory.
+- `--yes` is valid only with `--auto` and authorizes parsing PDFs discovered
+  under `doc/` or `docs/`; without it, candidates are reported but not parsed.
+- Explicit automatic-mode dependency paths must be readable regular files
+  contained by the workspace and must not traverse symlinks.
+- Documentation, debug-scaffold, and register-catalog capabilities are applied
+  independently, then re-inventoried before rendering.
+- The JSON payload is versioned, deterministic, provenance-aware, and ordered as
+  `documentation`, `debug_scaffold`, `register_catalog`.
+- Automatic mode never downloads resources, builds firmware, executes discovered
+  strings, launches subprocesses, opens sockets, or contacts a target.
+
+Outputs:
+- Text or JSON on `stdout`, with `complete`, `partial`, or `failed` overall and
+  per-capability status plus exact next actions.
+- Exit `0` for complete, `2` for partial, and `1` for failed.
+- A docs-only successful initialization is partial and searchable immediately.
+
 ### `status`
 
 Purpose:
@@ -411,6 +442,10 @@ The CLI should prefer salvage over rejection:
 - `1`: operational failure
 - `2`: expected resolution/connect failure
 - `130`: interrupted by user
+
+`init-workspace` uses its capability contract: `0` for complete, `2` for
+partial/actionable progress, and `1` for failed. This is intentionally more
+specific than the evidence-command conventions below.
 
 Examples for `1`:
 

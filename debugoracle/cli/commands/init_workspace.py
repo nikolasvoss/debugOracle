@@ -1,13 +1,23 @@
 from __future__ import annotations
 
 import argparse
+import io
 import json
+import os
 import shutil
 import sys
+from contextlib import redirect_stderr
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import cast
 
+from ...docs_sidecar import ingest_documents
+from ...readiness import collect_workspace_plan
+from ...workspace_init_plan import (
+    CapabilityPlan,
+    CapabilityStatus,
+    plan_automatic_workspace_init,
+)
 from ._shared import parse_jsonc
 
 DEFAULT_MI_LOG_PATH = "${workspaceFolder}/.dbgoracle/cortex-debug-shared-mi.log"
@@ -53,6 +63,8 @@ class InitWorkspaceResult:
 
 
 def cmd_init_workspace(args: argparse.Namespace) -> int:
+    if getattr(args, "auto", False):
+        return _cmd_init_workspace_auto(args)
     if not args.openocd_config:
         _emit_missing_openocd_config(args, fmt=args.format)
         return 1
@@ -60,12 +72,375 @@ def cmd_init_workspace(args: argparse.Namespace) -> int:
     workspace_root = Path(args.workspace_root).resolve()
     try:
         result = initialize_workspace(args, workspace_root)
-    except OSError as error:
+    except (OSError, ValueError) as error:
         print(f"dbgoracle init-workspace: failed\nError: {error}")
         return 1
 
     _emit_result(result, fmt=args.format)
     return {"complete": 0, "partial": 2, "failed": 1}[result.status]
+
+
+def _cmd_init_workspace_auto(args: argparse.Namespace) -> int:
+    try:
+        workspace_root = Path(args.workspace_root).expanduser().resolve(strict=True)
+        inventory = collect_workspace_plan(workspace_root).automatic_init_inventory
+        explicit_executable = _validated_auto_file(args.executable, workspace_root)
+        explicit_svd = _validated_auto_file(args.svd_file, workspace_root)
+        explicit_openocd_configs = tuple(
+            cast(str, _validated_auto_file(value, workspace_root))
+            for value in (args.openocd_config or ())
+        )
+    except (OSError, ValueError) as error:
+        return _emit_auto_failure(args, error)
+
+    plan = plan_automatic_workspace_init(
+        inventory,
+        docs_authorized=bool(args.yes),
+        explicit_executable=explicit_executable,
+        explicit_svd=explicit_svd,
+        explicit_openocd_configs=explicit_openocd_configs,
+    )
+    documentation_status, documentation_application = _apply_auto_documentation(
+        plan.capabilities[0], workspace_root=workspace_root, authorized=bool(args.yes)
+    )
+    scaffold_status, scaffold_application = _apply_auto_scaffold(
+        plan.capabilities[1],
+        register_capability=plan.capabilities[2],
+        args=args,
+        workspace_root=workspace_root,
+    )
+    register_status, register_application = _apply_auto_register_catalog(
+        plan.capabilities[2],
+        args=args,
+        workspace_root=workspace_root,
+    )
+    try:
+        final_inventory = collect_workspace_plan(
+            workspace_root
+        ).automatic_init_inventory
+    except OSError as error:
+        return _emit_auto_failure(args, error)
+    final_plan = plan_automatic_workspace_init(
+        final_inventory,
+        docs_authorized=bool(args.yes),
+        explicit_executable=explicit_executable,
+        explicit_svd=explicit_svd,
+        explicit_openocd_configs=explicit_openocd_configs,
+    )
+    payload = final_plan.as_dict()
+    capabilities = cast(list[dict[str, object]], payload["capabilities"])
+    for capability, status, application in zip(
+        capabilities,
+        (documentation_status, scaffold_status, register_status),
+        (documentation_application, scaffold_application, register_application),
+    ):
+        capability["status"] = status
+        capability["application"] = application
+    if documentation_status == CapabilityStatus.PARTIAL.value and bool(
+        documentation_application.get("attempted")
+    ):
+        _append_auto_action(
+            capabilities[0],
+            action_id="inspect_document_ingest_results",
+            detail=(
+                "Inspect the per-document ingest results and run "
+                "`dbgoracle docs doctor` before retrying failed or partial PDFs."
+            ),
+        )
+    if scaffold_status == CapabilityStatus.PARTIAL.value and bool(
+        scaffold_application.get("attempted")
+    ):
+        _append_auto_action(
+            capabilities[1],
+            action_id="complete_debug_scaffold_setup",
+            detail=(
+                "Resolve the blocked workspace files and missing dependency checks "
+                "reported by this capability, then re-run automatic initialization."
+            ),
+        )
+    if register_status == CapabilityStatus.PARTIAL.value:
+        _append_auto_action(
+            capabilities[2],
+            action_id="persist_svd_setting",
+            detail=(
+                "Merge the selected `debugoracle.svdFile` value into the user-owned "
+                "`.vscode/settings.json`, or re-run with `--force` only when that "
+                "file is DebugOracle-managed."
+            ),
+        )
+    statuses = tuple(str(item["status"]) for item in capabilities)
+    payload["status"] = _auto_overall_status(statuses)
+    _emit_auto_payload(payload, fmt=args.format)
+    return {"complete": 0, "partial": 2, "failed": 1}[str(payload["status"])]
+
+
+def _apply_auto_documentation(
+    capability: CapabilityPlan,
+    *,
+    workspace_root: Path,
+    authorized: bool,
+) -> tuple[str, dict[str, object]]:
+    documents = _capability_input_values(capability, "documents")
+    if not authorized or not documents:
+        return capability.status.value, {
+            "attempted": False,
+            "results": [],
+            "warnings": [],
+        }
+    parser_stderr = io.StringIO()
+    with redirect_stderr(parser_stderr):
+        batch = ingest_documents(
+            workspace_root=workspace_root,
+            files=list(documents),
+            parser_name="pypdf",
+            semantic=False,
+            force=False,
+        )
+    parser_diagnostics = tuple(
+        line for line in parser_stderr.getvalue().splitlines() if line
+    )
+    normalized_results = [
+        {
+            "source_pdf": result.source_pdf,
+            "sidecar_dir": result.sidecar_dir,
+            "parser_used": result.parser_used,
+            "page_count": result.page_count,
+            "chunk_count": result.chunk_count,
+            "ingest_state": result.ingest_state,
+            "warning_summary": result.warning_summary,
+            "warnings": list(result.warnings),
+        }
+        for result in sorted(batch.results, key=lambda item: item.source_pdf)
+    ]
+    states = {result.ingest_state for result in batch.results}
+    status = (
+        CapabilityStatus.COMPLETE.value
+        if batch.results and states <= {"clean", "warning"}
+        else CapabilityStatus.PARTIAL.value
+    )
+    return status, {
+        "attempted": True,
+        "results": normalized_results,
+        "warnings": [*batch.warnings, *parser_diagnostics],
+        "invalid_inputs": list(batch.invalid_inputs),
+    }
+
+
+def _capability_input_values(capability: CapabilityPlan, key: str) -> tuple[str, ...]:
+    for item in capability.inputs:
+        if item.key == key:
+            return item.values
+    return ()
+
+
+def _auto_overall_status(statuses: tuple[str, ...]) -> str:
+    if statuses and all(
+        status == CapabilityStatus.COMPLETE.value for status in statuses
+    ):
+        return "complete"
+    if any(status != CapabilityStatus.UNAVAILABLE.value for status in statuses):
+        return "partial"
+    return "failed"
+
+
+def _emit_auto_failure(args: argparse.Namespace, error: Exception) -> int:
+    workspace_root = str(Path(args.workspace_root).expanduser().resolve())
+    payload: dict[str, object] = {
+        "schema_version": "1",
+        "scope": "automatic_workspace_init",
+        "workspace_root": workspace_root,
+        "status": "failed",
+        "capabilities": [],
+        "error": str(error),
+    }
+    _emit_auto_payload(payload, fmt=args.format)
+    return 1
+
+
+def _validated_auto_file(value: str | None, workspace_root: Path) -> str | None:
+    if value is None:
+        return None
+    expanded = value.replace("${workspaceFolder}", str(workspace_root))
+    candidate = Path(expanded).expanduser()
+    if not candidate.is_absolute():
+        candidate = workspace_root / candidate
+    try:
+        relative = candidate.relative_to(workspace_root)
+    except ValueError as error:
+        raise ValueError(
+            f"automatic input is outside the workspace: {value}"
+        ) from error
+    current = workspace_root
+    for part in relative.parts:
+        current = current / part
+        if current.is_symlink():
+            raise ValueError(f"automatic input must not use symlinks: {value}")
+    try:
+        resolved = candidate.resolve(strict=True)
+    except OSError as error:
+        raise ValueError(f"automatic input does not exist: {value}") from error
+    if not resolved.is_file() or not os.access(resolved, os.R_OK):
+        raise ValueError(f"automatic input is not a readable regular file: {value}")
+    if not resolved.is_relative_to(workspace_root):
+        raise ValueError(f"automatic input is outside the workspace: {value}")
+    return str(resolved)
+
+
+def _apply_auto_scaffold(
+    capability: CapabilityPlan,
+    *,
+    register_capability: CapabilityPlan,
+    args: argparse.Namespace,
+    workspace_root: Path,
+) -> tuple[str, dict[str, object]]:
+    executable = _capability_input_values(capability, "executable")
+    openocd_configs = _capability_input_values(capability, "openocd_configs")
+    if not executable or not openocd_configs:
+        return capability.status.value, {"attempted": False}
+    selected_svd = _capability_input_values(register_capability, "svd_file")
+    apply_args = argparse.Namespace(**vars(args))
+    apply_args.executable = executable[0]
+    apply_args.openocd_config = list(openocd_configs)
+    apply_args.svd_file = selected_svd[0] if selected_svd else None
+    try:
+        result = initialize_workspace(apply_args, workspace_root)
+    except (OSError, ValueError) as error:
+        return CapabilityStatus.PARTIAL.value, {
+            "attempted": True,
+            "workspace_files": _current_auto_workspace_files(workspace_root),
+            "blocked_files": [],
+            "required_actions": [],
+            "dependency_checks": [],
+            "error": str(error),
+        }
+    return result.status, {
+        "attempted": True,
+        "workspace_files": _current_auto_workspace_files(workspace_root),
+        "blocked_files": sorted(result.blocked_files),
+        "required_actions": [asdict(action) for action in result.required_actions],
+        "dependency_checks": [asdict(check) for check in result.dependency_checks],
+    }
+
+
+def _current_auto_workspace_files(workspace_root: Path) -> list[str]:
+    return [
+        str(path)
+        for path in (
+            workspace_root / ".vscode" / "settings.json",
+            workspace_root / ".vscode" / "launch.json",
+            workspace_root / ".vscode" / "tasks.json",
+        )
+        if path.is_file()
+    ]
+
+
+def _apply_auto_register_catalog(
+    capability: CapabilityPlan,
+    *,
+    args: argparse.Namespace,
+    workspace_root: Path,
+) -> tuple[str, dict[str, object]]:
+    selected = _capability_input_values(capability, "svd_file")
+    if not selected:
+        return capability.status.value, {"attempted": False}
+    selected_path = Path(selected[0])
+    setting_path = workspace_root / ".vscode" / "settings.json"
+    if selected_path.parent == workspace_root / ".dbgoracle":
+        return CapabilityStatus.COMPLETE.value, {
+            "attempted": False,
+            "selected_file": str(selected_path),
+            "state": "current",
+            "source": "dbgoracle_default_directory",
+        }
+    state = _persist_auto_svd_setting(
+        setting_path,
+        selected_path=selected_path,
+        force=bool(args.force),
+    )
+    return (
+        CapabilityStatus.COMPLETE.value
+        if state == "current"
+        else CapabilityStatus.PARTIAL.value,
+        {
+            "attempted": True,
+            "selected_file": str(selected_path),
+            "setting_path": str(setting_path),
+            "state": state,
+        },
+    )
+
+
+def _persist_auto_svd_setting(
+    setting_path: Path, *, selected_path: Path, force: bool
+) -> str:
+    if setting_path.exists():
+        try:
+            payload = parse_jsonc(setting_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return "blocked"
+        if not isinstance(payload, dict):
+            return "blocked"
+        current = payload.get("debugoracle.svdFile")
+        if isinstance(current, str) and _setting_path_matches(
+            current, selected_path=selected_path, workspace_root=setting_path.parents[1]
+        ):
+            return "current"
+        if payload.get("debugoracle.managedBy") != MANAGED_BY_VALUE or not force:
+            return "blocked"
+        payload["debugoracle.svdFile"] = str(selected_path)
+    else:
+        payload = {
+            "debugoracle.managedBy": MANAGED_BY_VALUE,
+            "debugoracle.svdFile": str(selected_path),
+        }
+        setting_path.parent.mkdir(parents=True, exist_ok=True)
+    setting_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return "current"
+
+
+def _setting_path_matches(
+    current: str, *, selected_path: Path, workspace_root: Path
+) -> bool:
+    expanded = current.replace("${workspaceFolder}", str(workspace_root))
+    path = Path(expanded).expanduser()
+    if not path.is_absolute():
+        path = workspace_root / path
+    return path.resolve() == selected_path
+
+
+def _append_auto_action(
+    capability_payload: dict[str, object], *, action_id: str, detail: str
+) -> None:
+    actions = cast(list[dict[str, str]], capability_payload["actions"])
+    if any(action["action_id"] == action_id for action in actions):
+        return
+    actions.append({"action_id": action_id, "detail": detail})
+
+
+def _emit_auto_payload(payload: dict[str, object], *, fmt: str) -> None:
+    if fmt == "json":
+        print(json.dumps(payload, indent=2))
+        return
+    print(f"dbgoracle init-workspace --auto: {payload['status']}")
+    print(f"Workspace: {payload['workspace_root']}")
+    for raw in cast(list[dict[str, object]], payload.get("capabilities", [])):
+        print(f"- {raw['name']}: {raw['status']}")
+        for selected in cast(list[dict[str, object]], raw["inputs"]):
+            values = ", ".join(cast(list[str], selected["values"]))
+            print(f"  {selected['key']} ({selected['provenance']}): {values}")
+        for ambiguity in cast(list[dict[str, object]], raw["ambiguities"]):
+            alternatives = ", ".join(
+                "/".join(values)
+                for values in cast(list[list[str]], ambiguity["alternatives"])
+            )
+            print(
+                f"  ambiguous {ambiguity['key']} ({ambiguity['provenance']}): "
+                f"{alternatives}"
+            )
+        for action in cast(list[dict[str, str]], raw["actions"]):
+            print(f"  action: {action['detail']}")
+    if error := payload.get("error"):
+        print(f"Error: {error}", file=sys.stderr)
 
 
 def _emit_missing_openocd_config(args: argparse.Namespace, *, fmt: str) -> None:
@@ -194,6 +569,12 @@ def initialize_workspace(
             (vscode_dir / "tasks.json", json.dumps(desired_tasks, indent=2) + "\n"),
         ]
         for path, content in desired_files:
+            if (
+                getattr(args, "auto", False)
+                and path.is_file()
+                and path.read_text(encoding="utf-8") == content
+            ):
+                continue
             if path.exists() and not _can_overwrite(path, force=args.force):
                 blocked_files.append(str(path))
                 required_actions.append(

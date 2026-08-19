@@ -657,8 +657,7 @@ def _add_init_workspace_parser(
     )
     init_workspace.add_argument(
         "--executable",
-        required=True,
-        help="ELF or executable path stored in workspace settings",
+        help="Required outside --auto; ELF or executable path stored in workspace settings",
     )
     init_workspace.add_argument(
         "--svd-file",
@@ -672,7 +671,17 @@ def _add_init_workspace_parser(
     init_workspace.add_argument(
         "--openocd-config",
         action="append",
-        help="Required OpenOCD config file stored in workspace settings; repeat for multiple files",
+        help="Required OpenOCD config file outside --auto; stored in workspace settings; repeat for multiple files",
+    )
+    init_workspace.add_argument(
+        "--auto",
+        action="store_true",
+        help="Discover bounded local inputs and initialize each unambiguous capability",
+    )
+    init_workspace.add_argument(
+        "--yes",
+        action="store_true",
+        help="Authorize parsing discovered PDFs in automatic mode",
     )
     init_workspace.add_argument(
         "--mi-log-path",
@@ -755,6 +764,12 @@ def positive_int(value: str) -> int:
 def validate_command_arguments(
     parser: argparse.ArgumentParser, args: argparse.Namespace
 ) -> None:
+    if getattr(args, "command", None) == "init_workspace":
+        if not getattr(args, "auto", False) and not getattr(args, "executable", None):
+            parser.error("the following arguments are required: --executable")
+        if getattr(args, "yes", False) and not getattr(args, "auto", False):
+            parser.error("--yes is only valid with init-workspace --auto")
+        return
     if getattr(args, "command", None) == "fetch":
         for selector in getattr(args, "mem", None) or []:
             if not _is_valid_memory_selector(selector):
