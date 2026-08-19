@@ -388,6 +388,102 @@ class AutomaticWorkspaceInitCliTests(unittest.TestCase):
             self.assertEqual(list(outside_vscode.iterdir()), [])
             self.assertEqual(list(outside_session.iterdir()), [])
 
+    def test_auto_init_rejects_symlinked_document_sidecar_storage(self) -> None:
+        storage_suffixes = (
+            ".dbgoracle-docs",
+            ".dbgoracle-docs.staging",
+            ".dbgoracle-docs.publish",
+            ".dbgoracle-docs.backup",
+        )
+        for storage_suffix in storage_suffixes:
+            with self.subTest(storage_suffix=storage_suffix):
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    workspace = Path(tmpdir) / "workspace"
+                    docs_dir = workspace / "docs"
+                    outside = Path(tmpdir) / "outside"
+                    docs_dir.mkdir(parents=True)
+                    outside.mkdir()
+                    source = docs_dir / "reference.pdf"
+                    self._write_text_pdf(source, "RCC clock selection")
+                    storage_path = Path(f"{source}{storage_suffix}")
+                    storage_path.symlink_to(outside, target_is_directory=True)
+
+                    stdout, stderr, exit_code = self._run_cli(
+                        [
+                            "init-workspace",
+                            "--workspace-root",
+                            str(workspace),
+                            "--auto",
+                            "--yes",
+                            "--format",
+                            "json",
+                        ]
+                    )
+
+                    payload = json.loads(stdout)
+                    documentation = payload["capabilities"][0]
+                    self.assertEqual(exit_code, 2)
+                    self.assertEqual(stderr, "")
+                    self.assertEqual(documentation["status"], "partial")
+                    self.assertEqual(
+                        documentation["application"]["results"][0]["ingest_state"],
+                        "failed",
+                    )
+                    self.assertIn(
+                        "symbolic-link docs sidecar",
+                        documentation["application"]["results"][0]["warning_summary"],
+                    )
+                    self.assertEqual(list(outside.iterdir()), [])
+                    self.assertTrue(storage_path.is_symlink())
+
+    def test_auto_init_rejects_symlinked_document_sidecar_files(self) -> None:
+        storage_files = (
+            (".dbgoracle-docs", "envelope.json"),
+            (".dbgoracle-docs.staging", "checkpoint.json"),
+        )
+        for storage_suffix, filename in storage_files:
+            with self.subTest(storage_suffix=storage_suffix, filename=filename):
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    workspace = Path(tmpdir) / "workspace"
+                    docs_dir = workspace / "docs"
+                    docs_dir.mkdir(parents=True)
+                    source = docs_dir / "reference.pdf"
+                    self._write_text_pdf(source, "RCC clock selection")
+                    storage_dir = Path(f"{source}{storage_suffix}")
+                    storage_dir.mkdir()
+                    outside_file = Path(tmpdir) / "outside.json"
+                    outside_file.write_text("unchanged", encoding="utf-8")
+                    (storage_dir / filename).symlink_to(outside_file)
+
+                    stdout, stderr, exit_code = self._run_cli(
+                        [
+                            "init-workspace",
+                            "--workspace-root",
+                            str(workspace),
+                            "--auto",
+                            "--yes",
+                            "--format",
+                            "json",
+                        ]
+                    )
+
+                    payload = json.loads(stdout)
+                    documentation = payload["capabilities"][0]
+                    self.assertEqual(exit_code, 2)
+                    self.assertEqual(stderr, "")
+                    self.assertEqual(documentation["status"], "partial")
+                    self.assertEqual(
+                        documentation["application"]["results"][0]["ingest_state"],
+                        "failed",
+                    )
+                    self.assertIn(
+                        "symbolic-link docs sidecar file",
+                        documentation["application"]["results"][0]["warning_summary"],
+                    )
+                    self.assertEqual(
+                        outside_file.read_text(encoding="utf-8"), "unchanged"
+                    )
+
     def test_unchanged_auto_init_rerun_is_content_and_result_idempotent(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)

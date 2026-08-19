@@ -439,6 +439,7 @@ def ingest_document(
     source = Path(path).expanduser().resolve()
     sidecar_dir = sidecar_dir_for(source)
     staging_dir = _staging_dir_for(sidecar_dir)
+    _validate_sidecar_storage_paths(sidecar_dir)
     expected_parser = (
         "plain-text"
         if source.suffix.lower() in {".txt", ".md", ".rst"}
@@ -955,6 +956,48 @@ def _staging_dir_for(sidecar_dir: Path) -> Path:
 
 def _publish_dir_for(sidecar_dir: Path) -> Path:
     return sidecar_dir.with_name(f"{sidecar_dir.name}.publish")
+
+
+def _validate_sidecar_storage_paths(sidecar_dir: Path) -> None:
+    storage_directories = (
+        sidecar_dir,
+        _staging_dir_for(sidecar_dir),
+        _publish_dir_for(sidecar_dir),
+        sidecar_dir.with_name(f"{sidecar_dir.name}.backup"),
+    )
+    for directory in storage_directories:
+        if directory.is_symlink():
+            raise RuntimeError(
+                f"Refusing symbolic-link docs sidecar storage path: '{directory}'."
+            )
+        if directory.exists() and not directory.is_dir():
+            raise RuntimeError(
+                f"Docs sidecar storage path is not a directory: '{directory}'."
+            )
+
+    known_files = (
+        (sidecar_dir, (ENVELOPE_FILENAME, INDEX_FILENAME, EMBEDDINGS_FILENAME)),
+        (
+            _staging_dir_for(sidecar_dir),
+            (
+                CHECKPOINT_FILENAME,
+                CHUNKS_FILENAME,
+                STAGED_INDEX_FILENAME,
+                EMBEDDINGS_FILENAME,
+            ),
+        ),
+    )
+    for directory, filenames in known_files:
+        for filename in filenames:
+            path = directory / filename
+            if path.is_symlink():
+                raise RuntimeError(
+                    f"Refusing symbolic-link docs sidecar file: '{path}'."
+                )
+            if path.exists() and not path.is_file():
+                raise RuntimeError(
+                    f"Docs sidecar path is not a regular file: '{path}'."
+                )
 
 
 def _discard_staging_dir(path: Path) -> None:
@@ -1761,9 +1804,16 @@ def _build_failed_result(
     source: Path, parser_name: str, warnings: list[str]
 ) -> DocsIngestResult:
     sidecar_dir = sidecar_dir_for(source)
-    sidecar_dir.mkdir(parents=True, exist_ok=True)
     envelope_path = sidecar_dir / ENVELOPE_FILENAME
     index_path = sidecar_dir / INDEX_FILENAME
+    storage_safe = True
+    try:
+        _validate_sidecar_storage_paths(sidecar_dir)
+    except RuntimeError as error:
+        storage_safe = False
+        message = str(error)
+        if message not in warnings:
+            warnings.append(message)
     envelope = DocsEnvelope(
         source_pdf=str(source.resolve()),
         parser_used=parser_name,
@@ -1776,7 +1826,11 @@ def _build_failed_result(
         semantic_indexed=False,
         warnings=warnings,
     )
-    save_docs_artifact(DocsArtifact(envelope=envelope, index_entries=[]), sidecar_dir)
+    if storage_safe:
+        sidecar_dir.mkdir(parents=True, exist_ok=True)
+        save_docs_artifact(
+            DocsArtifact(envelope=envelope, index_entries=[]), sidecar_dir
+        )
     return DocsIngestResult(
         source_pdf=str(source.resolve()),
         sidecar_dir=str(sidecar_dir),

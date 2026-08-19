@@ -87,14 +87,16 @@ DebugOracle project license.
 
 The deterministic direct-dependency audit is retained at
 [`docs/audits/public-alpha-p0-python-dependency-licenses.json`](docs/audits/public-alpha-p0-python-dependency-licenses.json).
-It records the package configuration, locally observed authoritative package
-metadata, and unresolved evidence separately; it is not a transitive software
-bill of materials.
+It records the package configuration, authoritative package metadata, and
+unresolved evidence separately; it is not a transitive software bill of
+materials.
 
-The supported base install contains **pypdf 6.9.2**, sourced from
-<https://github.com/py-pdf/pypdf>, under the **BSD-3-Clause** license. Its
-installed core metadata declares `BSD-3-Clause` and retains the upstream
-`LICENSE` in the distribution metadata.
+The supported base install pins **pypdf 6.16.1**, sourced from
+<https://github.com/py-pdf/pypdf>, under the **BSD-3-Clause** license. Official
+PyPI metadata for the 6.16.1 release declares `BSD-3-Clause`, records a
+Trusted-Publishing provenance statement, and links the signed upstream tag.
+This security release replaces the locally observed 6.9.2 baseline, which is
+affected by published resource-consumption advisories in PDF parsing paths.
 
 The declared `docling`, `semantic`, and development extras remain visible in
 package configuration so downstream experimentation does not require hidden

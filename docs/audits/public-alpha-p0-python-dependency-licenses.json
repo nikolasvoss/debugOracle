@@ -5,8 +5,9 @@
     "configuration": "pyproject.toml",
     "lockfile": null,
     "local_metadata_api": "importlib.metadata",
-    "environment": "repository development environment",
-    "limitation": "No dependency lockfile is present. Observed versions and licenses are evidence for locally installed direct packages only; they do not prove the transitive closure of an unpinned extra."
+    "remote_release_metadata": "https://pypi.org/project/pypdf/6.16.1/",
+    "environment": "repository development environment plus official PyPI release metadata for the security-updated base dependency",
+    "limitation": "No dependency lockfile is present. The pypdf 6.16.1 version, license, hashes, and provenance are official PyPI release evidence; the local development environment remained on 6.9.2 during this audit. Other observed versions and licenses are evidence for locally installed direct packages only and do not prove the transitive closure of an unpinned extra."
   },
   "profiles": [
     {
@@ -14,11 +15,17 @@
       "installer_status": "supported",
       "dependencies": [
         {
-          "requirement": "pypdf==6.9.2",
-          "observed_version": "6.9.2",
+          "requirement": "pypdf==6.16.1",
+          "observed_version": "6.16.1",
           "license": "BSD-3-Clause",
           "source": "https://github.com/py-pdf/pypdf",
-          "evidence": "Installed pypdf 6.9.2 core metadata License-Expression and retained dist-info LICENSE",
+          "evidence": "Official PyPI 6.16.1 release metadata declares BSD-3-Clause, Python >=3.9, Trusted Publishing, SHA-256 hashes, and the signed upstream tag; local parser regression tests ran with the previously installed 6.9.2 package because the environment update was not authorized",
+          "security_evidence": [
+            "https://github.com/py-pdf/pypdf/security/advisories/GHSA-23w6-3w8w-8484",
+            "https://github.com/py-pdf/pypdf/security/advisories/GHSA-763m-79hh-57f2",
+            "https://github.com/py-pdf/pypdf/security/advisories/GHSA-fc8x-2rww-xw9m",
+            "https://github.com/py-pdf/pypdf/security/advisories/GHSA-fwg2-594c-jp42"
+          ],
           "audit_status": "compatible"
         }
       ],

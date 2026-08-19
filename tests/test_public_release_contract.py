@@ -34,7 +34,7 @@ class PublicReleaseContractTests(unittest.TestCase):
             (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
         )
 
-        self.assertEqual(pyproject["project"]["dependencies"], ["pypdf==6.9.2"])
+        self.assertEqual(pyproject["project"]["dependencies"], ["pypdf==6.16.1"])
 
     def test_direct_dependency_license_inventory_matches_package_config(self) -> None:
         pyproject = tomllib.loads(
@@ -92,7 +92,7 @@ class PublicReleaseContractTests(unittest.TestCase):
     def test_third_party_notices_records_python_dependency_decisions(self) -> None:
         notices = (REPO_ROOT / "THIRD_PARTY_NOTICES.md").read_text(encoding="utf-8")
 
-        self.assertIn("pypdf 6.9.2", notices)
+        self.assertIn("pypdf 6.16.1", notices)
         self.assertIn("BSD-3-Clause", notices)
         self.assertRegex(
             notices,

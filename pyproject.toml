@@ -19,7 +19,7 @@ classifiers = [
     "Topic :: Software Development :: Debuggers",
 ]
 dependencies = [
-    "pypdf==6.9.2",
+    "pypdf==6.16.1",
 ]
 
 [project.optional-dependencies]
