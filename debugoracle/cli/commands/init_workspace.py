@@ -114,19 +114,21 @@ def _cmd_init_workspace_auto(args: argparse.Namespace) -> int:
         args=args,
         workspace_root=workspace_root,
     )
+    final_inventory_error: str | None = None
     try:
         final_inventory = collect_workspace_plan(
             workspace_root
         ).automatic_init_inventory
+        final_plan = plan_automatic_workspace_init(
+            final_inventory,
+            docs_authorized=bool(args.yes),
+            explicit_executable=explicit_executable,
+            explicit_svd=explicit_svd,
+            explicit_openocd_configs=explicit_openocd_configs,
+        )
     except OSError as error:
-        return _emit_auto_failure(args, error)
-    final_plan = plan_automatic_workspace_init(
-        final_inventory,
-        docs_authorized=bool(args.yes),
-        explicit_executable=explicit_executable,
-        explicit_svd=explicit_svd,
-        explicit_openocd_configs=explicit_openocd_configs,
-    )
+        final_plan = plan
+        final_inventory_error = str(error)
     payload = final_plan.as_dict()
     capabilities = cast(list[dict[str, object]], payload["capabilities"])
     for capability, status, application in zip(
@@ -170,6 +172,16 @@ def _cmd_init_workspace_auto(args: argparse.Namespace) -> int:
         )
     statuses = tuple(str(item["status"]) for item in capabilities)
     payload["status"] = _auto_overall_status(statuses)
+    if final_inventory_error is not None:
+        payload["status"] = (
+            "partial"
+            if any(status != CapabilityStatus.UNAVAILABLE.value for status in statuses)
+            else "failed"
+        )
+        payload["error"] = (
+            "Workspace re-inventory failed after capability application: "
+            f"{final_inventory_error}"
+        )
     _emit_auto_payload(payload, fmt=args.format)
     return {"complete": 0, "partial": 2, "failed": 1}[str(payload["status"])]
 
@@ -188,14 +200,26 @@ def _apply_auto_documentation(
             "warnings": [],
         }
     parser_stderr = io.StringIO()
-    with redirect_stderr(parser_stderr):
-        batch = ingest_documents(
-            workspace_root=workspace_root,
-            files=list(documents),
-            parser_name="pypdf",
-            semantic=False,
-            force=False,
+    try:
+        with redirect_stderr(parser_stderr):
+            batch = ingest_documents(
+                workspace_root=workspace_root,
+                files=list(documents),
+                parser_name="pypdf",
+                semantic=False,
+                force=False,
+            )
+    except Exception as error:
+        parser_diagnostics = tuple(
+            line for line in parser_stderr.getvalue().splitlines() if line
         )
+        return CapabilityStatus.PARTIAL.value, {
+            "attempted": True,
+            "results": [],
+            "warnings": list(parser_diagnostics),
+            "invalid_inputs": [],
+            "error": str(error),
+        }
     parser_diagnostics = tuple(
         line for line in parser_stderr.getvalue().splitlines() if line
     )
@@ -297,6 +321,26 @@ def _apply_auto_scaffold(
     openocd_configs = _capability_input_values(capability, "openocd_configs")
     if not executable or not openocd_configs:
         return capability.status.value, {"attempted": False}
+    try:
+        _validate_auto_output_directory(
+            workspace_root,
+            workspace_root / ".dbgoracle",
+            filenames=(),
+        )
+        _validate_auto_output_directory(
+            workspace_root,
+            workspace_root / ".vscode",
+            filenames=("settings.json", "launch.json", "tasks.json"),
+        )
+    except ValueError as error:
+        return CapabilityStatus.PARTIAL.value, {
+            "attempted": True,
+            "workspace_files": [],
+            "blocked_files": [],
+            "required_actions": [],
+            "dependency_checks": [],
+            "error": str(error),
+        }
     selected_svd = _capability_input_values(register_capability, "svd_file")
     apply_args = argparse.Namespace(**vars(args))
     apply_args.executable = executable[0]
@@ -352,11 +396,35 @@ def _apply_auto_register_catalog(
             "state": "current",
             "source": "dbgoracle_default_directory",
         }
-    state = _persist_auto_svd_setting(
-        setting_path,
-        selected_path=selected_path,
-        force=bool(args.force),
-    )
+    try:
+        _validate_auto_output_directory(
+            workspace_root,
+            workspace_root / ".vscode",
+            filenames=("settings.json",),
+        )
+    except ValueError as error:
+        return CapabilityStatus.PARTIAL.value, {
+            "attempted": True,
+            "selected_file": str(selected_path),
+            "setting_path": str(workspace_root / ".vscode" / "settings.json"),
+            "state": "blocked",
+            "error": str(error),
+        }
+    try:
+        state = _persist_auto_svd_setting(
+            setting_path,
+            selected_path=selected_path,
+            force=bool(args.force),
+            allow_write=not bool(args.attach),
+        )
+    except OSError as error:
+        return CapabilityStatus.PARTIAL.value, {
+            "attempted": True,
+            "selected_file": str(selected_path),
+            "setting_path": str(setting_path),
+            "state": "failed",
+            "error": str(error),
+        }
     return (
         CapabilityStatus.COMPLETE.value
         if state == "current"
@@ -371,7 +439,7 @@ def _apply_auto_register_catalog(
 
 
 def _persist_auto_svd_setting(
-    setting_path: Path, *, selected_path: Path, force: bool
+    setting_path: Path, *, selected_path: Path, force: bool, allow_write: bool
 ) -> str:
     if setting_path.exists():
         try:
@@ -385,10 +453,14 @@ def _persist_auto_svd_setting(
             current, selected_path=selected_path, workspace_root=setting_path.parents[1]
         ):
             return "current"
+        if not allow_write:
+            return "blocked"
         if payload.get("debugoracle.managedBy") != MANAGED_BY_VALUE or not force:
             return "blocked"
         payload["debugoracle.svdFile"] = str(selected_path)
     else:
+        if not allow_write:
+            return "blocked"
         payload = {
             "debugoracle.managedBy": MANAGED_BY_VALUE,
             "debugoracle.svdFile": str(selected_path),
@@ -396,6 +468,33 @@ def _persist_auto_svd_setting(
         setting_path.parent.mkdir(parents=True, exist_ok=True)
     setting_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     return "current"
+
+
+def _validate_auto_output_directory(
+    workspace_root: Path,
+    directory: Path,
+    *,
+    filenames: tuple[str, ...],
+) -> None:
+    try:
+        relative = directory.relative_to(workspace_root)
+    except ValueError as error:
+        raise ValueError(
+            f"automatic output is outside the workspace: {directory}"
+        ) from error
+    current = workspace_root
+    for part in relative.parts:
+        current = current / part
+        if current.is_symlink():
+            raise ValueError(f"automatic output must not use symlinks: {current}")
+    if directory.exists() and not directory.is_dir():
+        raise ValueError(f"automatic output directory is not a directory: {directory}")
+    for filename in filenames:
+        output_path = directory / filename
+        if output_path.is_symlink():
+            raise ValueError(f"automatic output must not use symlinks: {output_path}")
+        if output_path.exists() and not output_path.is_file():
+            raise ValueError(f"automatic output is not a regular file: {output_path}")
 
 
 def _setting_path_matches(

@@ -17,6 +17,7 @@ from pypdf.generic import (
 
 from debugoracle.cli import main
 from debugoracle.docs_sidecar import search_documents
+from debugoracle.readiness import collect_workspace_plan
 
 
 class AutomaticWorkspaceInitCliTests(unittest.TestCase):
@@ -305,6 +306,88 @@ class AutomaticWorkspaceInitCliTests(unittest.TestCase):
             )
             self.assertFalse((workspace / ".vscode" / "launch.json").exists())
 
+    def test_auto_attach_never_persists_an_explicit_svd_setting(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            board_dir = workspace / "boards"
+            board_dir.mkdir()
+            svd = board_dir / "device.svd"
+            svd.write_text("<device/>", encoding="utf-8")
+
+            stdout, stderr, exit_code = self._run_cli(
+                [
+                    "init-workspace",
+                    "--workspace-root",
+                    str(workspace),
+                    "--auto",
+                    "--attach",
+                    "--force",
+                    "--svd-file",
+                    str(svd),
+                    "--format",
+                    "json",
+                ]
+            )
+
+            payload = json.loads(stdout)
+            register = payload["capabilities"][2]
+            self.assertEqual(exit_code, 2)
+            self.assertEqual(stderr, "")
+            self.assertEqual(register["status"], "partial")
+            self.assertEqual(register["application"]["state"], "blocked")
+            self.assertFalse((workspace / ".vscode").exists())
+
+    def test_auto_init_does_not_write_through_symlinked_output_directories(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sandbox = Path(tmpdir)
+            workspace = sandbox / "workspace"
+            outside_vscode = sandbox / "outside-vscode"
+            outside_session = sandbox / "outside-session"
+            for directory in (workspace, outside_vscode, outside_session):
+                directory.mkdir()
+            (workspace / "build").mkdir()
+            executable = workspace / "build" / "app.elf"
+            executable.write_bytes(b"ELF")
+            (workspace / "config").mkdir()
+            config = workspace / "config" / "target.cfg"
+            config.write_text("# target\n", encoding="utf-8")
+            (workspace / "boards").mkdir()
+            svd = workspace / "boards" / "device.svd"
+            svd.write_text("<device/>", encoding="utf-8")
+            (workspace / ".vscode").symlink_to(outside_vscode, target_is_directory=True)
+            (workspace / ".dbgoracle").symlink_to(
+                outside_session, target_is_directory=True
+            )
+
+            stdout, stderr, exit_code = self._run_cli(
+                [
+                    "init-workspace",
+                    "--workspace-root",
+                    str(workspace),
+                    "--auto",
+                    "--executable",
+                    str(executable),
+                    "--openocd-config",
+                    str(config),
+                    "--svd-file",
+                    str(svd),
+                    "--format",
+                    "json",
+                ]
+            )
+
+            payload = json.loads(stdout)
+            self.assertEqual(exit_code, 2)
+            self.assertEqual(stderr, "")
+            self.assertEqual(
+                [item["status"] for item in payload["capabilities"]],
+                ["unavailable", "partial", "partial"],
+            )
+            self.assertEqual(list(outside_vscode.iterdir()), [])
+            self.assertEqual(list(outside_session.iterdir()), [])
+
     def test_unchanged_auto_init_rerun_is_content_and_result_idempotent(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
@@ -417,6 +500,121 @@ class AutomaticWorkspaceInitCliTests(unittest.TestCase):
                 "failed",
             )
             self.assertTrue((workspace / ".vscode" / "launch.json").is_file())
+
+    def test_document_application_exception_does_not_suppress_scaffold(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            (workspace / "build").mkdir()
+            executable = workspace / "build" / "app.elf"
+            executable.write_bytes(b"ELF")
+            (workspace / "config").mkdir()
+            config = workspace / "config" / "target.cfg"
+            config.write_text("# target\n", encoding="utf-8")
+            (workspace / "docs").mkdir()
+            (workspace / "docs" / "reference.pdf").write_bytes(b"fixture")
+
+            with (
+                patch(
+                    "debugoracle.cli.commands.init_workspace.ingest_documents",
+                    side_effect=OSError("sidecar storage unavailable"),
+                ),
+                patch(
+                    "debugoracle.cli.commands.init_workspace.shutil.which",
+                    return_value="/usr/bin/openocd",
+                ),
+            ):
+                stdout, stderr, exit_code = self._run_cli(
+                    [
+                        "init-workspace",
+                        "--workspace-root",
+                        str(workspace),
+                        "--auto",
+                        "--yes",
+                        "--executable",
+                        str(executable),
+                        "--openocd-config",
+                        str(config),
+                        "--format",
+                        "json",
+                    ]
+                )
+
+            payload = json.loads(stdout)
+            documentation, scaffold, _register = payload["capabilities"]
+            self.assertEqual(exit_code, 2)
+            self.assertEqual(stderr, "")
+            self.assertEqual(documentation["status"], "partial")
+            self.assertIn("storage unavailable", documentation["application"]["error"])
+            self.assertEqual(scaffold["status"], "complete")
+            self.assertTrue((workspace / ".vscode" / "launch.json").is_file())
+
+    def test_register_write_failure_is_reported_without_unstructured_abort(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            (workspace / "boards").mkdir()
+            svd = workspace / "boards" / "device.svd"
+            svd.write_text("<device/>", encoding="utf-8")
+
+            with patch(
+                "pathlib.Path.write_text",
+                side_effect=OSError("settings storage unavailable"),
+            ):
+                stdout, stderr, exit_code = self._run_cli(
+                    [
+                        "init-workspace",
+                        "--workspace-root",
+                        str(workspace),
+                        "--auto",
+                        "--svd-file",
+                        str(svd),
+                        "--format",
+                        "json",
+                    ]
+                )
+
+            payload = json.loads(stdout)
+            register = payload["capabilities"][2]
+            self.assertEqual(exit_code, 2)
+            self.assertEqual(stderr, "")
+            self.assertEqual(register["status"], "partial")
+            self.assertEqual(register["application"]["state"], "failed")
+            self.assertIn("storage unavailable", register["application"]["error"])
+
+    def test_post_application_inventory_failure_preserves_capability_results(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            session_dir = workspace / ".dbgoracle"
+            session_dir.mkdir()
+            svd = session_dir / "device.svd"
+            svd.write_text("<device/>", encoding="utf-8")
+            initial_plan = collect_workspace_plan(workspace)
+
+            with patch(
+                "debugoracle.cli.commands.init_workspace.collect_workspace_plan",
+                side_effect=[initial_plan, OSError("inventory unavailable")],
+            ):
+                stdout, stderr, exit_code = self._run_cli(
+                    [
+                        "init-workspace",
+                        "--workspace-root",
+                        str(workspace),
+                        "--auto",
+                        "--format",
+                        "json",
+                    ]
+                )
+
+            payload = json.loads(stdout)
+            self.assertEqual(exit_code, 2)
+            self.assertEqual(stderr, "")
+            self.assertEqual(payload["status"], "partial")
+            self.assertEqual(len(payload["capabilities"]), 3)
+            self.assertEqual(payload["capabilities"][2]["status"], "complete")
+            self.assertIn("re-inventory failed", payload["error"])
 
     def test_auto_init_rejects_explicit_files_outside_the_workspace(self) -> None:
         with (

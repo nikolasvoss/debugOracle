@@ -275,34 +275,83 @@ def make_parser(parser_name: str) -> DocsParser:
 
 
 def discover_candidate_documents(workspace_root: str | Path) -> list[Path]:
+    candidates, _truncated = _discover_candidate_documents(workspace_root)
+    return candidates
+
+
+def discover_candidate_documents_bounded(
+    workspace_root: str | Path,
+    *,
+    max_entries: int,
+    max_candidates: int,
+) -> tuple[list[Path], bool]:
+    """Discover documents with hard traversal and result bounds."""
+
+    if max_entries <= 0 or max_candidates <= 0:
+        raise ValueError("document discovery bounds must be positive")
+    return _discover_candidate_documents(
+        workspace_root,
+        max_entries=max_entries,
+        max_candidates=max_candidates,
+    )
+
+
+def _discover_candidate_documents(
+    workspace_root: str | Path,
+    *,
+    max_entries: int | None = None,
+    max_candidates: int | None = None,
+) -> tuple[list[Path], bool]:
     workspace = Path(workspace_root).expanduser().resolve()
     candidates: list[Path] = []
+    entries_seen = 0
     for directory_name in DISCOVERY_DIRECTORIES:
         candidate_dir = workspace / directory_name
         if candidate_dir.is_symlink() or not candidate_dir.is_dir():
             continue
-        for current_root, directory_names, file_names in os.walk(
-            candidate_dir, topdown=True, followlinks=False
-        ):
-            current_dir = Path(current_root)
-            directory_names[:] = sorted(
-                name
-                for name in directory_names
-                if not (current_dir / name).is_symlink()
-            )
-            for file_name in sorted(file_names):
-                candidate = current_dir / file_name
-                if candidate.suffix not in DISCOVERY_SUFFIXES:
-                    continue
-                if candidate.is_symlink():
-                    continue
-                try:
-                    resolved = candidate.resolve(strict=True)
-                except OSError:
-                    continue
-                if resolved.is_file() and resolved.is_relative_to(workspace):
-                    candidates.append(resolved)
-    return _dedupe_paths(sorted(candidates))
+        pending = [candidate_dir]
+        while pending:
+            current_dir = pending.pop()
+            child_directories: list[Path] = []
+            try:
+                directory_entries = os.scandir(current_dir)
+            except OSError:
+                continue
+            with directory_entries:
+                for entry in directory_entries:
+                    entries_seen += 1
+                    if max_entries is not None and entries_seen > max_entries:
+                        return _dedupe_paths(sorted(candidates)), True
+                    candidate = Path(entry.path)
+                    try:
+                        if entry.is_symlink():
+                            continue
+                        if entry.is_dir(follow_symlinks=False):
+                            if not entry.name.endswith(SIDECAR_SUFFIX):
+                                child_directories.append(candidate)
+                            continue
+                        if not entry.is_file(follow_symlinks=False):
+                            continue
+                    except OSError:
+                        continue
+                    if candidate.suffix.lower() not in DISCOVERY_SUFFIXES:
+                        continue
+                    try:
+                        resolved = candidate.resolve(strict=True)
+                    except OSError:
+                        continue
+                    if resolved.is_file() and resolved.is_relative_to(workspace):
+                        candidates.append(resolved)
+                        if (
+                            max_candidates is not None
+                            and len(candidates) > max_candidates
+                        ):
+                            return (
+                                _dedupe_paths(sorted(candidates))[:max_candidates],
+                                True,
+                            )
+            pending.extend(sorted(child_directories, reverse=True))
+    return _dedupe_paths(sorted(candidates)), False
 
 
 def ingest_documents(

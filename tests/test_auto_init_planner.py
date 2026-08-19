@@ -327,6 +327,68 @@ class AutomaticWorkspaceInitPlannerTests(unittest.TestCase):
         self.assertEqual(inventory.svd_candidates, ())
         self.assertEqual(inventory.documents, ())
 
+    def test_inventory_does_not_read_configuration_through_symlinked_vscode(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sandbox = Path(tmpdir)
+            workspace = sandbox / "workspace"
+            outside_vscode = sandbox / "outside-vscode"
+            workspace.mkdir()
+            outside_vscode.mkdir()
+            executable = workspace / "app.elf"
+            config = workspace / "target.cfg"
+            svd = workspace / "device.svd"
+            for path in (executable, config, svd):
+                path.write_bytes(b"fixture")
+            (outside_vscode / "settings.json").write_text(
+                json.dumps(
+                    {
+                        "debugoracle.executable": str(executable),
+                        "debugoracle.svdFile": str(svd),
+                        "debugoracle.openocdConfigFiles": [str(config)],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (outside_vscode / "launch.json").write_text(
+                json.dumps(
+                    {
+                        "configurations": [
+                            {
+                                "type": "cortex-debug",
+                                "configFiles": [str(config)],
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (workspace / ".vscode").symlink_to(outside_vscode, target_is_directory=True)
+
+            inventory = collect_workspace_plan(workspace).automatic_init_inventory
+
+        self.assertIsNone(inventory.configured_executable)
+        self.assertIsNone(inventory.configured_svd)
+        self.assertEqual(inventory.configured_openocd_configs, ())
+        self.assertEqual(inventory.cortex_debug_openocd_configs, ())
+
+    def test_document_entry_bound_blocks_selection_before_full_tree_walk(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            docs = workspace / "docs"
+            docs.mkdir()
+            (docs / "first.pdf").write_bytes(b"fixture")
+            (docs / "second.pdf").write_bytes(b"fixture")
+
+            with patch("debugoracle.readiness.MAX_DISCOVERY_FILES", 1):
+                inventory = collect_workspace_plan(workspace).automatic_init_inventory
+            plan = plan_automatic_workspace_init(inventory, docs_authorized=True)
+
+        self.assertIn("documents", inventory.truncated_candidate_classes)
+        self.assertEqual(plan.capabilities[0].status, "partial")
+        self.assertEqual(plan.capabilities[0].inputs, ())
+
     def test_inventory_bounds_each_candidate_class_and_blocks_auto_selection(
         self,
     ) -> None:

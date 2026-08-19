@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
-from .docs_sidecar import SIDECAR_SUFFIX, discover_candidate_documents
+from .docs_sidecar import discover_candidate_documents_bounded
 from .jsonc import parse_jsonc
 from .workspace_init_plan import AutomaticInitInventory
 
@@ -302,7 +302,11 @@ def _collect_automatic_init_inventory(
     documents = _discover_document_candidates(root, truncated_classes=truncated_classes)
 
     settings_path = root / ".vscode" / "settings.json"
-    settings = _read_jsonc_mapping(settings_path)
+    settings = (
+        _read_jsonc_mapping(settings_path)
+        if _is_trusted_workspace_file(settings_path, root)
+        else None
+    )
     configured_executable = _configured_workspace_file(
         root, settings, "debugoracle.executable"
     )
@@ -350,10 +354,17 @@ def _discover_direct_svd_candidates(
 def _discover_document_candidates(
     root: Path, *, truncated_classes: set[str]
 ) -> tuple[str, ...]:
+    discovered, truncated = discover_candidate_documents_bounded(
+        root,
+        max_entries=MAX_DISCOVERY_FILES,
+        max_candidates=MAX_DISCOVERY_CANDIDATES,
+    )
+    if truncated:
+        truncated_classes.add("documents")
     values = tuple(
         str(path.resolve(strict=True))
-        for path in discover_candidate_documents(root)
-        if _is_document_source(path, root)
+        for path in discovered
+        if _is_trusted_workspace_file(path, root)
     )
     return _bounded_candidate_values(
         values,
@@ -405,7 +416,10 @@ def _configured_workspace_files(
 
 
 def _cortex_debug_openocd_configurations(root: Path) -> tuple[tuple[str, ...], ...]:
-    payload = _read_jsonc_mapping(root / ".vscode" / "launch.json")
+    launch_path = root / ".vscode" / "launch.json"
+    if not _is_trusted_workspace_file(launch_path, root):
+        return ()
+    payload = _read_jsonc_mapping(launch_path)
     configurations = payload.get("configurations") if payload is not None else None
     if not isinstance(configurations, list):
         return ()
@@ -457,16 +471,6 @@ def _is_trusted_workspace_file(path: Path, root: Path) -> bool:
         and stat.S_ISREG(metadata.st_mode)
         and bool(metadata.st_mode & readable_mode)
     )
-
-
-def _is_document_source(path: Path, root: Path) -> bool:
-    if not _is_trusted_workspace_file(path, root):
-        return False
-    try:
-        relative = path.relative_to(root)
-    except ValueError:
-        return False
-    return all(not part.endswith(SIDECAR_SUFFIX) for part in relative.parts[:-1])
 
 
 def _unresolved_workspace_path(value: str, root: Path) -> Path:
