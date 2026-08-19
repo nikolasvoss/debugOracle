@@ -1,11 +1,11 @@
 # Public Alpha Demo and Workspace Initialization Handoff
 
-Status: paused at a clean implementation boundary on 2026-08-19.
+Status: automatic initialization implemented and documentation synchronized on
+2026-08-19; pre-landing review and release validation remain pending.
 
-This document records the implemented hardware-free demo, the remaining
-automatic workspace-initialization work, and the exact point from which to
-continue. It distinguishes shipped behavior from proposed behavior; the latter
-must not be presented as implemented until its task spec and tests are complete.
+This document records the implemented hardware-free demo and automatic
+workspace initialization, plus the exact remaining release gates. It
+distinguishes completed implementation from validation that has not yet run.
 
 ## Product intent
 
@@ -40,6 +40,12 @@ ambiguous inputs should produce precise next actions rather than guesses.
 Main repository:
 
 - branch: `codex/demo-docs-init-flow`
+- `6f2b00b feat: apply automatic workspace initialization`
+- `94e375e fix: contain automatic document discovery`
+- `ca51a17 feat: plan automatic workspace initialization`
+- `2a3d67c docs: pin portable demo SVD flow`
+- `8ffc58b docs: plan automatic workspace initialization`
+- `9b1b4c5 docs: record demo initialization handoff`
 - `f3a64b6 test: lock reproducible demo evidence`
 - `9b34ca2 docs: add hardware-free agent demo flow`
 - base: `7d277af docs: sync dependency audit status`
@@ -108,84 +114,53 @@ present a provenance-aware diagnosis.
 - Commit hooks passed for both main-repository commits: Ruff, Ruff format,
   Pyright, pytest-fast, coverage, and Bandit.
 
-Final release review, demo CLI QA, and `./scripts/verify.sh full` have not yet
-been run for the complete future slice.
+Final release review, demo CLI QA, security review, and
+`./scripts/verify.sh full` have not yet been run for the complete slice.
 
-## Known limitation at the pause point
+## Completed automatic-initialization slice
 
-General automatic initialization of an arbitrary user project is not yet
-implemented. The current experience is agent-guided: repository instructions
-tell the agent which existing DebugOracle commands to run and prohibit guessing
-missing board settings.
+The approved behavior in `AUTOMATIC_WORKSPACE_INIT_TASK_SPEC.md` is implemented
+through `6f2b00b`. The public golden path is:
 
-Also verify the demo's SVD path before claiming that the reference-workspaces
-repository works as a standalone clone. Its VS Code settings currently refer to
-`../../../STM32L432.svd`, which works in the main repository's submodule layout
-but may not resolve when the reference repository is cloned alone. Decide
-whether to bundle an appropriately licensed SVD in the reference repository or
-make path discovery independent of the parent checkout.
+```bash
+dbgoracle init-workspace --workspace-root . --auto --yes --format json
+```
 
-## Next implementation slice
+Implemented behavior includes:
 
-This is a public behavior change and must follow
-`docs/workflows/AGENT_WORKFLOW_RULES.md`. Before coding, write a focused task
-spec and test plan for automatic initialization. Do not modify the existing
-untracked P0 planning files until their ownership and intended contents have
-been reconciled.
+- bounded, local-only inventory through the existing workspace-plan path;
+- deterministic selection or ambiguity reporting for ELF, SVD, and existing
+  Cortex-Debug `configFiles` inputs;
+- independent documentation, debug-scaffold, and register-catalog capability
+  application;
+- explicit `--yes` authorization before discovered PDFs are parsed;
+- docs-only initialization without a toolchain, board, probe, executable, or
+  OpenOCD configuration;
+- versioned JSON and deterministic text results with provenance, status, and
+  ordered next actions;
+- no build, network/download, probe, debugger transport, or target access;
+- idempotent reruns and preservation of user-owned VS Code files.
 
-First inspect the smallest relevant surface:
+The earlier standalone SVD-path concern is resolved by `2a3d67c`: the
+hardware-free demo relies on the register catalog already embedded in its
+committed snapshot and does not require an external SVD. Live users are told to
+place their exact-device SVD at `.dbgoracle/<device>.svd`.
 
-- `docs/specs/init_workspace.md`
-- `debugoracle/cli/commands/init_workspace.py`
-- the existing readiness or workspace-plan command and its tests
-- the nearest `init-workspace` CLI tests
+## Remaining release slice
 
-Then choose the smallest extension of the existing architecture. In
-particular, determine whether the existing workspace-plan/readiness machinery
-can provide discovery and planning without introducing another overlapping
-command.
+Do not modify the existing untracked P0 planning files until their ownership
+and intended contents have been reconciled. The implementation is complete;
+the remaining work is verification and release readiness:
 
-The task spec should lock these requirements:
-
-1. Discover documentation only in documented project locations such as
-   `doc/`, `docs/`, and especially `docs/vendor/`.
-2. Use a single `.dbgoracle/*.svd` automatically; report multiple candidates as
-   ambiguous.
-3. Discover ELF/build outputs deterministically and never select arbitrarily.
-4. Reuse an unambiguous existing Cortex-Debug/OpenOCD configuration when
-   available.
-5. Initialize and ingest documentation independently when hardware-debug inputs
-   are missing.
-6. Report each capability as complete, partial, or unavailable, with exact next
-   actions and paths.
-7. Perform no probe connection, target mutation, or live acquisition during
-   initialization.
-8. Never download, move, or infer proprietary vendor inputs silently.
-9. Preserve deterministic output and explicit provenance.
-
-Recommended TDD order:
-
-1. discovery/planning tests for one valid candidate, no candidate, and multiple
-   candidates;
-2. docs-only initialization with no toolchain or OpenOCD configuration;
-3. mixed-capability initialization where docs succeed and hardware setup stays
-   partial;
-4. idempotent rerun and deterministic JSON/text output;
-5. CLI integration tests for exit codes, stdout/stderr, and actionable paths;
-6. only then the smallest implementation changes.
-
-## Remaining showcase work
-
-After automatic initialization is implemented:
-
-- add a concise README transcript showing the agent connecting RTT, source,
-  RCC clock selection, BRR, and documentation evidence;
-- make clear that the value is reliable access to heterogeneous evidence, not
-  merely generic agent reasoning;
-- resolve the standalone SVD-path issue;
-- run the pre-landing review, CLI QA for the user-facing flow, documentation
-  sync, and full repository validation;
-- update the changelog only with behavior that actually shipped.
+1. Run the pre-landing `/review` gate over the complete implementation diff.
+2. Run `/cli-qa` against explicit legacy init, auto planning without consent,
+   docs-only auto init, full unambiguous auto init, ambiguity, and rerun flows.
+3. Run the mandatory `/security-review` for the untrusted local PDF/JSONC/path
+   boundary and confirm zero network, subprocess, socket, or target access.
+4. Run `./scripts/verify.sh full`; do not claim release completion while any
+   hook fails.
+5. Reconcile the user-owned P0 planning files separately and update their state
+   only with explicit ownership.
 
 ## Resume commands
 
@@ -195,9 +170,10 @@ git -C examples/debugoracle-reference-workspaces switch codex/demo-docs-init-flo
 git status --short --branch
 git -C examples/debugoracle-reference-workspaces status --short --branch
 python3 -m unittest tests.test_reference_workspace_samples
+python3 -m unittest tests.test_auto_init_planner tests.test_auto_init_cli
+python3 -m unittest tests.test_auto_init_docs
 ```
 
 At resume time, first confirm that the two branches and commit IDs above are
-still present and that the pre-existing user files remain untouched. Then write
-the automatic-initialization task spec and test plan before starting its TDD
-implementation.
+still present and that the pre-existing user files remain untouched. Then run
+the remaining review, CLI QA, security, and full-validation gates in that order.

@@ -1,5 +1,23 @@
 ## [Unreleased]
 
+### Added
+- Added opt-in `init-workspace --auto` planning and application with stable text
+  and versioned JSON capability results for documentation, debug scaffold, and
+  register-catalog setup.
+- Added `--yes` authorization for automatic ingestion of locally discovered
+  PDFs under `doc/` and `docs/`, including `docs/vendor/`.
+
+### Changed
+- Automatic workspace initialization now completes each unambiguous local
+  capability independently, preserving useful docs-only or SVD-only progress
+  when executable or OpenOCD inputs are absent.
+- Automatic discovery now reports candidate provenance, ambiguities, and exact
+  next actions without building firmware, downloading resources, contacting a
+  probe, or modifying source documents.
+- Documented a hardware-free evidence-synthesis showcase that connects recorded
+  RTT, firmware source, RCC/USART register values, and a project-owned register
+  reference.
+
 ## [0.2.0] - 2026-08-13
 
 ### Changed

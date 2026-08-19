@@ -21,10 +21,42 @@ distinguish observations from documentation and conclusions.
 
 The workspace contains a snapshot, firmware sources, and a short project-owned
 register reference, so the agent can demonstrate reports plus docs search
-without hardware or an embedded toolchain. The complete ST RM0394 manual is not
-redistributed for legal reasons and is optional for the demo; the workspace
-links to the official download and explains the local `docs/vendor/` import
-path.
+without hardware or an embedded toolchain.
+
+### What the agent can prove
+
+The showcase is not generic reasoning over a prompt. DebugOracle gives the
+agent traceable access to heterogeneous evidence that normally lives in
+separate tools and files. A strong answer from the bundled fixture looks like
+this:
+
+> **Recorded observation:** RTT reports
+> `OBS: serial_path=fault code=-2`.
+>
+> **Firmware source:** `app/src/usart.c` requests 115200 baud, while
+> `app/src/main.c` switches USART1 to `RCC_USART1CLKSOURCE_HSI`.
+>
+> **Register evidence:** the snapshot records `RCC_CCIPR = 0x00000002`, so
+> USART1 uses HSI16, and `USART1_BRR = 0x000002B6` (decimal 694).
+>
+> **Bundled reference:** the project-owned register note documents the
+> `USART1SEL` meaning and the sampling-by-16 baud relation. With HSI16, the
+> observed divider yields about 23,055 baud, not 115200 baud.
+>
+> **Conclusion:** the sources independently converge on a USART clock/divider
+> mismatch. The snapshot proves the recorded state, not the state of a
+> currently connected target; a live capture would be the next confirmation.
+
+That provenance boundary matters: runtime text is a symptom, source shows
+intent and configuration, registers show recorded device state, and the local
+reference supplies the hardware meaning needed to connect them.
+
+The complete ST RM0394 manual is not redistributed and is not required for the
+demo. The limited bundled reference is independently written and project-owned.
+If you want the full manual, download it yourself from the official
+[STM32L4 documentation page](https://www.st.com/en/microcontrollers-microprocessors/stm32l4-series/documentation.html)
+and place the PDF under `docs/vendor/`. DebugOracle does not silently download
+or redistribute restricted vendor documentation.
 
 ## PR workflow (solo v1)
 
@@ -92,8 +124,8 @@ inputs are unambiguous, including workspace setup and docs ingestion. Do not
 guess missing board settings; tell me the exact missing file and destination.
 ```
 
-For predictable automatic discovery, copy private local inputs here before
-asking the agent:
+For predictable automatic discovery, copy your local inputs here before asking
+the agent:
 
 ```text
 your-firmware-project/
@@ -101,9 +133,23 @@ your-firmware-project/
 └── .dbgoracle/           # exactly one default <device>.svd
 ```
 
-The agent should still complete docs or SVD setup when live OpenOCD details are
-missing. Vendor PDFs, generated docs sidecars, and captured artifacts should
-remain local and uncommitted.
+Then the agent can run the non-interactive golden path directly:
+
+```bash
+dbgoracle init-workspace --workspace-root . --auto --yes --format json
+```
+
+The command initializes every capability whose local inputs are unambiguous and
+returns structured next actions for the rest. Documentation-only initialization
+requires no embedded toolchain, board, probe, executable, or OpenOCD setup; it
+indexes eligible PDFs and returns `partial` (exit code 2) while the absent
+hardware capabilities remain actionable. Multiple ELF, SVD, or Cortex-Debug
+choices are reported rather than guessed.
+
+Vendor PDFs, generated docs sidecars, and captured artifacts should remain
+local and uncommitted. DebugOracle never downloads vendor documents during
+automatic initialization; obtain any restricted manual yourself from its
+official publisher and copy it to `docs/vendor/`.
 
 Linux v1 ships a CLI-only installer path. It installs `dbgoracle`; it does not install `openocd`, VS Code, Cortex-Debug, or board-specific tooling.
 
@@ -235,11 +281,20 @@ Full usage and troubleshooting:
 
 If you are using an agent, the natural-language initialization request above is
 the recommended entry point: the agent can resolve existing project settings,
-run `init-workspace`, ingest PDFs from `docs/vendor/`, and use exactly one SVD
-from `.dbgoracle/`. It must report ambiguous or missing hardware-specific
-inputs instead of guessing them.
+run the automatic command below, ingest PDFs from `docs/vendor/`, and use
+exactly one `.dbgoracle/<device>.svd`. It must report ambiguous or missing
+hardware-specific inputs instead of guessing them.
 
-For a fresh project with an installed CLI, start here:
+```bash
+dbgoracle init-workspace --workspace-root . --auto --yes --format json
+```
+
+`--yes` explicitly authorizes parsing discovered local PDFs. Omit it to inspect
+the deterministic plan and receive the exact authorization action without
+parsing those documents. The automatic mode performs no build, download,
+network access, probe connection, or target interaction.
+
+For a fully explicit hardware setup, provide each input yourself:
 
 ```bash
 dbgoracle init-workspace --workspace-root . --executable build/app.elf --openocd-config interface/stlink.cfg --openocd-config target/stm32l4x.cfg
