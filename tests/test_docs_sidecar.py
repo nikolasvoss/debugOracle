@@ -626,6 +626,75 @@ second-page text
 
         self.assertEqual([path.name for path in discovered], ["chip.pdf", "ref.pdf"])
 
+    def test_discovery_rejects_in_workspace_pdf_symlink_alias(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            docs = workspace / "docs"
+            docs.mkdir()
+            source = workspace / "reference.pdf"
+            source.write_bytes(b"%PDF")
+            (docs / "alias.pdf").symlink_to(source)
+
+            discovered = discover_candidate_documents(workspace)
+
+        self.assertEqual(discovered, [])
+
+    def test_discovery_rejects_pdf_symlink_outside_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sandbox = Path(tmpdir)
+            workspace = sandbox / "workspace"
+            docs = workspace / "docs"
+            docs.mkdir(parents=True)
+            outside = sandbox / "outside.pdf"
+            outside.write_bytes(b"%PDF")
+            (docs / "outside.pdf").symlink_to(outside)
+
+            discovered = discover_candidate_documents(workspace)
+
+        self.assertEqual(discovered, [])
+
+    def test_discovery_does_not_traverse_symlink_directories(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sandbox = Path(tmpdir)
+            workspace = sandbox / "workspace"
+            docs = workspace / "docs"
+            outside = sandbox / "outside"
+            docs.mkdir(parents=True)
+            outside.mkdir()
+            safe = docs / "safe.pdf"
+            safe.write_bytes(b"%PDF")
+            (outside / "hidden.pdf").write_bytes(b"%PDF")
+            (docs / "linked").symlink_to(outside, target_is_directory=True)
+
+            discovered = discover_candidate_documents(workspace)
+
+        self.assertEqual(discovered, [safe.resolve()])
+
+    def test_discovery_returns_canonical_documents_in_stable_sorted_order(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            nested_doc = workspace / "doc" / "nested"
+            docs = workspace / "docs"
+            nested_doc.mkdir(parents=True)
+            docs.mkdir()
+            created = [
+                docs / "z.pdf",
+                nested_doc / "reference.pdf",
+                docs / "a.pdf",
+            ]
+            for path in created:
+                path.write_bytes(b"%PDF")
+
+            first = discover_candidate_documents(workspace)
+            second = discover_candidate_documents(workspace)
+
+        expected = sorted(path.resolve() for path in created)
+        self.assertEqual(first, expected)
+        self.assertEqual(second, expected)
+        self.assertEqual(len(first), len(set(first)))
+
     def test_ingest_requires_confirmation_for_discovered_pdfs(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
@@ -637,6 +706,30 @@ second-page text
         self.assertTrue(batch.confirmation_required)
         self.assertEqual(batch.results, [])
         self.assertEqual(len(batch.discovered_candidates), 1)
+
+    def test_discovered_ingest_never_parses_a_symlinked_pdf(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sandbox = Path(tmpdir)
+            workspace = sandbox / "workspace"
+            docs = workspace / "docs"
+            docs.mkdir(parents=True)
+            safe = docs / "safe.pdf"
+            outside = sandbox / "outside.pdf"
+            self._write_text_pdf(safe, ["Safe reference"])
+            self._write_text_pdf(outside, ["Outside reference"])
+            (docs / "outside-alias.pdf").symlink_to(outside)
+
+            batch = ingest_documents(
+                workspace_root=workspace,
+                confirm_discovered=True,
+            )
+            outside_sidecar_exists = sidecar_dir_for(outside).exists()
+
+        self.assertEqual(batch.discovered_candidates, [str(safe.resolve())])
+        self.assertEqual(len(batch.results), 1)
+        self.assertEqual(batch.results[0].source_pdf, str(safe.resolve()))
+        self.assertEqual(batch.results[0].ingest_state, "clean")
+        self.assertFalse(outside_sidecar_exists)
 
     def test_explicit_missing_file_does_not_fall_back_to_discovery(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
