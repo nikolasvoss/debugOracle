@@ -4,13 +4,16 @@ import itertools
 import os
 import platform
 import shutil
+import stat
 import sys
 import time
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
+from .docs_sidecar import SIDECAR_SUFFIX, discover_candidate_documents
 from .jsonc import parse_jsonc
+from .workspace_init_plan import AutomaticInitInventory
 
 MAX_CONFIG_BYTES = 128 * 1024
 MAX_DISCOVERY_FILES = 4096
@@ -62,6 +65,7 @@ class WorkspacePlan:
     workspace_root: str
     status: str
     candidates: dict[str, tuple[str, ...]]
+    automatic_init_inventory: AutomaticInitInventory
     truncated: bool = False
 
     def as_dict(self) -> dict[str, object]:
@@ -162,7 +166,9 @@ def collect_workspace_plan(workspace_root: Path) -> WorkspacePlan:
                 break
         if truncated:
             break
-    frozen_candidates = {key: tuple(values) for key, values in candidates.items()}
+    frozen_candidates = {
+        key: tuple(sorted(set(values))) for key, values in candidates.items()
+    }
     executable_count = len(frozen_candidates["executables"])
     status = (
         "blocked"
@@ -175,10 +181,16 @@ def collect_workspace_plan(workspace_root: Path) -> WorkspacePlan:
             else "blocked"
         )
     )
+    automatic_init_inventory = _collect_automatic_init_inventory(
+        root,
+        frozen_candidates=frozen_candidates,
+        legacy_truncated=truncated,
+    )
     return WorkspacePlan(
         workspace_root=str(root),
         status=status,
         candidates=frozen_candidates,
+        automatic_init_inventory=automatic_init_inventory,
         truncated=truncated,
     )
 
@@ -254,13 +266,213 @@ def _bounded_entries(directory: Path) -> tuple[tuple[Path, ...], bool]:
     with os.scandir(directory) as entries:
         selected = tuple(
             itertools.islice(
-                (Path(entry.path) for entry in entries), MAX_DISCOVERY_FILES + 1
+                sorted(Path(entry.path) for entry in entries),
+                MAX_DISCOVERY_FILES + 1,
             )
         )
     return (
         tuple(sorted(selected[:MAX_DISCOVERY_FILES])),
         len(selected) > MAX_DISCOVERY_FILES,
     )
+
+
+def _collect_automatic_init_inventory(
+    root: Path,
+    *,
+    frozen_candidates: dict[str, tuple[str, ...]],
+    legacy_truncated: bool,
+) -> AutomaticInitInventory:
+    truncated_classes: set[str] = set()
+    if legacy_truncated:
+        truncated_classes.update(("executables", "raw_openocd_configs"))
+
+    executable_candidates = _bounded_candidate_values(
+        frozen_candidates["executables"],
+        candidate_class="executables",
+        truncated_classes=truncated_classes,
+    )
+    raw_openocd_configs = _bounded_candidate_values(
+        frozen_candidates["openocd_configs"],
+        candidate_class="raw_openocd_configs",
+        truncated_classes=truncated_classes,
+    )
+    svd_candidates = _discover_direct_svd_candidates(
+        root, truncated_classes=truncated_classes
+    )
+    documents = _discover_document_candidates(root, truncated_classes=truncated_classes)
+
+    settings_path = root / ".vscode" / "settings.json"
+    settings = _read_jsonc_mapping(settings_path)
+    configured_executable = _configured_workspace_file(
+        root, settings, "debugoracle.executable"
+    )
+    configured_svd = _configured_workspace_file(root, settings, "debugoracle.svdFile")
+    configured_openocd_configs = _configured_workspace_files(
+        root, settings, "debugoracle.openocdConfigFiles"
+    )
+    cortex_debug_openocd_configs = _cortex_debug_openocd_configurations(root)
+
+    return AutomaticInitInventory(
+        workspace_root=str(root),
+        executable_candidates=executable_candidates,
+        svd_candidates=svd_candidates,
+        raw_openocd_configs=raw_openocd_configs,
+        configured_executable=configured_executable,
+        configured_svd=configured_svd,
+        configured_openocd_configs=configured_openocd_configs,
+        cortex_debug_openocd_configs=cortex_debug_openocd_configs,
+        documents=documents,
+        truncated_candidate_classes=tuple(sorted(truncated_classes)),
+    )
+
+
+def _discover_direct_svd_candidates(
+    root: Path, *, truncated_classes: set[str]
+) -> tuple[str, ...]:
+    session_dir = root / ".dbgoracle"
+    if not session_dir.is_dir() or session_dir.is_symlink():
+        return ()
+    entries, truncated = _bounded_entries(session_dir)
+    if truncated:
+        truncated_classes.add("svd_files")
+    values = tuple(
+        str(path.resolve(strict=True))
+        for path in entries
+        if path.suffix.lower() == ".svd" and _is_trusted_workspace_file(path, root)
+    )
+    return _bounded_candidate_values(
+        values,
+        candidate_class="svd_files",
+        truncated_classes=truncated_classes,
+    )
+
+
+def _discover_document_candidates(
+    root: Path, *, truncated_classes: set[str]
+) -> tuple[str, ...]:
+    values = tuple(
+        str(path.resolve(strict=True))
+        for path in discover_candidate_documents(root)
+        if _is_document_source(path, root)
+    )
+    return _bounded_candidate_values(
+        values,
+        candidate_class="documents",
+        truncated_classes=truncated_classes,
+    )
+
+
+def _bounded_candidate_values(
+    values: tuple[str, ...],
+    *,
+    candidate_class: str,
+    truncated_classes: set[str],
+) -> tuple[str, ...]:
+    canonical = tuple(sorted(set(values)))
+    if len(canonical) > MAX_DISCOVERY_CANDIDATES:
+        truncated_classes.add(candidate_class)
+        return canonical[:MAX_DISCOVERY_CANDIDATES]
+    return canonical
+
+
+def _configured_workspace_file(
+    root: Path, payload: dict[str, object] | None, key: str
+) -> str | None:
+    value = payload.get(key) if payload is not None else None
+    if not isinstance(value, str) or not value.strip():
+        return None
+    path = _unresolved_workspace_path(value, root)
+    if path is None or not _is_trusted_workspace_file(path, root):
+        return None
+    return str(path.resolve(strict=True))
+
+
+def _configured_workspace_files(
+    root: Path, payload: dict[str, object] | None, key: str
+) -> tuple[str, ...]:
+    values = payload.get(key) if payload is not None else None
+    if not isinstance(values, list) or not values:
+        return ()
+    resolved: list[str] = []
+    for value in values:
+        if not isinstance(value, str) or not value.strip():
+            return ()
+        path = _unresolved_workspace_path(value, root)
+        if path is None or not _is_trusted_workspace_file(path, root):
+            return ()
+        resolved.append(str(path.resolve(strict=True)))
+    return tuple(resolved)
+
+
+def _cortex_debug_openocd_configurations(root: Path) -> tuple[tuple[str, ...], ...]:
+    payload = _read_jsonc_mapping(root / ".vscode" / "launch.json")
+    configurations = payload.get("configurations") if payload is not None else None
+    if not isinstance(configurations, list):
+        return ()
+    selected: list[tuple[str, ...]] = []
+    for configuration in configurations:
+        if not isinstance(configuration, dict):
+            continue
+        if configuration.get("type") != "cortex-debug":
+            continue
+        values = configuration.get("configFiles")
+        if not isinstance(values, list) or not values:
+            continue
+        normalized = _normalize_workspace_file_list(root, values)
+        if normalized:
+            selected.append(normalized)
+    return tuple(sorted(selected))
+
+
+def _normalize_workspace_file_list(root: Path, values: list[object]) -> tuple[str, ...]:
+    resolved: list[str] = []
+    for value in values:
+        if not isinstance(value, str) or not value.strip():
+            return ()
+        path = _unresolved_workspace_path(value, root)
+        if path is None or not _is_trusted_workspace_file(path, root):
+            return ()
+        resolved.append(str(path.resolve(strict=True)))
+    return tuple(resolved)
+
+
+def _is_trusted_workspace_file(path: Path, root: Path) -> bool:
+    try:
+        relative = path.relative_to(root)
+    except ValueError:
+        return False
+    current = root
+    for part in relative.parts:
+        current = current / part
+        if current.is_symlink():
+            return False
+    try:
+        resolved = path.resolve(strict=True)
+        metadata = resolved.stat()
+    except OSError:
+        return False
+    readable_mode = stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH
+    return (
+        resolved.is_relative_to(root)
+        and stat.S_ISREG(metadata.st_mode)
+        and bool(metadata.st_mode & readable_mode)
+    )
+
+
+def _is_document_source(path: Path, root: Path) -> bool:
+    if not _is_trusted_workspace_file(path, root):
+        return False
+    try:
+        relative = path.relative_to(root)
+    except ValueError:
+        return False
+    return all(not part.endswith(SIDECAR_SUFFIX) for part in relative.parts[:-1])
+
+
+def _unresolved_workspace_path(value: str, root: Path) -> Path:
+    replaced = value.replace("${workspaceFolder}", str(root))
+    path = Path(replaced)
+    return path if path.is_absolute() else root / path
 
 
 def _cortex_debug_item(home: Path) -> ReadinessItem:
