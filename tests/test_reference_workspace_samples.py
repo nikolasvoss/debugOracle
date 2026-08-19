@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import shutil
+import tempfile
 import unittest
 from io import StringIO
 from contextlib import redirect_stdout, redirect_stderr
@@ -152,22 +154,27 @@ class ReferenceWorkspaceSampleTests(unittest.TestCase):
             "BFAR", artifact.registers, "hardfault snapshot must have BFAR register"
         )
 
-    def test_peripheral_miscfg_snapshot_has_usart_brr(self):
-        """peripheral-miscfg snapshot must have USART1_BRR in registers."""
+    def test_peripheral_miscfg_snapshot_has_clock_mismatch_evidence(self):
+        """The demo fixture must contain both sides of the clock mismatch."""
         path = self._snapshot_path("peripheral-miscfg")
         with open(path, encoding="utf-8") as f:
             data = json.load(f)
         artifact = InvestigationArtifact.from_dict(data)
-        self.assertIn(
-            "USART1_BRR",
-            artifact.registers,
-            "peripheral-miscfg snapshot must have USART1_BRR register",
-        )
+        self.assertEqual(artifact.registers["RCC_CCIPR"].upper(), "0X00000002")
+        self.assertEqual(artifact.registers["USART1_BRR"].upper(), "0X000002B6")
+        self.assertEqual(artifact.registers["USART1_CR1"].upper(), "0X0000000D")
+        self.assertTrue(artifact.sources.gdb.embedded)
+        self.assertTrue(artifact.sources.rtt.embedded)
+        self.assertTrue(artifact.sources.registers.embedded)
+        self.assertEqual(artifact.sources.gdb.event_count, 3)
+        self.assertEqual(artifact.sources.registers.register_count, 5)
         self.assertEqual(
-            artifact.registers["USART1_BRR"].upper(),
-            "0X208D",
-            "USART1_BRR should be 0x208D (9600 baud at 80MHz)",
+            [item.name for item in artifact.sources.registers.peripherals],
+            ["RCC", "USART1"],
         )
+        self.assertIn("serial_path=fault code=-2", artifact.sources.rtt.raw_text)
+        self.assertTrue(data["_fabricated"])
+        self.assertIn("project-authored", data["provenance"]["note"])
 
     def test_healthy_snapshot_has_variable_evidence(self):
         """healthy snapshot must have locals including gpio_test_pass_count."""
@@ -203,6 +210,67 @@ class ReferenceWorkspaceSampleTests(unittest.TestCase):
         ):
             with self.subTest(required_text=required_text):
                 self.assertIn(required_text, source)
+
+    def test_peripheral_demo_reference_is_ingestible_and_searchable(self):
+        source_pdf = (
+            PERIPHERAL_DEMO_ROOT / "doc" / "debugoracle_demo_stm32l4_reference.pdf"
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            docs_dir = workspace / "docs" / "vendor"
+            docs_dir.mkdir(parents=True)
+            shutil.copy2(source_pdf, docs_dir / source_pdf.name)
+
+            ingest_stdout = StringIO()
+            with redirect_stdout(ingest_stdout), redirect_stderr(StringIO()):
+                ingest_code = cli_main(
+                    [
+                        "docs",
+                        "ingest",
+                        "--workspace-root",
+                        str(workspace),
+                        "--yes",
+                        "--no-interactive",
+                        "--format",
+                        "json",
+                    ]
+                )
+            ingest_payload = json.loads(ingest_stdout.getvalue())
+
+            search_stdout = StringIO()
+            with redirect_stdout(search_stdout), redirect_stderr(StringIO()):
+                search_code = cli_main(
+                    [
+                        "docs",
+                        "search",
+                        "USART1SEL USART_BRR baud",
+                        "--workspace-root",
+                        str(workspace),
+                        "--format",
+                        "json",
+                    ]
+                )
+            search_payload = json.loads(search_stdout.getvalue())
+
+        self.assertEqual(ingest_code, 0)
+        self.assertEqual(ingest_payload["results"][0]["ingest_state"], "clean")
+        self.assertEqual(ingest_payload["results"][0]["page_count"], 2)
+        self.assertEqual(search_code, 0)
+        self.assertGreater(len(search_payload["results"]), 0)
+        self.assertIn("USART_BRR", search_payload["results"][0]["text"])
+
+    def test_peripheral_demo_committed_report_matches_snapshot(self):
+        snapshot_path = self._snapshot_path("peripheral-miscfg")
+        report_path = snapshot_path.with_name("report.txt")
+
+        code, stdout, stderr = self._run_report(snapshot_path)
+
+        self.assertEqual(code, 0)
+        self.assertEqual(stderr, "")
+        self.assertEqual(stdout, report_path.read_text(encoding="utf-8"))
+        self.assertIn("Trust: SAFE", stdout)
+        self.assertIn("RCC_CCIPR: 0x00000002", stdout)
+        self.assertIn("USART1_BRR: 0x000002B6", stdout)
 
     def test_peripheral_demo_explains_automatic_docs_and_svd_setup(self):
         readme = (PERIPHERAL_DEMO_ROOT / "README.md").read_text(encoding="utf-8")
