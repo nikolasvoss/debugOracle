@@ -19,6 +19,7 @@ STM32_WORKSPACES_ROOT = (
     / "debugoracle-reference-workspaces"
     / "stm32"
 )
+PERIPHERAL_DEMO_ROOT = STM32_WORKSPACES_ROOT / "peripheral-miscfg"
 
 # Each entry: (workspace_name, expected_stop_reason_or_none, has_halt_context)
 WORKSPACE_SAMPLES = [
@@ -180,3 +181,41 @@ class ReferenceWorkspaceSampleTests(unittest.TestCase):
             local_names,
             "healthy snapshot must have gpio_test_pass_count in locals",
         )
+
+    def test_peripheral_demo_includes_project_owned_reference_pdf(self):
+        source_path = (
+            PERIPHERAL_DEMO_ROOT / "doc" / "debugoracle_demo_stm32l4_reference.md"
+        )
+        pdf_path = source_path.with_suffix(".pdf")
+
+        self.assertTrue(source_path.is_file())
+        self.assertTrue(pdf_path.is_file())
+        self.assertTrue(pdf_path.read_bytes().startswith(b"%PDF"))
+
+        source = source_path.read_text(encoding="utf-8")
+        for required_text in (
+            "Project-owned demo reference",
+            "RCC_CCIPR",
+            "USART1SEL",
+            "USART_BRR",
+            "not a replacement for RM0394",
+            "https://www.st.com/en/microcontrollers-microprocessors/stm32l4-series/documentation.html",
+        ):
+            with self.subTest(required_text=required_text):
+                self.assertIn(required_text, source)
+
+    def test_peripheral_demo_explains_automatic_docs_and_svd_setup(self):
+        readme = (PERIPHERAL_DEMO_ROOT / "README.md").read_text(encoding="utf-8")
+        agent_guide = (PERIPHERAL_DEMO_ROOT / "AGENTS.md").read_text(encoding="utf-8")
+        vendor_guide = (STM32_WORKSPACES_ROOT / "vendor-downloads.md").read_text(
+            encoding="utf-8"
+        )
+
+        for document in (readme, agent_guide, vendor_guide):
+            self.assertIn("docs/vendor/", document)
+            self.assertIn(".dbgoracle/", document)
+
+        self.assertIn("dbgoracle docs ingest --workspace-root . --yes", agent_guide)
+        self.assertIn("dbgoracle init-workspace", agent_guide)
+        self.assertIn("initialise this workspace", readme.lower())
+        self.assertIn("RM0394", vendor_guide)

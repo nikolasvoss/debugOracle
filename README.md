@@ -7,6 +7,25 @@ The intended system architecture lives in [`docs/architecture.md`](docs/architec
 
 Module specifications live under [`docs/specs/README.md`](docs/specs/README.md). The spec filename matches the module filename so agents have one predictable place to look for architecture notes.
 
+## Hardware-Free Agent Demo
+
+Open
+[`examples/debugoracle-reference-workspaces/stm32/peripheral-miscfg`](examples/debugoracle-reference-workspaces/stm32/peripheral-miscfg)
+as the root of a new VS Code window and ask:
+
+```text
+Initialise this workspace for the DebugOracle demo. Show me what evidence is
+available, ingest the bundled demo reference, diagnose the serial failure, and
+distinguish observations from documentation and conclusions.
+```
+
+The workspace contains a snapshot, firmware sources, and a short project-owned
+register reference, so the agent can demonstrate reports plus docs search
+without hardware or an embedded toolchain. The complete ST RM0394 manual is not
+redistributed for legal reasons and is optional for the demo; the workspace
+links to the official download and explains the local `docs/vendor/` import
+path.
+
 ## PR workflow (solo v1)
 
 Behavior-changing pull requests are expected to include traceability fields in the PR body:
@@ -66,10 +85,25 @@ PEP 668 override. Confirm when `dbgoracle --version` works.
 Open your **firmware project** in a new Codex or Claude Code session, then paste:
 
 ```text
-Set up DebugOracle for this firmware project. Read the project instructions,
-inspect what is needed, and ask me before changing project files or installing
-anything. Do not guess missing board or debug settings.
+Initialise this workspace completely for DebugOracle. Inspect the existing
+firmware, build outputs, Cortex-Debug/OpenOCD configuration, PDFs under
+docs/vendor/, and an SVD under .dbgoracle/. Initialise every capability whose
+inputs are unambiguous, including workspace setup and docs ingestion. Do not
+guess missing board settings; tell me the exact missing file and destination.
 ```
+
+For predictable automatic discovery, copy private local inputs here before
+asking the agent:
+
+```text
+your-firmware-project/
+├── docs/vendor/          # reference manuals and datasheets (PDF)
+└── .dbgoracle/           # exactly one default <device>.svd
+```
+
+The agent should still complete docs or SVD setup when live OpenOCD details are
+missing. Vendor PDFs, generated docs sidecars, and captured artifacts should
+remain local and uncommitted.
 
 Linux v1 ships a CLI-only installer path. It installs `dbgoracle`; it does not install `openocd`, VS Code, Cortex-Debug, or board-specific tooling.
 
@@ -176,7 +210,9 @@ DebugOracle can ingest local manuals/datasheets into a nearby docs sidecar for l
 Quick start:
 
 ```bash
-dbgoracle docs ingest --file doc/STM32F4_Reference_Manual.pdf
+mkdir -p docs/vendor
+cp /path/to/Reference_Manual.pdf docs/vendor/
+dbgoracle docs ingest --workspace-root . --yes --no-interactive
 dbgoracle docs search "USART baud rate register"
 dbgoracle docs status
 ```
@@ -196,6 +232,12 @@ Full usage and troubleshooting:
 [`docs/docs-ingestion.md`](docs/docs-ingestion.md)
 
 ### Bootstrap a workspace
+
+If you are using an agent, the natural-language initialization request above is
+the recommended entry point: the agent can resolve existing project settings,
+run `init-workspace`, ingest PDFs from `docs/vendor/`, and use exactly one SVD
+from `.dbgoracle/`. It must report ambiguous or missing hardware-specific
+inputs instead of guessing them.
 
 For a fresh project with an installed CLI, start here:
 
