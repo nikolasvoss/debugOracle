@@ -1,12 +1,21 @@
 # Public Alpha Demo and Workspace Initialization Handoff
 
-Status: automatic initialization implemented, documented, and locally release
-ready on 2026-08-21. Remote/base synchronization was not performed by the local
-ship gate.
+Status: completed and published as `v0.2.0` on 2026-08-21.
 
 This document records the implemented hardware-free demo and automatic
-workspace initialization, the completed local release gates, and the remaining
-publication actions.
+workspace initialization, the completed release gates, and the final
+publication state.
+
+## Published state
+
+- Main repository `main` and tag `v0.2.0` point to
+  `175b41728d66d8ecba61dc7969b39c2c98150bfb`.
+- Reference-workspaces `main` points to
+  `36934bd168aef6541a3c74bf6ef579b15447505c`.
+- The GitHub release is
+  `https://github.com/nikolasvoss/ai-debugger-v2/releases/tag/v0.2.0`.
+- Remote synchronization, tag publication, and release publication completed
+  after the local gate described below.
 
 ## Product intent
 
@@ -36,7 +45,7 @@ to `docs/vendor/`, place exactly one default SVD at
 capabilities with unambiguous inputs should be initialized, while missing or
 ambiguous inputs should produce precise next actions rather than guesses.
 
-## Repository state
+## Pre-publication repository state
 
 Main repository:
 
@@ -64,15 +73,9 @@ Reference-workspaces submodule:
 - `26bdf81 docs: add hardware-free docs demo reference`
 - base: `75e2c82 chore: sanitize public reference workspaces`
 
-The following main-worktree files predated this slice and are intentionally not
-owned by it. Do not overwrite, stage, or delete them without reconciling their
-contents with the user:
-
-- modified `AGENTS.md`
-- untracked `docs/plans/PUBLIC_ALPHA_P0_PLAN.md`
-- untracked `docs/plans/PUBLIC_ALPHA_P0_RISK_REGISTER.md`
-- untracked `docs/plans/PUBLIC_ALPHA_P0_TASK_SPEC.md`
-- untracked `docs/plans/PUBLIC_ALPHA_P0_TEST_PLAN.md`
+The user-owned `AGENTS.md` change and four P0 planning files were deliberately
+left untouched during implementation. They were reconciled separately after
+publication so their ownership and historical status remained clear.
 
 ## Completed demo slice
 
@@ -180,23 +183,13 @@ Local ship status: **ready**.
   not changed by final validation.
 
 The local gate did not fetch, pull, push, compare a remote base, or resolve a
-remote integration branch. Perform that repository synchronization separately
-before publishing if the release workflow requires it. Reconcile the user-owned
-P0 planning files only with explicit ownership.
+remote integration branch. Those actions were completed afterward: origin/main
+was merged and validated, both repositories were pushed, and `v0.2.0` was
+published. The user-owned P0 planning files were reconciled only after explicit
+authorization.
 
-## Resume commands
+## Closure
 
-```bash
-git switch codex/demo-docs-init-flow
-git -C examples/debugoracle-reference-workspaces switch codex/demo-docs-init-flow
-git status --short --branch
-git -C examples/debugoracle-reference-workspaces status --short --branch
-python3 -m unittest tests.test_reference_workspace_samples
-python3 -m unittest tests.test_auto_init_planner tests.test_auto_init_cli tests.test_auto_init_docs tests.test_docs_sidecar tests.test_docs_cli_and_status_capture tests.test_reference_workspace_samples
-./scripts/verify.sh full
-```
-
-At resume time, first confirm that the two branches and commit IDs above are
-still present and that the pre-existing user files remain untouched. The next
-release action is remote/base synchronization or publication, not another local
-implementation gate, unless the source changes.
+No publication action remains for the `v0.2.0` implementation. Future changes
+start from the published commits above and must preserve the documented
+provenance limitations and residual security risks.

@@ -1,5 +1,12 @@
 ## [Unreleased]
 
+### Changed
+- Archived the public-alpha P0 planning set with the actual release outcome,
+  accepted deviations, and residual risks.
+- Clarified the contribution policy for third-party runtime dependencies.
+
+## [0.2.0] - 2026-08-21
+
 ### Added
 - Added opt-in `init-workspace --auto` planning and application with stable text
   and versioned JSON capability results for documentation, debug scaffold, and
@@ -20,6 +27,13 @@
 - The fast verification preflight now runs the non-HIL test suite without
   coverage, while the required full gate runs the same suite once with the
   existing coverage threshold and has a three-minute CI timeout.
+- Prepared the first public alpha release from audited repository snapshots.
+- Aligned CLI, package, installer-manifest, changelog, and release-tag version
+  metadata.
+- Defined Ubuntu 24.04 LTS x86-64, Python 3.12, and `pipx` as the verified alpha
+  environment; other environments remain unverified.
+- Pointed installer release metadata at the public DebugOracle repository while
+  preserving the checkout-local package override.
 
 ### Fixed
 - Kept automatic filesystem discovery hard-bounded and deterministic, rejected
@@ -29,14 +43,6 @@
   manifest URL with the public repository.
 - Aligned README and CLI guidance with the disabled 0.2.0 Docling and semantic
   installer profiles.
-
-## [0.2.0] - 2026-08-13
-
-### Changed
-- Prepared the first public alpha release from audited, clean repository snapshots.
-- Aligned CLI, package, installer-manifest, changelog, and release-tag version metadata.
-- Defined Ubuntu 24.04 LTS x86-64, Python 3.12, and `pipx` as the verified alpha environment; other environments remain unverified.
-- Pointed installer release metadata at the public DebugOracle repository while preserving the checkout-local package override.
 
 ## [0.1.2] - 2026-04-08
 
