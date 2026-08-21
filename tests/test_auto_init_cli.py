@@ -644,6 +644,39 @@ class AutomaticWorkspaceInitCliTests(unittest.TestCase):
             self.assertEqual(scaffold["status"], "complete")
             self.assertTrue((workspace / ".vscode" / "launch.json").is_file())
 
+    def test_invalid_vscode_encoding_does_not_suppress_document_ingest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            vscode = workspace / ".vscode"
+            vscode.mkdir()
+            (vscode / "settings.json").write_bytes(b"\xff")
+            docs = workspace / "docs"
+            docs.mkdir()
+            source = docs / "reference.pdf"
+            self._write_text_pdf(source, "USART1 register reference")
+
+            stdout, stderr, exit_code = self._run_cli(
+                [
+                    "init-workspace",
+                    "--workspace-root",
+                    str(workspace),
+                    "--auto",
+                    "--yes",
+                    "--format",
+                    "json",
+                ]
+            )
+
+            payload = json.loads(stdout)
+
+        self.assertEqual(exit_code, 2)
+        self.assertEqual(stderr, "")
+        self.assertEqual(payload["capabilities"][0]["status"], "complete")
+        self.assertEqual(
+            payload["capabilities"][0]["application"]["results"][0]["ingest_state"],
+            "clean",
+        )
+
     def test_register_write_failure_is_reported_without_unstructured_abort(
         self,
     ) -> None:

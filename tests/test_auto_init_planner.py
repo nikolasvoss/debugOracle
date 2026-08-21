@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-from debugoracle.readiness import collect_workspace_plan
+from debugoracle.readiness import _bounded_entries, collect_workspace_plan
 from debugoracle.workspace_init_plan import (
     AutomaticInitInventory,
     plan_automatic_workspace_init,
@@ -14,6 +14,28 @@ from debugoracle.workspace_init_plan import (
 
 
 class AutomaticWorkspaceInitPlannerTests(unittest.TestCase):
+    def test_directory_entry_bound_stops_scandir_before_sorting(self) -> None:
+        class _BoundedScandir:
+            def __enter__(self):  # type: ignore[no-untyped-def]
+                return self
+
+            def __exit__(self, *args):  # type: ignore[no-untyped-def]
+                return None
+
+            def __iter__(self):  # type: ignore[no-untyped-def]
+                yield type("Entry", (), {"path": "/workspace/b"})()
+                yield type("Entry", (), {"path": "/workspace/a"})()
+                raise AssertionError("directory traversal exceeded its hard bound")
+
+        with (
+            patch("debugoracle.readiness.MAX_DISCOVERY_FILES", 1),
+            patch("debugoracle.readiness.os.scandir", return_value=_BoundedScandir()),
+        ):
+            selected, truncated = _bounded_entries(Path("/workspace"))
+
+        self.assertEqual(selected, ())
+        self.assertTrue(truncated)
+
     def test_empty_inventory_reports_fixed_unavailable_capabilities(self) -> None:
         inventory = AutomaticInitInventory(workspace_root="/workspace")
 
@@ -388,6 +410,19 @@ class AutomaticWorkspaceInitPlannerTests(unittest.TestCase):
         self.assertIn("documents", inventory.truncated_candidate_classes)
         self.assertEqual(plan.capabilities[0].status, "partial")
         self.assertEqual(plan.capabilities[0].inputs, ())
+
+    def test_discovery_rejects_an_unreadable_executable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            build = workspace / "build"
+            build.mkdir()
+            executable = build / "app.elf"
+            executable.write_bytes(b"ELF")
+            executable.chmod(0)
+
+            inventory = collect_workspace_plan(workspace).automatic_init_inventory
+
+        self.assertEqual(inventory.executable_candidates, ())
 
     def test_inventory_bounds_each_candidate_class_and_blocks_auto_selection(
         self,

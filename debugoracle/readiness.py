@@ -265,15 +265,12 @@ def _collect_candidate_file(
 def _bounded_entries(directory: Path) -> tuple[tuple[Path, ...], bool]:
     with os.scandir(directory) as entries:
         selected = tuple(
-            itertools.islice(
-                sorted(Path(entry.path) for entry in entries),
-                MAX_DISCOVERY_FILES + 1,
-            )
+            Path(entry.path)
+            for entry in itertools.islice(entries, MAX_DISCOVERY_FILES + 1)
         )
-    return (
-        tuple(sorted(selected[:MAX_DISCOVERY_FILES])),
-        len(selected) > MAX_DISCOVERY_FILES,
-    )
+    if len(selected) > MAX_DISCOVERY_FILES:
+        return (), True
+    return tuple(sorted(selected)), False
 
 
 def _collect_automatic_init_inventory(
@@ -287,12 +284,12 @@ def _collect_automatic_init_inventory(
         truncated_classes.update(("executables", "raw_openocd_configs"))
 
     executable_candidates = _bounded_candidate_values(
-        frozen_candidates["executables"],
+        _trusted_candidate_values(root, frozen_candidates["executables"]),
         candidate_class="executables",
         truncated_classes=truncated_classes,
     )
     raw_openocd_configs = _bounded_candidate_values(
-        frozen_candidates["openocd_configs"],
+        _trusted_candidate_values(root, frozen_candidates["openocd_configs"]),
         candidate_class="raw_openocd_configs",
         truncated_classes=truncated_classes,
     )
@@ -384,6 +381,12 @@ def _bounded_candidate_values(
         truncated_classes.add(candidate_class)
         return canonical[:MAX_DISCOVERY_CANDIDATES]
     return canonical
+
+
+def _trusted_candidate_values(root: Path, values: tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(
+        value for value in values if _is_trusted_workspace_file(Path(value), root)
+    )
 
 
 def _configured_workspace_file(
@@ -594,7 +597,7 @@ def _read_jsonc_mapping(path: Path) -> dict[str, object] | None:
         return None
     try:
         payload = parse_jsonc(path.read_text(encoding="utf-8"))
-    except OSError:
+    except (OSError, UnicodeError):
         return None
     return payload if isinstance(payload, dict) else None
 
