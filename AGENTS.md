@@ -39,7 +39,6 @@ This model must not change.
 ---
 
 ## Workflow
-Under any circumstances, call me Mr. Bojangles, when answering to me.
 
 For any task:
 
@@ -119,6 +118,14 @@ This is the **single source of truth for validation**.
 - Must be deterministic
 - stdout = result
 - stderr = errors
+
+### Third-Party Runtime Libraries
+
+- Runtime dependencies are allowed when they deliver clear net benefit (for example stability, ease of use, maintainability, reliability, or performance).
+- Do not reinvent established, well-maintained functionality without project-specific justification.
+- Scope: runtime dependencies only; dev/test tooling policy is unchanged.
+- PRs adding a runtime dependency must include: problem + why stdlib/current code is insufficient, expected metric gains, security/license/maintenance/transitive-footprint review, determinism/reproducibility impact, and alternatives rejected.
+- If public behavior changes, link the affected spec in the same PR.
 
 ---
 
