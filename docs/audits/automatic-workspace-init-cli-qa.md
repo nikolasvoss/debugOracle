@@ -3,12 +3,12 @@
 | Field | Value |
 |---|---|
 | Date | 2026-08-21 |
-| Baseline | `08a5f39` |
+| Baseline | CLI matrix `08a5f39`; final revalidation `b4fd219` |
 | Command | `./dbgoracle init-workspace` |
 | Mode | `full` |
 | Scope | Automatic workspace initialization public CLI contract |
 | Measured CLI time | 18.6 seconds (fixture setup and analysis excluded) |
-| Outcome | **REVIEW** |
+| Outcome | **PASS** |
 | Workspace root | `/tmp/dbgoracle-auto-cliqa.0FEl60` (bounded, ephemeral cases) |
 
 Task spec:
@@ -25,12 +25,14 @@ exit class, emitted parseable or expected help output on stdout, emitted zero
 bytes on stderr, and produced only the authorized workspace artifacts. No CLI
 blocker was found.
 
-The gate remains **REVIEW**, rather than PASS, because the authorized real-PDF
-checks ran with locally installed `pypdf==6.9.2`; the declared and security-fixed
-runtime target is `pypdf==6.16.1`. No package was downloaded or installed. A
-clean ship environment must select 6.16.1 and repeat the PDF checks.
+The original command matrix ran with locally installed `pypdf==6.9.2`. Final
+ship validation on 2026-08-21 proved `pypdf==6.16.1` in both the checkout Python
+and pipx DebugOracle environments, then repeated the focused real-PDF, search,
+malformed-PDF, automatic-init, idempotence, and reference-workspace coverage.
+All 105 focused tests passed, so the earlier ship-environment constraint is
+resolved and the gate is promoted to **PASS**.
 
-## Health Score: 97/100
+## Health Score: 98/100
 
 | Category | Score |
 |---|---:|
@@ -39,23 +41,25 @@ clean ship environment must select 6.16.1 and repeat the PDF checks.
 | Output determinism | 100 |
 | Error handling | 100 |
 | Reproducibility | 100 |
-| Security hygiene | 80 |
+| Security hygiene | 90 |
 
-The rounded aggregate is 97. Security hygiene is reduced only for the
-ship-environment dependency constraint and the already tracked residual risks;
-this run found no new unsafe CLI behavior.
+The rounded aggregate is 98. Security hygiene retains a small reduction for the
+three already tracked non-blocking residual risks; this run found no new unsafe
+CLI behavior.
 
 ## Blocked Findings (Must Fix)
 
 None in the automatic-initialization CLI behavior.
 
-## Ship-Environment Constraint
+## Resolved Ship-Environment Constraint
 
-1. **CLIQA-AWI-001: declared PDF parser target not exercised** — The local
-   interpreter reports `pypdf==6.9.2`, while `pyproject.toml` declares 6.16.1.
-   This does not invalidate the CLI orchestration evidence, but it blocks the
-   final ship claim until a clean environment asserts 6.16.1 and repeats the
-   authorized real-PDF, search, malformed-PDF, and idempotence checks.
+1. **CLIQA-AWI-001: declared PDF parser target not exercised — resolved
+   2026-08-21.** Checkout Python reports `pypdf 6.16.1` from
+   `/home/niko/.local/lib/python3.12/site-packages`, and the pipx DebugOracle
+   environment reports 6.16.1 from
+   `/home/niko/.local/pipx/venvs/debugoracle/lib/python3.12/site-packages`.
+   The 105-test focused revalidation covers authorized real-PDF ingestion,
+   search, malformed-PDF isolation, and unchanged automatic-init reruns.
 
 ## Review-Only Findings
 
@@ -81,13 +85,13 @@ process, and separate stdout/stderr captures.
 | Help: `init-workspace --help` | 0 | 2,527 B help / 0 B | Lists `--auto`, `--yes`, explicit input flags, and `{text,json}` | Pass |
 | Empty: `--workspace-root $QA_ROOT/empty --auto --format json` | 1 | 1,466 B JSON / 0 B | Schema `1`; scope `automatic_workspace_init`; ordered capabilities all `unavailable`; zero files written | Pass |
 | No consent: `--workspace-root $QA_ROOT/docs_no_yes --auto --format json` | 2 | 1,822 B JSON / 0 B | `partial`; PDF reported with `workspace_discovery`; first action `authorize_document_ingest`; application not attempted; no sidecar, `.vscode`, or `.dbgoracle`; source unchanged | Pass |
-| Docs only: `--workspace-root $QA_ROOT/docs_yes --auto --yes --format json` | 2 | 2,027 B JSON / 0 B | Overall `partial`; documentation `complete`; pypdf, 2 pages, 2 chunks, clean; hardware capabilities unavailable | Pass with environment constraint |
-| Search: `docs search USART --workspace-root $QA_ROOT/docs_yes --format json` | 0 | 4,817 B JSON / 0 B | BM25; two clean hits; results contain `USART1SEL`, `USART_CR1`, and `USART_BRR` evidence | Pass with environment constraint |
-| Full: `--workspace-root $QA_ROOT/full --auto --yes --executable build/app.elf --svd-file .dbgoracle/device.svd --openocd-config config/interface.cfg --openocd-config config/target.cfg --format json` | 0 | 3,583 B JSON / 0 B | Overall and all three capabilities `complete`; capability order fixed; docs provenance `workspace_discovery`; ELF/SVD/OpenOCD provenance `explicit`; five generated artifacts | Pass with environment constraint |
+| Docs only: `--workspace-root $QA_ROOT/docs_yes --auto --yes --format json` | 2 | 2,027 B JSON / 0 B | Overall `partial`; documentation `complete`; pypdf, 2 pages, 2 chunks, clean; hardware capabilities unavailable | Pass; revalidated with 6.16.1 |
+| Search: `docs search USART --workspace-root $QA_ROOT/docs_yes --format json` | 0 | 4,817 B JSON / 0 B | BM25; two clean hits; results contain `USART1SEL`, `USART_CR1`, and `USART_BRR` evidence | Pass; revalidated with 6.16.1 |
+| Full: `--workspace-root $QA_ROOT/full --auto --yes --executable build/app.elf --svd-file .dbgoracle/device.svd --openocd-config config/interface.cfg --openocd-config config/target.cfg --format json` | 0 | 3,583 B JSON / 0 B | Overall and all three capabilities `complete`; capability order fixed; docs provenance `workspace_discovery`; ELF/SVD/OpenOCD provenance `explicit`; five generated artifacts | Pass; revalidated with 6.16.1 |
 | Ambiguity: `--workspace-root $QA_ROOT/ambiguous --auto --format json` | 2 | 2,411 B JSON / 0 B | Two ELF and two SVD candidates yield `choose_executable` and `choose_svd`; no candidate guessed; no `.vscode` writes | Pass |
 | User-owned VS Code: `--workspace-root $QA_ROOT/owned --auto --executable build/app.elf --openocd-config config/target.cfg --format json` | 2 | 5,938 B JSON / 0 B | Scaffold `partial`; all three existing files listed as blocked; before/after SHA-256 sets identical | Pass |
-| Full identical rerun: same full command | 0 | 3,583 B JSON / 0 B | First/second stdout byte-identical; all five artifact SHA-256 values identical | Pass with environment constraint |
-| Malformed PDF: full explicit inputs plus `docs/broken.pdf` and `--yes` | 2 | 3,912 B JSON / 0 B | Documentation `partial`, `ingest_state=failed`, controlled pypdf warning; scaffold/register still `complete`; source unchanged | Pass with environment constraint |
+| Full identical rerun: same full command | 0 | 3,583 B JSON / 0 B | First/second stdout byte-identical; all five artifact SHA-256 values identical | Pass; revalidated with 6.16.1 |
+| Malformed PDF: full explicit inputs plus `docs/broken.pdf` and `--yes` | 2 | 3,912 B JSON / 0 B | Documentation `partial`, `ingest_state=failed`, controlled pypdf warning; scaffold/register still `complete`; source unchanged | Pass; revalidated with 6.16.1 |
 | Missing explicit path: valid ELF plus `--openocd-config missing.cfg` | 1 | 239 B JSON / 0 B | `failed`; exact `automatic input does not exist` error; no managed output | Pass |
 | Outside explicit path: valid ELF plus outside-root config | 1 | 295 B JSON / 0 B | `failed`; exact `outside the workspace` error; no managed output | Pass |
 | Symlink explicit path: valid ELF plus symlinked config | 1 | 252 B JSON / 0 B | `failed`; exact `must not use symlinks` error; no managed output | Pass |
@@ -129,9 +133,9 @@ and an empty-index JSON array (`index.json`, 2 bytes).
 |---|---:|---:|
 | Critical | 0 | 0 |
 | High | 0 | 0 |
-| Medium | 0 | 4 |
+| Medium | 0 | 3 |
 | Low | 0 | 0 |
-| **Total** | **0** | **4** |
+| **Total** | **0** | **3** |
 
 ## Reproduction Notes
 
@@ -146,11 +150,12 @@ and an empty-index JSON array (`index.json`, 2 bytes).
   assertions without embedding large extracted document text.
 - This gate did not alter CLI code, `AGENTS.md`, P0 files, or the reference
   workspace submodule.
+- Final 6.16.1 revalidation ran the checkout test modules for the automatic
+  planner/CLI/docs contract, docs sidecar and CLI rendering, and reference
+  workspace: 105 tests passed. `./scripts/verify.sh full` subsequently passed
+  Ruff, Ruff format, Pyright, pytest-fast, coverage, and Bandit.
 
 ## Next Action
 
-In a clean release environment, install the repository's declared base
-dependencies, assert `pypdf.__version__ == "6.16.1"`, and repeat the four
-PDF-crossing rows: docs-only ingest, search, full rerun/idempotence, and
-malformed-PDF isolation. If those pass, this CLI QA outcome can be promoted
-from REVIEW to PASS without another source change.
+No CLI-QA blocker remains. Preserve the exact dependency pin and retain
+CLIQA-AWI-002 through CLIQA-AWI-004 as non-blocking follow-up risks.

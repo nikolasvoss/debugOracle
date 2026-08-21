@@ -1,10 +1,12 @@
 # Automatic Workspace Initialization Security Review
 
-Date: 2026-08-19
+Date: 2026-08-21
 
 Gate: mandatory `/security-review`
 
 Reviewed baseline: `799bfa7`
+
+Final ship-validation baseline: `b4fd219`
 
 Task spec:
 [`AUTOMATIC_WORKSPACE_INIT_TASK_SPEC.md`](../plans/AUTOMATIC_WORKSPACE_INIT_TASK_SPEC.md)
@@ -18,7 +20,7 @@ Code-review input:
 ## Result
 
 - `risk_tier`: high
-- `status`: issues_found
+- `status`: pass
 - `gate`: pass with fixes and tracked non-critical residual risks
 - `blockers`: none for this security gate
 
@@ -26,12 +28,11 @@ No critical or high-severity finding remains open. The review found and fixed
 two high-severity issues: unsafe document-sidecar storage aliases and a pinned
 PDF parser version affected by published resource-consumption advisories.
 
-The repository now declares `pypdf==6.16.1`. The local development environment
-still contained 6.9.2 after an environment update was not authorized, so the
-functional PDF suite below validates compatibility against 6.9.2, not the new
-runtime pin. A clean-environment install must prove that 6.16.1 is selected and
-run the same PDF tests before `/ship`; this is a release-validation condition,
-not an unresolved source-code vulnerability.
+The repository declares `pypdf==6.16.1`. Final ship validation on 2026-08-21
+proved that both the checkout interpreter and the installed pipx DebugOracle
+environment select 6.16.1, then exercised the PDF/docs/automatic-init suite and
+the full repository gate successfully. The earlier release-validation condition
+is resolved.
 
 ## Findings
 
@@ -187,9 +188,21 @@ None.
 - `pyright`: passed.
 - `bandit`: passed.
 - `git diff --check`: passed before final staging.
-- Local environment constraint: `python3 -m pip show pypdf` reported 6.9.2.
-  The attempted environment update was not authorized and was not retried.
+- Original review environment: the security-review suite above ran with
+  `pypdf==6.9.2`; this historical constraint is superseded by the final ship
+  evidence below.
+- Final version evidence on 2026-08-21:
+  - checkout `python3`: `pypdf 6.16.1` from
+    `/home/niko/.local/lib/python3.12/site-packages/pypdf/__init__.py`;
+  - pipx DebugOracle environment: `pypdf 6.16.1` from
+    `/home/niko/.local/pipx/venvs/debugoracle/lib/python3.12/site-packages`.
+- Final focused revalidation under 6.16.1:
+  `python3 -m unittest tests.test_auto_init_planner tests.test_auto_init_cli tests.test_auto_init_docs tests.test_docs_sidecar tests.test_docs_cli_and_status_capture tests.test_reference_workspace_samples`
+  - 105 tests passed, including authorized real-PDF ingestion, BM25 search,
+    malformed-PDF isolation, automatic-init idempotence, and the bundled
+    reference-workspace flow.
+- Final repository validation: `./scripts/verify.sh full` passed Ruff, Ruff
+  format, Pyright, pytest-fast, coverage, and Bandit.
 
-The mandatory clean-environment release gate must install the declared base
-dependency, assert `pypdf.__version__ == "6.16.1"`, and run the same PDF suite
-before `/ship`.
+No critical or high-severity finding remains open. SR-AWI-003 through
+SR-AWI-005 remain explicitly tracked, non-blocking residual risks.

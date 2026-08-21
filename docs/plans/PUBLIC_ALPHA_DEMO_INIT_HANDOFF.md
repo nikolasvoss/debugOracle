@@ -1,11 +1,12 @@
 # Public Alpha Demo and Workspace Initialization Handoff
 
-Status: automatic initialization implemented and documentation synchronized on
-2026-08-19; pre-landing review and release validation remain pending.
+Status: automatic initialization implemented, documented, and locally release
+ready on 2026-08-21. Remote/base synchronization was not performed by the local
+ship gate.
 
 This document records the implemented hardware-free demo and automatic
-workspace initialization, plus the exact remaining release gates. It
-distinguishes completed implementation from validation that has not yet run.
+workspace initialization, the completed local release gates, and the remaining
+publication actions.
 
 ## Product intent
 
@@ -40,6 +41,11 @@ ambiguous inputs should produce precise next actions rather than guesses.
 Main repository:
 
 - branch: `codex/demo-docs-init-flow`
+- ship-validation baseline: `b4fd219 docs: record automatic workspace init CLI QA`
+- `08a5f39 security: harden automatic document initialization`
+- `799bfa7 fix: harden automatic workspace initialization`
+- `f9aad79 docs: pin automatic demo agent flow`
+- `0ffbddd docs: publish automatic init showcase`
 - `6f2b00b feat: apply automatic workspace initialization`
 - `94e375e fix: contain automatic document discovery`
 - `ca51a17 feat: plan automatic workspace initialization`
@@ -114,8 +120,8 @@ present a provenance-aware diagnosis.
 - Commit hooks passed for both main-repository commits: Ruff, Ruff format,
   Pyright, pytest-fast, coverage, and Bandit.
 
-Final release review, demo CLI QA, security review, and
-`./scripts/verify.sh full` have not yet been run for the complete slice.
+The final review, CLI-QA, security, document-release, and full-validation gates
+are recorded below.
 
 ## Completed automatic-initialization slice
 
@@ -146,21 +152,37 @@ hardware-free demo relies on the register catalog already embedded in its
 committed snapshot and does not require an external SVD. Live users are told to
 place their exact-device SVD at `.dbgoracle/<device>.svd`.
 
-## Remaining release slice
+## Final release validation
 
-Do not modify the existing untracked P0 planning files until their ownership
-and intended contents have been reconciled. The implementation is complete;
-the remaining work is verification and release readiness:
+Local ship status: **ready**.
 
-1. Run the pre-landing `/review` gate over the complete implementation diff.
-2. Run `/cli-qa` against explicit legacy init, auto planning without consent,
-   docs-only auto init, full unambiguous auto init, ambiguity, and rerun flows.
-3. Run the mandatory `/security-review` for the untrusted local PDF/JSONC/path
-   boundary and confirm zero network, subprocess, socket, or target access.
-4. Run `./scripts/verify.sh full`; do not claim release completion while any
-   hook fails.
-5. Reconcile the user-owned P0 planning files separately and update their state
-   only with explicit ownership.
+- Pre-landing code review: passed with fixes; no critical or high-severity
+  finding remains open.
+- Mandatory high-risk security review: passed with fixes. The descriptor-atomic
+  filesystem window, in-process parser resource envelope, and recoverable
+  multi-file scaffold publication remain documented non-blocking risks.
+- CLI QA: passed. The 14-case behavior matrix had no CLI blocker, and its former
+  parser-version constraint is resolved.
+- Checkout version evidence: `pypdf 6.16.1` from
+  `/home/niko/.local/lib/python3.12/site-packages/pypdf/__init__.py`.
+- pipx DebugOracle version evidence: `pypdf 6.16.1` from
+  `/home/niko/.local/pipx/venvs/debugoracle/lib/python3.12/site-packages`.
+- Focused 6.16.1 revalidation:
+  `python3 -m unittest tests.test_auto_init_planner tests.test_auto_init_cli tests.test_auto_init_docs tests.test_docs_sidecar tests.test_docs_cli_and_status_capture tests.test_reference_workspace_samples`
+  passed all 105 tests.
+- `./scripts/verify.sh full`: passed Ruff, Ruff format, Pyright, pytest-fast,
+  coverage, and Bandit.
+- Document-release gate: README commands and placement guidance, affected
+  specifications, and `changelog.md` describe the implemented behavior. No
+  additional README, spec, changelog, or TODO edit was required.
+- Worktree ownership check: the modified `AGENTS.md` and four untracked P0 plan
+  files remain untouched and unstaged; the reference-workspace submodule was
+  not changed by final validation.
+
+The local gate did not fetch, pull, push, compare a remote base, or resolve a
+remote integration branch. Perform that repository synchronization separately
+before publishing if the release workflow requires it. Reconcile the user-owned
+P0 planning files only with explicit ownership.
 
 ## Resume commands
 
@@ -170,10 +192,11 @@ git -C examples/debugoracle-reference-workspaces switch codex/demo-docs-init-flo
 git status --short --branch
 git -C examples/debugoracle-reference-workspaces status --short --branch
 python3 -m unittest tests.test_reference_workspace_samples
-python3 -m unittest tests.test_auto_init_planner tests.test_auto_init_cli
-python3 -m unittest tests.test_auto_init_docs
+python3 -m unittest tests.test_auto_init_planner tests.test_auto_init_cli tests.test_auto_init_docs tests.test_docs_sidecar tests.test_docs_cli_and_status_capture tests.test_reference_workspace_samples
+./scripts/verify.sh full
 ```
 
 At resume time, first confirm that the two branches and commit IDs above are
-still present and that the pre-existing user files remain untouched. Then run
-the remaining review, CLI QA, security, and full-validation gates in that order.
+still present and that the pre-existing user files remain untouched. The next
+release action is remote/base synchronization or publication, not another local
+implementation gate, unless the source changes.
