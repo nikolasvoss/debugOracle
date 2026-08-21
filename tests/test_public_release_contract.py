@@ -28,6 +28,23 @@ def _tracked_paths(repository: Path) -> set[str]:
     return {path.decode("utf-8") for path in completed.stdout.split(b"\0") if path}
 
 
+def _tracked_gitlinks(repository: Path) -> set[str]:
+    completed = subprocess.run(
+        ["git", "ls-files", "--stage", "-z"],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+    )
+    gitlinks: set[str] = set()
+    for entry in completed.stdout.split(b"\0"):
+        if not entry:
+            continue
+        metadata, path = entry.split(b"\t", 1)
+        if metadata.split(b" ", 1)[0] == b"160000":
+            gitlinks.add(path.decode("utf-8"))
+    return gitlinks
+
+
 class PublicReleaseContractTests(unittest.TestCase):
     def test_base_dependency_is_the_audited_pypdf_release(self) -> None:
         pyproject = tomllib.loads(
@@ -119,7 +136,7 @@ class PublicReleaseContractTests(unittest.TestCase):
 
         self.assertIn("## Supported Versions", security_text)
         self.assertIn(
-            "https://github.com/nikolasvoss/debugoracle/security/advisories/new",
+            "https://github.com/nikolasvoss/ai-debugger-v2/security/advisories/new",
             security_text,
         )
         self.assertNotIn("mailto:", security_text.casefold())
@@ -139,10 +156,10 @@ class PublicReleaseContractTests(unittest.TestCase):
             project["urls"],
             {
                 "Changelog": (
-                    "https://github.com/nikolasvoss/debugoracle/blob/main/changelog.md"
+                    "https://github.com/nikolasvoss/ai-debugger-v2/blob/main/changelog.md"
                 ),
-                "Issues": "https://github.com/nikolasvoss/debugoracle/issues",
-                "Repository": "https://github.com/nikolasvoss/debugoracle",
+                "Issues": "https://github.com/nikolasvoss/ai-debugger-v2/issues",
+                "Repository": "https://github.com/nikolasvoss/ai-debugger-v2",
             },
         )
 
@@ -167,6 +184,10 @@ class PublicReleaseContractTests(unittest.TestCase):
         self.assertEqual(
             urls,
             {"https://github.com/nikolasvoss/debugoracle-reference-workspaces"},
+        )
+        self.assertEqual(
+            _tracked_gitlinks(REPO_ROOT),
+            {"examples/debugoracle-reference-workspaces"},
         )
 
     def test_vendor_manual_and_generated_doc_artifacts_are_not_tracked(self) -> None:

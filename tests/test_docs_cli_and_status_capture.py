@@ -109,9 +109,10 @@ class DocsCliTests(unittest.TestCase):
             progress(1, 1, "parse")
         self.assertIn("parse: 1/1 pages", out.getvalue())
 
-        lines = docs_cli._next_steps_lines(
-            [_ingest_result(state="partial"), _ingest_result(state="failed")]
-        )
+        with patch.object(docs_cli, "_docling_installed", return_value=True):
+            lines = docs_cli._next_steps_lines(
+                [_ingest_result(state="partial"), _ingest_result(state="failed")]
+            )
         self.assertIn("Next:", lines[0])
         self.assertTrue(any("--parser docling --force" in line for line in lines))
         self.assertTrue(any("docs doctor" in line for line in lines))

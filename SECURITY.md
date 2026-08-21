@@ -13,7 +13,7 @@ the latest `0.2.x` release.
 ## Reporting a Vulnerability
 
 Report suspected vulnerabilities through
-[GitHub private vulnerability reporting](https://github.com/nikolasvoss/debugoracle/security/advisories/new).
+[GitHub private vulnerability reporting](https://github.com/nikolasvoss/ai-debugger-v2/security/advisories/new).
 This is the project's only security-reporting channel. Please do not disclose a
 suspected vulnerability in a public issue, discussion, or pull request.
 

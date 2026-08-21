@@ -103,13 +103,13 @@ After cloning this repository, open it in Codex or Claude Code and paste:
 Install DebugOracle globally for this user. Read the project instructions and
 README.md first.
 Use the supported installer. Before running it, summarize every optional
-installation component and ask which ones I want; do not silently select or
-skip optional components. For the current docs profile, offer `none` (base
-only), `docling` (better PDF extraction), `semantic` (semantic search), or
-`all` (both), then pass my answer as `--docs-tools <profile>`. Proceed with
-required routine per-user setup without asking; ask only before privileged or
+installation component. The 0.2.0 supported installer provides only the base
+`pypdf` profile because the optional Docling and semantic dependency/model
+license audits are incomplete. Proceed with required routine per-user setup
+without asking; ask only before privileged or
 system-wide changes, destructive actions, project-file changes, or an explicit
-PEP 668 override. Confirm when `dbgoracle --version` works.
+PEP 668 override. Confirm when
+`dbgoracle --version` works.
 ```
 
 ### Connect a firmware project
@@ -169,27 +169,17 @@ Manifest-driven launcher path from a checkout:
 ./scripts/install/linux.sh
 ```
 
-After `dbgoracle` is installed, the setup script asks whether to install optional docs tooling:
-
-- `docling` for stronger extraction on difficult/scanned PDFs
-- semantic search deps (`sentence-transformers`, `numpy`) for hybrid docs search
-
-Non-interactive or scripted installs can choose explicitly:
+Docling, semantic, and combined profiles remain disabled for the 0.2.0 supported
+installer because their dependency and model license audits are incomplete.
+Use the supported base profile explicitly for non-interactive installs:
 
 ```bash
 ./scripts/install/linux.sh --docs-tools none
-./scripts/install/linux.sh --docs-tools docling
-./scripts/install/linux.sh --docs-tools semantic
-./scripts/install/linux.sh --docs-tools all
 ```
 
-If you skipped optional docs tooling during install, add it later with one command:
-
-```bash
-./scripts/install/linux.sh --docs-tools docling
-./scripts/install/linux.sh --docs-tools semantic
-./scripts/install/linux.sh --docs-tools all
-```
+The optional package extras remain declared for downstream experimentation but
+are outside the supported installer path. See `THIRD_PARTY_NOTICES.md` and the
+dependency audit before selecting them manually.
 
 Secondary local-dev path from a checkout:
 
@@ -266,8 +256,7 @@ dbgoracle docs status
 Key points:
 
 - Default parser is `pypdf` (`pypdf` is installed with base dependencies).
-- Optional parser: `--parser docling` (install with `./scripts/install/linux.sh --docs-tools docling`).
-- Optional hybrid search: ingest with `--semantic`; `docs search` auto-selects hybrid ranking when embeddings are available (install with `./scripts/install/linux.sh --docs-tools semantic`).
+- Optional Docling parsing and semantic search remain outside the 0.2.0 supported installer while their dependency and model license audits are incomplete.
 - Preflight dependency check: `dbgoracle docs doctor`.
 - If you run ingest without `--file`/`--folder`, DebugOracle discovers likely PDFs under `doc/` and `docs/` and requires `--yes` confirmation.
 - In TTY mode, ingest can prompt for discovered-doc confirmation; use `--no-interactive` to disable prompts.

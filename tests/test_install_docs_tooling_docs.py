@@ -5,15 +5,14 @@ from pathlib import Path
 
 
 class InstallDocsToolingDocsTests(unittest.TestCase):
-    def test_readme_documents_linux_installer_docs_tools_commands(self) -> None:
+    def test_readme_marks_optional_installer_profiles_disabled(self) -> None:
         readme = Path("README.md").read_text(encoding="utf-8")
+        normalized = " ".join(readme.split())
 
-        self.assertIn("./scripts/install/linux.sh --docs-tools docling", readme)
-        self.assertIn(
-            "./scripts/install/linux.sh --docs-tools semantic",
-            readme,
-        )
-        self.assertIn("./scripts/install/linux.sh --docs-tools all", readme)
+        self.assertIn("disabled for the 0.2.0 supported installer", normalized)
+        self.assertNotIn("./scripts/install/linux.sh --docs-tools docling", readme)
+        self.assertNotIn("./scripts/install/linux.sh --docs-tools semantic", readme)
+        self.assertNotIn("./scripts/install/linux.sh --docs-tools all", readme)
         self.assertNotIn("./scripts/install/install-docs-tools.sh", readme)
 
     def test_docs_ingestion_marks_optional_installer_profiles_disabled(self) -> None:

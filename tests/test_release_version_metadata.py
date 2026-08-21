@@ -9,6 +9,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 
 from debugoracle.cli.main import build_parser
+from debugoracle.installer.core import DEFAULT_MANIFEST_URL
 from debugoracle.version import __version__
 
 
@@ -36,7 +37,7 @@ class ReleaseVersionMetadataTests(unittest.TestCase):
         pyproject = (REPOSITORY_ROOT / "pyproject.toml").read_text(encoding="utf-8")
 
         self.assertEqual(manifest["version"], __version__)
-        public_repository_url = "https://github.com/nikolasvoss/debugoracle"
+        public_repository_url = "https://github.com/nikolasvoss/ai-debugger-v2"
         self.assertEqual(
             manifest["source_url"],
             f"{public_repository_url}/archive/refs/tags/v{__version__}.tar.gz",
@@ -44,6 +45,13 @@ class ReleaseVersionMetadataTests(unittest.TestCase):
         self.assertEqual(
             manifest["release_notes_url"],
             f"{public_repository_url}/releases/tag/v{__version__}",
+        )
+        self.assertEqual(
+            DEFAULT_MANIFEST_URL,
+            (
+                "https://raw.githubusercontent.com/nikolasvoss/ai-debugger-v2/"
+                "main/release/install-manifest.json"
+            ),
         )
         self.assertIn('dynamic = ["version"]', pyproject)
         self.assertIn('version = {attr = "debugoracle.version.__version__"}', pyproject)

@@ -841,8 +841,9 @@ second-page text
             rendered = _render_ingest(batch, fmt="text")
 
         self.assertIn("hint: extraction quality may improve with Docling", rendered)
-        self.assertIn("pipx inject debugoracle docling", rendered)
-        self.assertIn("pip install 'debugoracle[docling]'", rendered)
+        self.assertIn("unavailable in the 0.2.0 supported installer", rendered)
+        self.assertNotIn("pipx inject debugoracle docling", rendered)
+        self.assertNotIn("pip install 'debugoracle[docling]'", rendered)
 
     def test_cli_docs_doctor_json_returns_summary(self) -> None:
         stdout_buffer = StringIO()

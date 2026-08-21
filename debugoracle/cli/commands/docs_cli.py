@@ -131,12 +131,9 @@ def _render_ingest(batch: DocsIngestBatch, *, fmt: str) -> str:
                 and not _docling_installed()
             ):
                 lines.append("  hint: extraction quality may improve with Docling")
-                lines.append("    pipx inject debugoracle docling")
                 lines.append(
-                    "    # or in the active venv: pip install 'debugoracle[docling]'"
-                )
-                lines.append(
-                    f"    dbgoracle docs ingest {result.source_pdf} --parser=docling"
+                    "    Docling is unavailable in the 0.2.0 supported installer "
+                    "while its dependency and model license audit is incomplete."
                 )
     if batch.warnings:
         lines.append("Warnings:")
@@ -281,7 +278,9 @@ def _next_steps_lines(results: list[DocsIngestResult]) -> list[str]:
     lines = ["Next:"]
     first_source = results[0].source_pdf
     lines.append(f'- Search now: dbgoracle docs search "<query>" --file {first_source}')
-    if any(result.ingest_state in {"partial", "warning"} for result in results):
+    if _docling_installed() and any(
+        result.ingest_state in {"partial", "warning"} for result in results
+    ):
         lines.append(
             "- If quality looks degraded, retry with: --parser docling --force"
         )

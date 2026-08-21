@@ -28,9 +28,9 @@ semantic = ["sentence-transformers>=2.7", "numpy>=1.26"]
 dev = ["pyright", "pytest"]
 
 [project.urls]
-Changelog = "https://github.com/nikolasvoss/debugoracle/blob/main/changelog.md"
-Issues = "https://github.com/nikolasvoss/debugoracle/issues"
-Repository = "https://github.com/nikolasvoss/debugoracle"
+Changelog = "https://github.com/nikolasvoss/ai-debugger-v2/blob/main/changelog.md"
+Issues = "https://github.com/nikolasvoss/ai-debugger-v2/issues"
+Repository = "https://github.com/nikolasvoss/ai-debugger-v2"
 
 [project.scripts]
 dbgoracle = "debugoracle:main"

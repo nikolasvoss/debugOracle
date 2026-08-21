@@ -18,6 +18,15 @@
   RTT, firmware source, RCC/USART register values, and a project-owned register
   reference.
 
+### Fixed
+- Kept automatic filesystem discovery hard-bounded and deterministic, rejected
+  unreadable discovered executables, and contained malformed VS Code file
+  encodings without suppressing independent capabilities.
+- Removed the orphaned private HIL gitlink and aligned the default installer
+  manifest URL with the public repository.
+- Aligned README and CLI guidance with the disabled 0.2.0 Docling and semantic
+  installer profiles.
+
 ## [0.2.0] - 2026-08-13
 
 ### Changed

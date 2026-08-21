@@ -5,6 +5,6 @@
   "version": "0.2.0",
   "python_requires": ">=3.10",
   "installer_min_version": "0.1.0",
-  "release_notes_url": "https://github.com/nikolasvoss/debugoracle/releases/tag/v0.2.0",
-  "source_url": "https://github.com/nikolasvoss/debugoracle/archive/refs/tags/v0.2.0.tar.gz"
+  "release_notes_url": "https://github.com/nikolasvoss/ai-debugger-v2/releases/tag/v0.2.0",
+  "source_url": "https://github.com/nikolasvoss/ai-debugger-v2/archive/refs/tags/v0.2.0.tar.gz"
 }
