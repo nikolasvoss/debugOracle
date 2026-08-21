@@ -9,7 +9,7 @@ from pathlib import Path
 
 
 class VerifyScriptTests(unittest.TestCase):
-    def test_default_mode_runs_fast_pass_with_skip_coverage_and_pytest_fast(
+    def test_default_mode_runs_fast_pass_with_tests_and_without_coverage(
         self,
     ) -> None:
         script_path = Path("scripts/verify.sh")
@@ -41,7 +41,8 @@ class VerifyScriptTests(unittest.TestCase):
             self.assertEqual(completed.returncode, 0, completed.stderr)
             self.assertTrue(log_path.exists(), "expected fake pre-commit to run")
             log_text = log_path.read_text(encoding="utf-8")
-            self.assertIn("SKIP=coverage,pytest-fast", log_text)
+            self.assertIn("SKIP=coverage", log_text)
+            self.assertNotIn("SKIP=coverage,pytest-fast", log_text)
             self.assertIn(
                 "PYTEST_ADDOPTS=--ignore=tests/debugoracle-hil-tests", log_text
             )
@@ -51,7 +52,7 @@ class VerifyScriptTests(unittest.TestCase):
                 completed.stdout,
             )
 
-    def test_full_mode_runs_without_skip(self) -> None:
+    def test_full_mode_skips_fast_test_hook(self) -> None:
         script_path = Path("scripts/verify.sh")
         with tempfile.TemporaryDirectory() as tmp:
             bin_dir = Path(tmp) / "bin"
@@ -82,12 +83,18 @@ class VerifyScriptTests(unittest.TestCase):
             self.assertTrue(log_path.exists(), "expected fake pre-commit to run")
             log_text = log_path.read_text(encoding="utf-8")
             self.assertIn("SKIP=", log_text)
+            self.assertIn("SKIP=pytest-fast", log_text)
             self.assertNotIn("SKIP=coverage", log_text)
-            self.assertNotIn("SKIP=pytest-fast", log_text)
             self.assertIn(
                 "PYTEST_ADDOPTS=--ignore=tests/debugoracle-hil-tests", log_text
             )
             self.assertIn("ARGS:run --all-files", log_text)
+
+    def test_quality_configuration_has_fast_and_coverage_test_hooks(self) -> None:
+        config = Path(".pre-commit-config.yaml").read_text(encoding="utf-8")
+
+        self.assertIn("- id: coverage", config)
+        self.assertIn("- id: pytest-fast", config)
 
     def test_invalid_mode_returns_usage_error(self) -> None:
         script_path = Path("scripts/verify.sh")

@@ -17,6 +17,9 @@
 - Documented a hardware-free evidence-synthesis showcase that connects recorded
   RTT, firmware source, RCC/USART register values, and a project-owned register
   reference.
+- The fast verification preflight now runs the non-HIL test suite without
+  coverage, while the required full gate runs the same suite once with the
+  existing coverage threshold and has a three-minute CI timeout.
 
 ### Fixed
 - Kept automatic filesystem discovery hard-bounded and deterministic, rejected
