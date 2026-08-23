@@ -11,3 +11,6 @@ build/
 
 # Private hardware-in-the-loop repository is not part of the public tree.
 /tests/debugoracle-hil-tests/
+
+# Local notes and interview material must never be versioned or released.
+/docs/private_notes/

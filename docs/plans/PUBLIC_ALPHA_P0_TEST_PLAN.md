@@ -1,10 +1,10 @@
 # Public Alpha P0 Test Plan
 
-**Status:** Closed — release evidence recorded for `v0.2.0` on 2026-08-21
+**Status:** Closed — private `v0.2.0` release evidence retained; release withdrawn before public availability
 
 ## Execution Summary
 
-This test plan is retained as historical release evidence. The implemented
+This test plan is retained as historical private release evidence. The implemented
 contracts were exercised by the focused parser, diagnostics, metadata,
 public-release, automatic-initialization, and reference-workspace tests. CLI QA
 passed its 14-case matrix, the final pypdf 6.16.1 revalidation passed 105 focused

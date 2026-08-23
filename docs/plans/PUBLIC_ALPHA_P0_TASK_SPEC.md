@@ -1,11 +1,13 @@
 # Public Alpha P0 Task Spec
 
-**Status:** Closed with accepted deviations — `v0.2.0` published on 2026-08-21
+**Status:** Closed with accepted deviations — private `v0.2.0` withdrawn before public availability
 
 ## Release Disposition
 
 This specification is retained as the historical contract that drove the
-public-alpha work. The core user outcome shipped: an anonymous user can install
+public-alpha work. The private release was withdrawn before public availability;
+a future release must use a newly selected version. The core user outcome is
+ready for a future release: an anonymous user can install
 the base CLI, open the bundled reference workspace, initialize and query the
 project-owned documentation, and inspect deterministic snapshot/register/source
 evidence without an embedded toolchain, probe, board, or vendor PDF.

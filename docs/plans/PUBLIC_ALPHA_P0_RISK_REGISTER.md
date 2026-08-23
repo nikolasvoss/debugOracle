@@ -1,6 +1,6 @@
 # Public Alpha P0 Risk Register
 
-**Status:** Closed for `v0.2.0` with accepted residual risks — 2026-08-21
+**Status:** Closed for withdrawn private `v0.2.0` with accepted residual risks — 2026-08-21
 
 ## Final Risk Disposition
 

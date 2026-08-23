@@ -174,6 +174,27 @@ class PublicReleaseContractTests(unittest.TestCase):
         self.assertIn("*.dbgoracle-docs/", ignore_rules)
         self.assertIn("*.dbgoracle-docs.staging/", ignore_rules)
 
+    def test_private_notes_and_retired_interview_paths_are_not_public(self) -> None:
+        ignore_rules = {
+            line.strip()
+            for line in (REPO_ROOT / ".gitignore")
+            .read_text(encoding="utf-8")
+            .splitlines()
+        }
+
+        self.assertIn("/docs/private_notes/", ignore_rules)
+        private_prefixes = (
+            "docs/private_notes/",
+            "docs/job_interview/",
+            "docs/user_interview/",
+        )
+        offenders = [
+            path
+            for path in _tracked_paths(REPO_ROOT)
+            if path.startswith(private_prefixes)
+        ]
+        self.assertEqual(offenders, [])
+
     def test_only_public_reference_submodule_is_required(self) -> None:
         modules = configparser.ConfigParser()
         modules.read(REPO_ROOT / ".gitmodules", encoding="utf-8")

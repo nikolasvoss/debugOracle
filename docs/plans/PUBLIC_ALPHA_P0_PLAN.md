@@ -1,13 +1,13 @@
 # Public Alpha P0 Implementation Plan
 
-**Status:** Closed with accepted deviations — `v0.2.0` published on 2026-08-21
+**Status:** Closed with accepted deviations — private `v0.2.0` withdrawn before public availability
 
 ## Release Outcome
 
 This file is the historical implementation plan for the public alpha, not an
-active backlog. The reviewed release is tagged `v0.2.0` at main-repository
-commit `175b41728d66d8ecba61dc7969b39c2c98150bfb`; the pinned public reference
-workspace is commit `36934bd168aef6541a3c74bf6ef579b15447505c`.
+active backlog. The private `v0.2.0` tag was withdrawn before public
+availability; a future release will use a newly selected version. The pinned
+public reference workspace is commit `36934bd168aef6541a3c74bf6ef579b15447505c`.
 
 The parser migration, dependency fail-closed policy, public metadata, sanitized
 reference workspace, hardware-free evidence demo, automatic workspace

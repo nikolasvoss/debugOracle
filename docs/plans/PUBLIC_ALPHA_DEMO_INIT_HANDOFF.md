@@ -1,21 +1,19 @@
 # Public Alpha Demo and Workspace Initialization Handoff
 
-Status: completed and published as `v0.2.0` on 2026-08-21.
+Status: completed; the private `v0.2.0` release was withdrawn before public availability.
 
 This document records the implemented hardware-free demo and automatic
 workspace initialization, the completed release gates, and the final
 publication state.
 
-## Published state
+## Withdrawn release state
 
-- Main repository `main` and tag `v0.2.0` point to
-  `175b41728d66d8ecba61dc7969b39c2c98150bfb`.
+- The original `v0.2.0` tag and GitHub release were withdrawn before public
+  availability as part of private-data cleanup.
 - Reference-workspaces `main` points to
   `36934bd168aef6541a3c74bf6ef579b15447505c`.
-- The GitHub release is
-  `https://github.com/nikolasvoss/ai-debugger-v2/releases/tag/v0.2.0`.
-- Remote synchronization, tag publication, and release publication completed
-  after the local gate described below.
+- No replacement release has been created; later work will be released under a
+  newly selected version.
 
 ## Product intent
 
@@ -190,6 +188,6 @@ authorization.
 
 ## Closure
 
-No publication action remains for the `v0.2.0` implementation. Future changes
-start from the published commits above and must preserve the documented
-provenance limitations and residual security risks.
+No publication action remains for the withdrawn `v0.2.0` implementation. Future
+changes must select a new release version and preserve the documented provenance
+limitations and residual security risks.
