@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import hashlib
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -16,7 +17,7 @@ from pypdf.generic import (
 )
 
 from debugoracle.cli import main
-from debugoracle.docs_sidecar import search_documents
+from debugoracle.docs_sidecar import search_documents, status_documents
 from debugoracle.readiness import collect_workspace_plan
 
 
@@ -109,6 +110,11 @@ class AutomaticWorkspaceInitCliTests(unittest.TestCase):
                 documentation["application"]["results"][0]["ingest_state"],
                 "clean",
             )
+            self.assertTrue(
+                documentation["application"]["results"][0]["sidecar_dir"].startswith(
+                    str(workspace / ".dbgoracle" / "documentation-search")
+                )
+            )
             self.assertFalse((workspace / ".vscode").exists())
             hits = search_documents(
                 workspace_root=workspace,
@@ -116,6 +122,18 @@ class AutomaticWorkspaceInitCliTests(unittest.TestCase):
             ).hits
             self.assertEqual(len(hits), 1)
             self.assertIn("CCIPR", hits[0].text)
+            explicit_hits = search_documents(
+                workspace_root=workspace,
+                query="USART1SEL peripheral clock",
+                files=[str(source)],
+            ).hits
+            self.assertEqual(len(explicit_hits), 1)
+            self.assertEqual(
+                status_documents(workspace_root=workspace, files=[str(source)])[
+                    0
+                ].ingest_state,
+                "clean",
+            )
 
     def test_missing_docs_consent_does_not_block_independent_scaffold(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -390,10 +408,10 @@ class AutomaticWorkspaceInitCliTests(unittest.TestCase):
 
     def test_auto_init_rejects_symlinked_document_sidecar_storage(self) -> None:
         storage_suffixes = (
-            ".dbgoracle-docs",
-            ".dbgoracle-docs.staging",
-            ".dbgoracle-docs.publish",
-            ".dbgoracle-docs.backup",
+            "",
+            ".staging",
+            ".publish",
+            ".backup",
         )
         for storage_suffix in storage_suffixes:
             with self.subTest(storage_suffix=storage_suffix):
@@ -405,7 +423,16 @@ class AutomaticWorkspaceInitCliTests(unittest.TestCase):
                     outside.mkdir()
                     source = docs_dir / "reference.pdf"
                     self._write_text_pdf(source, "RCC clock selection")
-                    storage_path = Path(f"{source}{storage_suffix}")
+                    digest = hashlib.sha256(
+                        str(source.resolve()).encode("utf-8")
+                    ).hexdigest()[:12]
+                    storage_path = (
+                        workspace
+                        / ".dbgoracle"
+                        / "documentation-search"
+                        / f"{source.name}-{digest}{storage_suffix}"
+                    )
+                    storage_path.parent.mkdir(parents=True)
                     storage_path.symlink_to(outside, target_is_directory=True)
 
                     stdout, stderr, exit_code = self._run_cli(
@@ -438,8 +465,8 @@ class AutomaticWorkspaceInitCliTests(unittest.TestCase):
 
     def test_auto_init_rejects_symlinked_document_sidecar_files(self) -> None:
         storage_files = (
-            (".dbgoracle-docs", "envelope.json"),
-            (".dbgoracle-docs.staging", "checkpoint.json"),
+            ("", "envelope.json"),
+            (".staging", "checkpoint.json"),
         )
         for storage_suffix, filename in storage_files:
             with self.subTest(storage_suffix=storage_suffix, filename=filename):
@@ -449,7 +476,16 @@ class AutomaticWorkspaceInitCliTests(unittest.TestCase):
                     docs_dir.mkdir(parents=True)
                     source = docs_dir / "reference.pdf"
                     self._write_text_pdf(source, "RCC clock selection")
-                    storage_dir = Path(f"{source}{storage_suffix}")
+                    digest = hashlib.sha256(
+                        str(source.resolve()).encode("utf-8")
+                    ).hexdigest()[:12]
+                    storage_dir = (
+                        workspace
+                        / ".dbgoracle"
+                        / "documentation-search"
+                        / f"{source.name}-{digest}{storage_suffix}"
+                    )
+                    storage_dir.parent.mkdir(parents=True)
                     storage_dir.mkdir()
                     outside_file = Path(tmpdir) / "outside.json"
                     outside_file.write_text("unchanged", encoding="utf-8")

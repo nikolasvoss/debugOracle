@@ -48,6 +48,9 @@ Every ingest writes `envelope.json` with at least:
 ## Storage Contract
 
 - Sidecar artifacts live in a sibling directory named `<source-name>.dbgoracle-docs`.
+- Agent-driven automatic workspace initialization stores new artifacts below
+  `.dbgoracle/documentation-search/`; direct document commands retain sibling
+  storage for compatibility. Search and status read both locations.
 - Sidecars contain `envelope.json` and `index.json`.
 - Optional `embeddings.npy` is written when semantic indexing is enabled.
 - `index.json` stores chunk entries with text/tokens and structural metadata (`heading_path`, `chunk_type`, optional `table_rows`).

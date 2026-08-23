@@ -11,6 +11,15 @@
 
 Own the installed-CLI workspace bootstrap flow for the supported Cortex-Debug/OpenOCD path.
 
+## Agent-First Input Contract
+
+- Fresh initialization creates the optional `debugoracle-input/` directory and
+  adds owned ignore rules for it and `.dbgoracle/`.
+- Automatic discovery checks that directory recursively first, then bounded
+  workspace fallback locations. It never guesses among multiple eligible files.
+- The coding agent, not the deterministic CLI, asks the engineer before
+  `--auto --yes` authorizes local PDF parsing.
+
 ## Responsibilities
 
 - Create the minimum `.dbgoracle` and `.vscode` scaffold for a fresh workspace.

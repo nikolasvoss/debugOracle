@@ -97,8 +97,5 @@ class ReleaseVersionMetadataTests(unittest.TestCase):
     def test_readme_separates_verified_and_unverified_environments(self) -> None:
         readme = (REPOSITORY_ROOT / "README.md").read_text(encoding="utf-8")
 
-        self.assertIn(
-            "Verified alpha environment: Ubuntu 24.04 LTS x86-64, Python 3.12, and `pipx`.",
-            readme,
-        )
-        self.assertIn("All other environments are unverified", readme)
+        self.assertIn("Ubuntu 24.04 LTS x86-64 with Python 3.12", readme)
+        self.assertIn("currently unverified", readme)

@@ -15,10 +15,11 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Protocol
 
-DISCOVERY_DIRECTORIES = ("doc", "docs")
+DISCOVERY_DIRECTORIES = ("debugoracle-input", "doc", "docs")
 DISCOVERY_SUFFIXES = (".pdf",)
 SUPPORTED_INGEST_SUFFIXES = (".pdf", ".txt", ".md", ".rst")
 SIDECAR_SUFFIX = ".dbgoracle-docs"
+MANAGED_DOCUMENTATION_DIRECTORY = "documentation-search"
 ENVELOPE_FILENAME = "envelope.json"
 INDEX_FILENAME = "index.json"
 EMBEDDINGS_FILENAME = "embeddings.npy"
@@ -305,6 +306,20 @@ def _discover_candidate_documents(
     workspace = Path(workspace_root).expanduser().resolve()
     candidates: list[Path] = []
     entries_seen = 0
+    try:
+        root_entries = tuple(
+            sorted(Path(entry.path) for entry in os.scandir(workspace))
+        )
+    except OSError:
+        root_entries = ()
+    for candidate in root_entries:
+        entries_seen += 1
+        if max_entries is not None and entries_seen > max_entries:
+            return _dedupe_paths(sorted(candidates)), True
+        if candidate.is_symlink() or not candidate.is_file():
+            continue
+        if candidate.suffix.lower() in DISCOVERY_SUFFIXES:
+            candidates.append(candidate.resolve())
     for directory_name in DISCOVERY_DIRECTORIES:
         candidate_dir = workspace / directory_name
         if candidate_dir.is_symlink() or not candidate_dir.is_dir():
@@ -364,6 +379,7 @@ def ingest_documents(
     semantic: bool = False,
     force: bool = False,
     progress_cb: ProgressCallback | None = None,
+    managed_storage: bool = False,
 ) -> DocsIngestBatch:
     explicit_files = files or []
     explicit_folders = folders or []
@@ -404,6 +420,7 @@ def ingest_documents(
         selected = discovered
 
     results: list[DocsIngestResult] = []
+    workspace = Path(workspace_root).expanduser().resolve()
     for source in selected:
         try:
             results.append(
@@ -413,12 +430,28 @@ def ingest_documents(
                     semantic=semantic,
                     force=force,
                     progress_cb=progress_cb,
+                    sidecar_dir=(
+                        _managed_sidecar_dir_for(workspace, source)
+                        if managed_storage
+                        else None
+                    ),
                 )
             )
         except Exception as error:
             message = f"Ingest failed for '{source}': {error}"
             warnings.append(message)
-            results.append(_build_failed_result(Path(source), parser_name, [message]))
+            results.append(
+                _build_failed_result(
+                    Path(source),
+                    parser_name,
+                    [message],
+                    sidecar_dir=(
+                        _managed_sidecar_dir_for(workspace, source)
+                        if managed_storage
+                        else None
+                    ),
+                )
+            )
 
     return DocsIngestBatch(
         results=results,
@@ -435,9 +468,10 @@ def ingest_document(
     semantic: bool = False,
     force: bool = False,
     progress_cb: ProgressCallback | None = None,
+    sidecar_dir: Path | None = None,
 ) -> DocsIngestResult:
     source = Path(path).expanduser().resolve()
-    sidecar_dir = sidecar_dir_for(source)
+    sidecar_dir = sidecar_dir or sidecar_dir_for(source)
     staging_dir = _staging_dir_for(sidecar_dir)
     _validate_sidecar_storage_paths(sidecar_dir)
     expected_parser = (
@@ -748,7 +782,7 @@ def search_documents(
     final_scores = list(bm25_scores)
     search_mode = "bm25"
     has_semantic_embeddings = any(
-        (sidecar_dir_for(envelope.source_pdf) / EMBEDDINGS_FILENAME).exists()
+        (_sidecar_dir_from_envelope(envelope) / EMBEDDINGS_FILENAME).exists()
         for envelope, _ in entries
     )
     if has_semantic_embeddings:
@@ -803,11 +837,7 @@ def status_documents(
 ) -> list[DocsStatusEntry]:
     if files:
         targets = [
-            sidecar_dir_for(
-                _resolve_from_workspace(
-                    Path(workspace_root).expanduser().resolve(), item
-                )
-            )
+            _resolve_sidecar_dir(Path(workspace_root).expanduser().resolve(), item)
             for item in files
         ]
     else:
@@ -856,11 +886,7 @@ def load_docs_artifacts(
 ) -> tuple[list[DocsArtifact], list[str]]:
     sidecar_dirs = (
         [
-            sidecar_dir_for(
-                _resolve_from_workspace(
-                    Path(workspace_root).expanduser().resolve(), item
-                )
-            )
+            _resolve_sidecar_dir(Path(workspace_root).expanduser().resolve(), item)
             for item in files
         ]
         if files
@@ -878,11 +904,13 @@ def load_docs_artifacts(
 
 def discover_sidecar_directories(workspace_root: str | Path) -> list[Path]:
     workspace = Path(workspace_root).expanduser().resolve()
+    managed_root = workspace / ".dbgoracle" / MANAGED_DOCUMENTATION_DIRECTORY
     return sorted(
         {
             path.parent.resolve()
             for path in workspace.rglob(ENVELOPE_FILENAME)
             if path.parent.name.endswith(SIDECAR_SUFFIX)
+            or path.parent.is_relative_to(managed_root)
         }
     )
 
@@ -948,6 +976,31 @@ def save_embeddings(sidecar_dir: str | Path, embeddings: Any) -> None:
 def sidecar_dir_for(source_path: str | Path) -> Path:
     source = Path(source_path).expanduser().resolve()
     return source.with_name(f"{source.name}{SIDECAR_SUFFIX}")
+
+
+def _managed_sidecar_dir_for(workspace_root: Path, source_path: Path) -> Path:
+    source = source_path.resolve()
+    digest = hashlib.sha256(str(source).encode("utf-8")).hexdigest()[:12]
+    return (
+        workspace_root
+        / ".dbgoracle"
+        / MANAGED_DOCUMENTATION_DIRECTORY
+        / f"{source.name}-{digest}"
+    )
+
+
+def _resolve_sidecar_dir(workspace_root: Path, source_path: str) -> Path:
+    source = _resolve_from_workspace(workspace_root, source_path)
+    managed = _managed_sidecar_dir_for(workspace_root, source)
+    return (
+        managed if (managed / ENVELOPE_FILENAME).is_file() else sidecar_dir_for(source)
+    )
+
+
+def _sidecar_dir_from_envelope(envelope: DocsEnvelope) -> Path:
+    if envelope.derived_paths:
+        return Path(envelope.derived_paths[0]).parent
+    return sidecar_dir_for(envelope.source_pdf)
 
 
 def _staging_dir_for(sidecar_dir: Path) -> Path:
@@ -1603,7 +1656,7 @@ def _semantic_scores_for_entries(
     warnings: list[str] = []
 
     for source_pdf, group in grouped.items():
-        sidecar_dir = sidecar_dir_for(source_pdf)
+        sidecar_dir = _sidecar_dir_from_envelope(group[0][1])
         embeddings_path = sidecar_dir / EMBEDDINGS_FILENAME
         if not embeddings_path.exists():
             continue
@@ -1801,9 +1854,12 @@ def _docling_page_mapping_untrusted(
 
 
 def _build_failed_result(
-    source: Path, parser_name: str, warnings: list[str]
+    source: Path,
+    parser_name: str,
+    warnings: list[str],
+    sidecar_dir: Path | None = None,
 ) -> DocsIngestResult:
-    sidecar_dir = sidecar_dir_for(source)
+    sidecar_dir = sidecar_dir or sidecar_dir_for(source)
     envelope_path = sidecar_dir / ENVELOPE_FILENAME
     index_path = sidecar_dir / INDEX_FILENAME
     storage_safe = True

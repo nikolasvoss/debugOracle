@@ -15,7 +15,7 @@ class AgentInstructionCompatibilityTests(unittest.TestCase):
 
         self.assertIn("Codex", readme)
         self.assertIn("Claude Code", readme)
-        self.assertIn("ask only before privileged or\nsystem-wide changes", readme)
+        self.assertIn("DebugOracle is operated by a coding agent", readme)
 
 
 if __name__ == "__main__":

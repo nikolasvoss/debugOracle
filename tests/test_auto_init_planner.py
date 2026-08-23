@@ -292,6 +292,27 @@ class AutomaticWorkspaceInitPlannerTests(unittest.TestCase):
         self.assertEqual(inventory.cortex_debug_openocd_configs, ((str(launch_cfg),),))
         self.assertEqual(inventory.documents, (str(document),))
 
+    def test_inventory_discovers_inputs_recursively_from_optional_input_folder(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            supplied = workspace / "debugoracle-input" / "manufacturer"
+            supplied.mkdir(parents=True)
+            executable = supplied / "firmware.elf"
+            svd = supplied / "device.svd"
+            document = supplied / "reference.pdf"
+            config = supplied / "probe.cfg"
+            for path in (executable, svd, document, config):
+                path.write_bytes(b"fixture")
+
+            inventory = collect_workspace_plan(workspace).automatic_init_inventory
+
+        self.assertEqual(inventory.executable_candidates, (str(executable),))
+        self.assertEqual(inventory.svd_candidates, (str(svd),))
+        self.assertEqual(inventory.raw_openocd_configs, (str(config),))
+        self.assertEqual(inventory.documents, (str(document),))
+
     def test_inventory_rejects_symlinked_and_outside_workspace_inputs(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             sandbox = Path(tmpdir)

@@ -168,7 +168,10 @@ def plan_automatic_workspace_init(
             PlanAction(
                 action_id="authorize_document_ingest",
                 detail=(
-                    "Re-run `dbgoracle init-workspace --workspace-root "
+                    "Local document search lets your agent cite manuals and "
+                    "datasheets while debugging. Parsing may take seconds to "
+                    "several minutes depending on document size. Re-run "
+                    "`dbgoracle init-workspace --workspace-root "
                     f"{shlex.quote(inventory.workspace_root)} --auto --yes "
                     "--format json` to authorize local PDF parsing."
                 ),
@@ -178,7 +181,11 @@ def plan_automatic_workspace_init(
         else (
             PlanAction(
                 action_id="add_documents",
-                detail="Place vendor PDFs in `docs/vendor/`.",
+                detail=(
+                    "Place manuals or datasheets in the optional "
+                    "`debugoracle-input/` folder, or leave them in a common "
+                    "workspace documentation location."
+                ),
             ),
         )
         if not documents

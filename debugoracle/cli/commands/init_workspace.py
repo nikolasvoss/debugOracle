@@ -31,6 +31,9 @@ DEFAULT_LAUNCH_NAME = "DebugOracle: Debug STM32"
 ATTACH_LAUNCH_NAME = "DebugOracle: Attach STM32"
 DEFAULT_LAUNCH_ROLE = "workspace-scaffold"
 ATTACH_LAUNCH_ROLE = "golden-path-attach"
+INPUT_DIRECTORY_NAME = "debugoracle-input"
+GITIGNORE_MARKER = "# DebugOracle workspace files"
+GITIGNORE_RULES = ("debugoracle-input/", ".dbgoracle/")
 
 
 @dataclass(frozen=True)
@@ -208,6 +211,7 @@ def _apply_auto_documentation(
                 parser_name="pypdf",
                 semantic=False,
                 force=False,
+                managed_storage=True,
             )
     except Exception as error:
         parser_diagnostics = tuple(
@@ -612,8 +616,13 @@ def initialize_workspace(
     launch_config_role = ATTACH_LAUNCH_ROLE if attach_mode else DEFAULT_LAUNCH_ROLE
 
     session_dir = workspace_root / ".dbgoracle"
+    input_dir = workspace_root / INPUT_DIRECTORY_NAME
     vscode_dir = workspace_root / ".vscode"
     session_dir.mkdir(parents=True, exist_ok=True)
+    input_dir_created = False
+    if not attach_mode:
+        input_dir_created = not input_dir.exists()
+        input_dir.mkdir(parents=True, exist_ok=True)
     if not attach_mode:
         vscode_dir.mkdir(parents=True, exist_ok=True)
 
@@ -641,6 +650,12 @@ def initialize_workspace(
     created_files: list[str] = []
     blocked_files: list[str] = []
     required_actions: list[RequiredAction] = []
+    if input_dir_created:
+        created_files.append(str(input_dir))
+    if not attach_mode:
+        gitignore_path = workspace_root / ".gitignore"
+        if _ensure_workspace_ignore_rules(gitignore_path):
+            created_files.append(str(gitignore_path))
 
     if attach_mode:
         for path in (
@@ -710,6 +725,24 @@ def initialize_workspace(
         required_actions=required_actions,
         dependency_checks=dependency_checks,
     )
+
+
+def _ensure_workspace_ignore_rules(gitignore_path: Path) -> bool:
+    """Append a narrow, idempotent DebugOracle-owned ignore block."""
+
+    if gitignore_path.is_symlink():
+        raise ValueError(f"Refusing symbolic-link .gitignore path: '{gitignore_path}'.")
+    if gitignore_path.exists() and not gitignore_path.is_file():
+        raise ValueError(f"Refusing non-regular .gitignore path: '{gitignore_path}'.")
+    existing = (
+        gitignore_path.read_text(encoding="utf-8") if gitignore_path.exists() else ""
+    )
+    if all(rule in existing.splitlines() for rule in GITIGNORE_RULES):
+        return False
+    suffix = "" if not existing or existing.endswith("\n") else "\n"
+    block = "\n".join((GITIGNORE_MARKER, *GITIGNORE_RULES, ""))
+    gitignore_path.write_text(existing + suffix + block, encoding="utf-8")
+    return True
 
 
 def _settings_payload(

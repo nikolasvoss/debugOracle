@@ -626,7 +626,7 @@ second-page text
 
         self.assertEqual([path.name for path in discovered], ["chip.pdf", "ref.pdf"])
 
-    def test_discovery_rejects_in_workspace_pdf_symlink_alias(self) -> None:
+    def test_discovery_uses_root_pdf_without_following_symlink_alias(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)
             docs = workspace / "docs"
@@ -637,7 +637,7 @@ second-page text
 
             discovered = discover_candidate_documents(workspace)
 
-        self.assertEqual(discovered, [])
+        self.assertEqual(discovered, [source])
 
     def test_discovery_rejects_pdf_symlink_outside_workspace(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

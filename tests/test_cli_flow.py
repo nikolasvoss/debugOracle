@@ -767,6 +767,67 @@ class DebugOracleCliTests(unittest.TestCase):
             self.assertTrue((workspace / ".dbgoracle").is_dir())
             self.assertEqual(stderr, "")
 
+    def test_init_workspace_creates_optional_input_folder_and_owned_ignore_rules(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            (workspace / ".gitignore").write_text("existing-rule\n", encoding="utf-8")
+
+            stdout, stderr, exit_code = self._run_cli_capture(
+                [
+                    "init-workspace",
+                    "--workspace-root",
+                    str(workspace),
+                    "--executable",
+                    "build/app.elf",
+                    "--openocd-config",
+                    "interface/stlink.cfg",
+                    "--format",
+                    "json",
+                ]
+            )
+
+            payload = json.loads(stdout)
+            gitignore = (workspace / ".gitignore").read_text(encoding="utf-8")
+            input_exists = (workspace / "debugoracle-input").is_dir()
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stderr, "")
+        self.assertTrue(input_exists)
+        self.assertIn("existing-rule\n", gitignore)
+        self.assertIn("# DebugOracle workspace files\n", gitignore)
+        self.assertIn("debugoracle-input/\n", gitignore)
+        self.assertIn(".dbgoracle/\n", gitignore)
+        self.assertIn(str(workspace / "debugoracle-input"), payload["created_files"])
+
+    def test_init_workspace_rejects_symlinked_gitignore(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir) / "workspace"
+            outside = Path(tmpdir) / "outside-gitignore"
+            workspace.mkdir()
+            outside.write_text("outside-rule\n", encoding="utf-8")
+            (workspace / ".gitignore").symlink_to(outside)
+
+            _stdout, _stderr, exit_code = self._run_cli_capture(
+                [
+                    "init-workspace",
+                    "--workspace-root",
+                    str(workspace),
+                    "--executable",
+                    "build/app.elf",
+                    "--openocd-config",
+                    "interface/stlink.cfg",
+                    "--format",
+                    "json",
+                ]
+            )
+
+            outside_content = outside.read_text(encoding="utf-8")
+
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(outside_content, "outside-rule\n")
+
     def test_init_workspace_attach_mode_returns_agent_merge_payloads(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             workspace = Path(tmpdir)

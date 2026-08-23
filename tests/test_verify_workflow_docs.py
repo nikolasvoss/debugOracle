@@ -45,17 +45,6 @@ class VerifyWorkflowDocsTests(unittest.TestCase):
             "`pre-commit run --all-files` output/result is attached", checklist
         )
 
-    def test_readme_documents_fast_and_full_verification_commands(self) -> None:
-        readme = Path("README.md").read_text(encoding="utf-8")
-
-        self.assertIn("./scripts/verify.sh fast", readme)
-        self.assertIn("./scripts/verify.sh full", readme)
-        self.assertIn("CI runs `./scripts/verify.sh full`", readme)
-        self.assertIn(
-            "`fast` runs the non-HIL test suite and skips only coverage reporting.",
-            readme,
-        )
-
 
 if __name__ == "__main__":
     unittest.main()

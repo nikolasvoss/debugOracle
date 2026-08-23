@@ -18,6 +18,10 @@ from .workspace_init_plan import AutomaticInitInventory
 MAX_CONFIG_BYTES = 128 * 1024
 MAX_DISCOVERY_FILES = 4096
 MAX_DISCOVERY_CANDIDATES = 256
+INPUT_DIRECTORY = "debugoracle-input"
+EXCLUDED_DISCOVERY_DIRECTORIES = frozenset(
+    {".git", ".venv", "venv", "node_modules", "__pycache__", ".cache"}
+)
 
 
 class ReadinessState(str, Enum):
@@ -150,11 +154,13 @@ def collect_workspace_plan(workspace_root: Path) -> WorkspacePlan:
         >= MAX_DISCOVERY_CANDIDATES
     ):
         truncated = True
-    scan_roots = tuple(root / name for name in ("build", "out", "boards", "config"))
+    scan_roots = tuple(
+        root / name for name in (INPUT_DIRECTORY, "build", "out", "boards", "config")
+    )
     for scan_root in scan_roots:
         if not scan_root.is_dir() or scan_root.is_symlink():
             continue
-        entries, directory_truncated = _bounded_entries(scan_root)
+        entries, directory_truncated = _bounded_tree_entries(scan_root)
         truncated = truncated or directory_truncated
         for entry in entries:
             _collect_candidate_file(entry, root, candidates)
@@ -273,6 +279,31 @@ def _bounded_entries(directory: Path) -> tuple[tuple[Path, ...], bool]:
     return tuple(sorted(selected)), False
 
 
+def _bounded_tree_entries(directory: Path) -> tuple[tuple[Path, ...], bool]:
+    """Return a deterministic, symlink-free bounded file inventory."""
+
+    pending = [directory]
+    files: list[Path] = []
+    seen = 0
+    while pending:
+        current = pending.pop()
+        try:
+            entries = tuple(sorted(Path(entry.path) for entry in os.scandir(current)))
+        except OSError:
+            continue
+        for entry in entries:
+            seen += 1
+            if seen > MAX_DISCOVERY_FILES:
+                return (), True
+            if entry.is_symlink():
+                continue
+            if entry.is_dir() and entry.name not in EXCLUDED_DISCOVERY_DIRECTORIES:
+                pending.append(entry)
+            elif entry.is_file():
+                files.append(entry)
+    return tuple(sorted(files)), False
+
+
 def _collect_automatic_init_inventory(
     root: Path,
     *,
@@ -330,19 +361,20 @@ def _collect_automatic_init_inventory(
 def _discover_direct_svd_candidates(
     root: Path, *, truncated_classes: set[str]
 ) -> tuple[str, ...]:
-    session_dir = root / ".dbgoracle"
-    if not session_dir.is_dir() or session_dir.is_symlink():
-        return ()
-    entries, truncated = _bounded_entries(session_dir)
-    if truncated:
-        truncated_classes.add("svd_files")
-    values = tuple(
-        str(path.resolve(strict=True))
-        for path in entries
-        if path.suffix.lower() == ".svd" and _is_trusted_workspace_file(path, root)
-    )
+    values: list[str] = []
+    for directory in (root / INPUT_DIRECTORY, root / ".dbgoracle"):
+        if not directory.is_dir() or directory.is_symlink():
+            continue
+        entries, truncated = _bounded_tree_entries(directory)
+        if truncated:
+            truncated_classes.add("svd_files")
+        values.extend(
+            str(path.resolve(strict=True))
+            for path in entries
+            if path.suffix.lower() == ".svd" and _is_trusted_workspace_file(path, root)
+        )
     return _bounded_candidate_values(
-        values,
+        tuple(values),
         candidate_class="svd_files",
         truncated_classes=truncated_classes,
     )

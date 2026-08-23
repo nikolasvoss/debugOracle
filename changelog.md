@@ -1,6 +1,14 @@
 ## [Unreleased]
 
 ### Changed
+- Reworked onboarding around an agent-first README, with plain-language
+  capabilities, requirements, a hardware-free demo, and linked setup guides.
+- Fresh workspace setup now creates optional `debugoracle-input/` and managed
+  ignore rules. Automatic discovery prioritizes that folder, then uses bounded
+  common workspace locations without guessing among ambiguous inputs.
+- Agent-authorized workspace documentation ingestion now stores new search data
+  under `.dbgoracle/documentation-search/`; document search and status retain
+  compatibility with legacy sibling sidecars.
 - Archived the public-alpha P0 planning set with the actual release outcome,
   accepted deviations, and residual risks.
 - Clarified the contribution policy for third-party runtime dependencies.
