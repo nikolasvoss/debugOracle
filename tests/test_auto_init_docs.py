@@ -22,10 +22,6 @@ class AutomaticWorkspaceInitDocumentationTests(unittest.TestCase):
         self.assertIn("seconds to several minutes", self.readme)
         self.assertIn(".dbgoracle/documentation-search/", self.readme)
 
-    def test_showcase_is_available_without_hardware(self) -> None:
-        self.assertIn("## See it work without hardware", self.readme)
-        self.assertIn("peripheral-miscfg", self.readme)
-
 
 if __name__ == "__main__":
     unittest.main()

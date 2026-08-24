@@ -53,12 +53,6 @@ class VerifyWorkflowDocsTests(unittest.TestCase):
         self.assertIn("artifact-gate:", workflow)
         self.assertIn("./scripts/verify-release.sh", workflow)
 
-    def test_readme_clone_instructions_initialize_recursive_submodules(self) -> None:
-        readme = Path("README.md").read_text(encoding="utf-8")
-
-        self.assertIn("git clone --recurse-submodules", readme)
-        self.assertIn("git submodule update --init --recursive", readme)
-
     def test_readme_distinguishes_ci_compatibility_from_verified_environment(
         self,
     ) -> None:

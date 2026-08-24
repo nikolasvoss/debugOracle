@@ -92,6 +92,15 @@ This is the **single source of truth for validation**.
 - Do not bypass or weaken checks
 - Fix root causes, not symptoms
 
+### Release Artifact Note
+
+- `scripts/verify-release.sh` compares the built wheel with the fixed checksum
+  in `release/install-manifest.json`. Changes to packaged content (including
+  `README.md`) change that wheel, so run this check before claiming CI is green.
+- Do not update the manifest checksum for an ordinary `main` change: it refers
+  to the published release artifact. Treat a mismatch as a release-gate design
+  issue unless the corresponding release artifact is being rebuilt and published.
+
 ---
 
 ## Coding Rules

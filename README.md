@@ -26,19 +26,11 @@ DebugOracle is operated through its CLI by a coding agent such as Codex or Claud
 
 ## Get started
 
-1. Clone this repository with its pinned demo and SDK dependencies, then open it
-   in Codex or Claude Code:
+1. Clone this repository, then open it in Codex or Claude Code:
 
 ```bash
-git clone --recurse-submodules https://github.com/nikolasvoss/debugOracle.git
+git clone https://github.com/nikolasvoss/debugOracle.git
 cd debugOracle
-```
-
-   If you already cloned the repository without submodules, recover them before
-   running the tests or opening the demo:
-
-```bash
-git submodule update --init --recursive
 ```
 
 2. Ask the agent:
@@ -88,16 +80,6 @@ complex tables or layouts may extract less accurately. The optional Docling
 and semantic profiles remain disabled until their dependency and model license
 audits are complete.
 </details>
-
-## See it work without hardware
-
-Open [`examples/debugoracle-reference-workspaces/stm32/peripheral-miscfg`](examples/debugoracle-reference-workspaces/stm32/peripheral-miscfg) in a new agent session and ask:
-
-```text
-Set up the DebugOracle demo. Show the available evidence, investigate the serial failure, and clearly separate observations, documentation, and the conclusion.
-```
-
-The demo combines runtime output, firmware source, captured registers, and a local register reference to identify a serial clock/divider mismatch with evidence rather than a guess.
 
 ## What DebugOracle changes
 
