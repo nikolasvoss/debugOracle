@@ -746,19 +746,23 @@ class DebugOracleCliTests(unittest.TestCase):
             vscode_dir.mkdir(parents=True)
             (vscode_dir / "settings.json").write_text("{}\n", encoding="utf-8")
 
-            stdout, stderr, exit_code = self._run_cli_capture(
-                [
-                    "init-workspace",
-                    "--workspace-root",
-                    str(workspace),
-                    "--executable",
-                    "build/app.elf",
-                    "--openocd-config",
-                    "interface/stlink.cfg",
-                    "--format",
-                    "json",
-                ]
-            )
+            with patch(
+                "debugoracle.cli.commands.init_workspace.shutil.which",
+                return_value="/usr/bin/openocd",
+            ):
+                stdout, stderr, exit_code = self._run_cli_capture(
+                    [
+                        "init-workspace",
+                        "--workspace-root",
+                        str(workspace),
+                        "--executable",
+                        "build/app.elf",
+                        "--openocd-config",
+                        "interface/stlink.cfg",
+                        "--format",
+                        "json",
+                    ]
+                )
 
             payload = json.loads(stdout)
             self.assertEqual(exit_code, 2)
@@ -783,19 +787,23 @@ class DebugOracleCliTests(unittest.TestCase):
             workspace = Path(tmpdir)
             (workspace / ".gitignore").write_text("existing-rule\n", encoding="utf-8")
 
-            stdout, stderr, exit_code = self._run_cli_capture(
-                [
-                    "init-workspace",
-                    "--workspace-root",
-                    str(workspace),
-                    "--executable",
-                    "build/app.elf",
-                    "--openocd-config",
-                    "interface/stlink.cfg",
-                    "--format",
-                    "json",
-                ]
-            )
+            with patch(
+                "debugoracle.cli.commands.init_workspace.shutil.which",
+                return_value="/usr/bin/openocd",
+            ):
+                stdout, stderr, exit_code = self._run_cli_capture(
+                    [
+                        "init-workspace",
+                        "--workspace-root",
+                        str(workspace),
+                        "--executable",
+                        "build/app.elf",
+                        "--openocd-config",
+                        "interface/stlink.cfg",
+                        "--format",
+                        "json",
+                    ]
+                )
 
             payload = json.loads(stdout)
             gitignore = (workspace / ".gitignore").read_text(encoding="utf-8")

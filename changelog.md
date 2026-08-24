@@ -24,6 +24,9 @@
   SVD, Pico SDK, and nested submodule material.
 
 ### Fixed
+- Restored the declared Python 3.10 CI compatibility for installer imports and
+  release-contract tests, and made workspace initialization tests independent
+  of host OpenOCD availability.
 - Hardened workspace-derived paths against symlink traversal and made
   canonical state publication atomic.
 - Made malformed GDB/MI input fail deterministically instead of risking a

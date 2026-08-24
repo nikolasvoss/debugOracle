@@ -9,7 +9,7 @@ from collections.abc import Mapping
 from email import policy
 from email.parser import BytesParser
 from pathlib import Path
-from typing import Protocol, Self, cast
+from typing import Protocol, cast
 from urllib.parse import unquote, urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
@@ -52,7 +52,7 @@ class _URLResponse(Protocol):
 
     def geturl(self) -> str: ...
 
-    def __enter__(self) -> Self: ...
+    def __enter__(self) -> "_URLResponse": ...
 
     def __exit__(self, exc_type: object, exc: object, traceback: object) -> None: ...
 
