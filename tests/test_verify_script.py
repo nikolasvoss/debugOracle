@@ -29,6 +29,7 @@ class VerifyScriptTests(unittest.TestCase):
 
             env = os.environ.copy()
             env["PATH"] = f"{bin_dir}:{env.get('PATH', '')}"
+            env.pop("PYTEST_ADDOPTS", None)
 
             completed = subprocess.run(
                 ["/bin/bash", str(script_path)],
@@ -70,6 +71,7 @@ class VerifyScriptTests(unittest.TestCase):
 
             env = os.environ.copy()
             env["PATH"] = f"{bin_dir}:{env.get('PATH', '')}"
+            env.pop("PYTEST_ADDOPTS", None)
 
             completed = subprocess.run(
                 ["/bin/bash", str(script_path), "full"],

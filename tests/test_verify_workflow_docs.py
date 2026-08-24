@@ -19,19 +19,33 @@ class VerifyWorkflowDocsTests(unittest.TestCase):
         )
         self.assertIn('.venv/bin/python -m pip install -e ".[dev]"', workflow)
         self.assertIn(
-            'PATH="$PWD/.venv/bin:$PATH" timeout 3m ./scripts/verify.sh full',
+            'PATH="$PWD/.venv/bin:$PATH" timeout 5m ./scripts/verify.sh full',
             workflow,
         )
 
-    def test_release_ci_covers_recursive_clone_python_matrix_and_wheel_smoke(
+    def test_release_ci_defers_private_reference_checkout_until_tag_gate(
         self,
     ) -> None:
         workflow = Path(".github/workflows/quality-and-traceability.yml").read_text(
             encoding="utf-8"
         )
 
-        self.assertGreaterEqual(workflow.count("submodules: recursive"), 3)
-        self.assertGreaterEqual(workflow.count("git submodule status --recursive"), 3)
+        conditional_checkout = (
+            "submodules: ${{ github.ref_type == 'tag' && 'recursive' || 'false' }}"
+        )
+        self.assertGreaterEqual(workflow.count(conditional_checkout), 3)
+        self.assertGreaterEqual(
+            workflow.count("DEBUGORACLE_SKIP_PRIVATE_REFERENCE:"), 3
+        )
+        self.assertIn("tests/test_reference_workspace_samples.py", workflow)
+        self.assertIn(
+            "--deselect=tests/test_public_release_contract.py::"
+            "PublicReleaseContractTests::"
+            "test_vendor_manual_and_generated_doc_artifacts_are_not_tracked",
+            workflow,
+        )
+        self.assertIn("if: github.ref_type == 'tag'", workflow)
+        self.assertIn("git submodule status --recursive", workflow)
         self.assertIn("compatibility-gate:", workflow)
         self.assertIn(
             'python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]', workflow

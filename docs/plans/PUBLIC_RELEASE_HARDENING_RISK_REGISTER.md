@@ -16,7 +16,7 @@
 | R-009 | High contract | `fetch` no-input exit code differs from the public spec. | Restore exit 2 with subprocess contract test. | AC-015 | Must close |
 | R-010 | Medium observability | Partial-evidence warnings are stored but absent from stderr, hiding degraded acquisition from agents/humans. | Central warning rendering with stdout/stderr separation tests. | AC-016 | Must close |
 | R-011 | Low/Medium validation | Invalid TCP ports reach connection logic and waste timeout budget. | Argparse range validator shared by TCP commands. | AC-017 | Must close before CLI QA pass |
-| R-012 | High CI/reproducibility | Normal clone and current CI omit the required reference-workspace submodule, causing 30 test failures. | Recursive checkout, status gate, onboarding recovery instructions. | AC-003 | Must close |
+| R-012 | High CI/reproducibility | Normal clone and current CI omit the required reference-workspace submodule, causing 30 test failures. | PR/`main` CI temporarily report and exclude the private reference tests; tagged validation remains strict. Publish the reviewed reference repository and restore recursive CI. | AC-003 | Maintainer-deferred 2026-08-24 for non-tag CI only; blocks release tag |
 | R-013 | Medium compatibility | `requires-python >=3.10` admits versions not covered by CI. | Test all admitted minors or narrow metadata and docs. | AC-004 | Must close |
 | R-014 | High legal/provenance | STM32 package license, acquisition receipt, SVD origin, and recursive Pico closure remain unresolved in the public inventory. | Obtain exact evidence or remove affected assets and claims. | AC-019 | Must close; no exception |
 | R-015 | High release identity | Withdrawn private `0.2.0` is still canonical and new work remains under Unreleased. | Use unused `0.3.0`, synchronize all metadata, never reuse/move tag. | AC-020 | Must close |
@@ -25,7 +25,7 @@
 | R-018 | Medium runtime regression | Safe-write migration could change permissions, append behavior, or explicit outside-output support. | Classify call sites; migrate incrementally; real I/O compatibility tests. | AC-005 through AC-007 | Monitor per PR |
 | R-019 | Medium compatibility | Strong run metadata makes old detached sessions impossible to stop automatically. | Version metadata; fail closed with manual recovery instructions; document behavior. | AC-009, AC-010 | Accept only with documented recovery |
 | R-020 | Medium release evidence | Offline tests cannot prove real RTT/OpenOCD/SVD/memory/install lifecycle. | Required sanitized HIL/manual matrix on verified environment. | AC-023 | Must close or narrow claims |
-| R-021 | Low/Medium CI stability | Recursive PDF/demo tests run close to the existing three-minute timeout. | Measure multiple runs; retain adequate headroom; update timeout contract if evidence requires. | AC-003, AC-022 | Resolve before final CI gate |
+| R-021 | Low/Medium CI stability | The core coverage suite alone was observed at about 166 seconds, leaving insufficient headroom in the former three-minute quality-step timeout. | Use a five-minute quality-step timeout; retain the ten-minute artifact gate and measure the remote run. | AC-003, AC-022 | Mitigated; verify with PR CI |
 | R-022 | Medium dependency governance | Adding `packaging` without the required runtime dependency review violates project policy. | Record need, alternatives, license, vulnerabilities, maintenance, footprint, determinism, and exact selected version. | AC-013, AC-022 | Must close before merge of PR 3 |
 
 ## Ownership

@@ -16,13 +16,16 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       DEBUGORACLE_RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+      DEBUGORACLE_SKIP_PRIVATE_REFERENCE: ${{ github.ref_type == 'tag' && '0' || '1' }}
+      PYTEST_ADDOPTS: "${{ github.ref_type == 'tag' && '' || '--ignore=tests/test_reference_workspace_samples.py --deselect=tests/test_public_release_contract.py::PublicReleaseContractTests::test_vendor_manual_and_generated_doc_artifacts_are_not_tracked' }}"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: ${{ github.ref_type == 'tag' && 'recursive' || 'false' }}
 
       - name: Verify recursive submodule state
+        if: github.ref_type == 'tag'
         run: |
           submodule_status="$(git submodule status --recursive)"
           printf '%s\n' "$submodule_status"
@@ -31,6 +34,10 @@ jobs:
             echo "Run: git submodule update --init --recursive" >&2
             exit 1
           fi
+
+      - name: Report deferred private reference gate
+        if: github.ref_type != 'tag'
+        run: echo "Private reference-workspace checkout is deferred; tag validation remains strict."
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -45,10 +52,13 @@ jobs:
           .venv/bin/python -m pip install -e ".[dev]"
 
       - name: Run quality gate
-        run: PATH="$PWD/.venv/bin:$PATH" timeout 3m ./scripts/verify.sh full
+        run: PATH="$PWD/.venv/bin:$PATH" timeout 5m ./scripts/verify.sh full
 
   compatibility-gate:
     runs-on: ubuntu-24.04
+    env:
+      DEBUGORACLE_SKIP_PRIVATE_REFERENCE: ${{ github.ref_type == 'tag' && '0' || '1' }}
+      PYTEST_ADDOPTS: "${{ github.ref_type == 'tag' && '' || '--ignore=tests/test_reference_workspace_samples.py --deselect=tests/test_public_release_contract.py::PublicReleaseContractTests::test_vendor_manual_and_generated_doc_artifacts_are_not_tracked' }}"
     strategy:
       fail-fast: false
       matrix:
@@ -57,9 +67,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: ${{ github.ref_type == 'tag' && 'recursive' || 'false' }}
 
       - name: Verify recursive submodule state
+        if: github.ref_type == 'tag'
         run: |
           submodule_status="$(git submodule status --recursive)"
           printf '%s\n' "$submodule_status"
@@ -68,6 +79,10 @@ jobs:
             echo "Run: git submodule update --init --recursive" >&2
             exit 1
           fi
+
+      - name: Report deferred private reference gate
+        if: github.ref_type != 'tag'
+        run: echo "Private reference-workspace checkout is deferred; tag validation remains strict."
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -88,13 +103,16 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       DEBUGORACLE_RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+      DEBUGORACLE_SKIP_PRIVATE_REFERENCE: ${{ github.ref_type == 'tag' && '0' || '1' }}
+      PYTEST_ADDOPTS: "${{ github.ref_type == 'tag' && '' || '--ignore=tests/test_reference_workspace_samples.py --deselect=tests/test_public_release_contract.py::PublicReleaseContractTests::test_vendor_manual_and_generated_doc_artifacts_are_not_tracked' }}"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: ${{ github.ref_type == 'tag' && 'recursive' || 'false' }}
 
       - name: Verify recursive submodule state
+        if: github.ref_type == 'tag'
         run: |
           submodule_status="$(git submodule status --recursive)"
           printf '%s\n' "$submodule_status"
@@ -103,6 +121,10 @@ jobs:
             echo "Run: git submodule update --init --recursive" >&2
             exit 1
           fi
+
+      - name: Report deferred private reference gate
+        if: github.ref_type != 'tag'
+        run: echo "Private reference-workspace checkout is deferred; tag validation remains strict."
 
       - name: Setup Python
         uses: actions/setup-python@v5

@@ -1,6 +1,6 @@
 # Public Release Hardening Implementation Plan
 
-**Status:** Ready for implementation
+**Status:** Implemented; external release gates remain open
 
 ## Task Link
 
@@ -24,8 +24,13 @@ Related artifacts:
   end-user onboarding path. Release 0.3.0 retains the explicit checkout-local
   installer as its documented user path; a later task may separate that
   contributor workflow from a standalone verified-wheel installer.
-- Rejected: weakening the spec to match accidental behavior, skipping missing
-  submodule tests, or declaring unresolved provenance verified.
+- Maintainer exception, 2026-08-24: pull-request and `main` CI temporarily skip
+  the private reference-workspace checkout and its content-dependent tests.
+  The exception expires before a release tag: tagged validation remains strict,
+  and `ROADMAP.md` tracks publication of the reference repository plus removal
+  of the exception.
+- Rejected: weakening runtime and security contracts or declaring unresolved
+  provenance verified.
 
 ## Engineering Review
 

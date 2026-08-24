@@ -1,6 +1,6 @@
 # Public Release Hardening Task Spec
 
-**Status:** Ready for implementation
+**Status:** Implemented; external release gates remain open
 
 ## Problem Statement
 
@@ -32,6 +32,16 @@ result can be published as the next public alpha.
   select a new unused PEP 440 version before changing release metadata.
 - The supported environment remains Linux. The package's declared Python
   range must be tested, narrowed, or corrected before release.
+
+### Temporary CI deviation
+
+On 2026-08-24 the maintainer deferred publication of the private
+`nikolasvoss/debugoracle-reference-workspaces` repository. Pull-request and
+`main` CI therefore omit its checkout and the tests that require its contents.
+This is not evidence for AC-003: tag validation remains fail-closed, requires
+the complete recursive checkout, and blocks publication until the reference
+repository is publicly readable or an equivalent reviewed distribution is
+provided. The follow-up is tracked in `ROADMAP.md`.
 
 ## Scope
 

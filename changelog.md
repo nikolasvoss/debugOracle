@@ -14,8 +14,10 @@
 - Archived the public-alpha P0 planning set with the actual release outcome,
   accepted deviations, and residual risks.
 - Clarified the contribution policy for third-party runtime dependencies.
-- Added recursive-submodule and isolated-artifact release gates across the
-  supported Python compatibility matrix.
+- Added isolated-artifact release gates across the supported Python
+  compatibility matrix. Pull-request and `main` CI temporarily exclude the
+  private reference workspace; tagged release validation still requires its
+  complete recursive checkout.
 - Centralized PEP 440 handling and cryptographically bound remote installer
   artifacts to a restricted manifest.
 - Recorded exact provenance, license evidence, and hashes for retained STM32,

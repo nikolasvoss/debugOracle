@@ -35,6 +35,8 @@ class ReleaseVerificationScriptTests(unittest.TestCase):
 
             environment = os.environ.copy()
             environment["PATH"] = f"{fake_bin}:/usr/bin:/bin"
+            environment.pop("DEBUGORACLE_SKIP_PRIVATE_REFERENCE", None)
+            environment.pop("DEBUGORACLE_RELEASE_TAG", None)
             completed = subprocess.run(
                 ["bash", str(scripts / SCRIPT_PATH.name), "/"],
                 cwd=checkout,
@@ -77,6 +79,8 @@ class ReleaseVerificationScriptTests(unittest.TestCase):
 
             environment = os.environ.copy()
             environment["PATH"] = f"{fake_bin}:/usr/bin:/bin"
+            environment.pop("DEBUGORACLE_SKIP_PRIVATE_REFERENCE", None)
+            environment.pop("DEBUGORACLE_RELEASE_TAG", None)
             completed = subprocess.run(
                 ["bash", str(scripts / SCRIPT_PATH.name)],
                 cwd=checkout,
@@ -90,6 +94,87 @@ class ReleaseVerificationScriptTests(unittest.TestCase):
         self.assertNotEqual(completed.returncode, 0)
         self.assertIn("git submodule update --init --recursive", completed.stderr)
         self.assertFalse(verification_marker.exists())
+
+    def test_explicit_non_tag_ci_exception_skips_private_reference_check(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            checkout = Path(tmpdir) / "checkout"
+            scripts = checkout / "scripts"
+            fake_bin = Path(tmpdir) / "bin"
+            scripts.mkdir(parents=True)
+            fake_bin.mkdir()
+            shutil.copy2(SCRIPT_PATH, scripts / SCRIPT_PATH.name)
+
+            verification_marker = Path(tmpdir) / "verification-started"
+            verify_script = scripts / "verify.sh"
+            verify_script.write_text(
+                f"#!/usr/bin/env bash\ntouch '{verification_marker}'\nexit 7\n",
+                encoding="utf-8",
+            )
+            verify_script.chmod(0o755)
+
+            fake_git = fake_bin / "git"
+            fake_git.write_text(
+                "#!/usr/bin/env bash\n"
+                "printf '%s\\n' "
+                "'-0000000000000000000000000000000000000000 examples/missing'\n",
+                encoding="utf-8",
+            )
+            fake_git.chmod(0o755)
+
+            environment = os.environ.copy()
+            environment["PATH"] = f"{fake_bin}:/usr/bin:/bin"
+            environment["DEBUGORACLE_SKIP_PRIVATE_REFERENCE"] = "1"
+            environment.pop("DEBUGORACLE_RELEASE_TAG", None)
+            completed = subprocess.run(
+                ["bash", str(scripts / SCRIPT_PATH.name)],
+                cwd=checkout,
+                env=environment,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            verification_started = verification_marker.exists()
+
+        self.assertEqual(completed.returncode, 7)
+        self.assertIn("private reference-workspace gate is deferred", completed.stderr)
+        self.assertTrue(verification_started)
+
+    def test_tagged_release_rejects_private_reference_exception(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            checkout = Path(tmpdir) / "checkout"
+            scripts = checkout / "scripts"
+            fake_bin = Path(tmpdir) / "bin"
+            scripts.mkdir(parents=True)
+            fake_bin.mkdir()
+            shutil.copy2(SCRIPT_PATH, scripts / SCRIPT_PATH.name)
+
+            verification_marker = Path(tmpdir) / "verification-started"
+            verify_script = scripts / "verify.sh"
+            verify_script.write_text(
+                f"#!/usr/bin/env bash\ntouch '{verification_marker}'\n",
+                encoding="utf-8",
+            )
+            verify_script.chmod(0o755)
+
+            environment = os.environ.copy()
+            environment["PATH"] = f"{fake_bin}:/usr/bin:/bin"
+            environment["DEBUGORACLE_SKIP_PRIVATE_REFERENCE"] = "1"
+            environment["DEBUGORACLE_RELEASE_TAG"] = "v0.3.0"
+            completed = subprocess.run(
+                ["bash", str(scripts / SCRIPT_PATH.name)],
+                cwd=checkout,
+                env=environment,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            verification_started = verification_marker.exists()
+
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("tagged release cannot skip", completed.stderr)
+        self.assertFalse(verification_started)
 
     def test_complete_release_check_builds_validates_installs_and_smokes_wheel(
         self,
@@ -150,6 +235,8 @@ class ReleaseVerificationScriptTests(unittest.TestCase):
             environment["PATH"] = f"{fake_bin}:/usr/bin:/bin"
             environment["PYTHON"] = str(fake_python)
             environment["TMPDIR"] = str(release_tmp)
+            environment.pop("DEBUGORACLE_SKIP_PRIVATE_REFERENCE", None)
+            environment.pop("DEBUGORACLE_RELEASE_TAG", None)
             completed = subprocess.run(
                 ["bash", str(scripts / SCRIPT_PATH.name)],
                 cwd=checkout,

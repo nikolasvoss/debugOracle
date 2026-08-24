@@ -227,6 +227,13 @@ pre-commit run --all-files
 
 ## Pass / Fail Rule
 
+Temporary exception recorded 2026-08-24: pull-request and `main` CI may omit
+the private reference-workspace checkout and deselect only its content-dependent
+tests. The workflow must report the omission. This exception does not apply to
+a tag: release-tag validation must initialize and verify the complete recursive
+submodule graph, so AC-003 remains open until the reference repository is
+publicly readable or equivalently distributed.
+
 - Any critical/high security finding, failed AC, failed provenance item,
   distribution-build error, dirty/missing submodule, or failed HIL release case
   blocks publication.

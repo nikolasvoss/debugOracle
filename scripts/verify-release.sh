@@ -10,12 +10,21 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPOSITORY_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 cd -- "$REPOSITORY_ROOT"
 
-submodule_status="$(git submodule status --recursive)"
-printf '%s\n' "$submodule_status"
-if printf '%s\n' "$submodule_status" | grep -Eq '^[+-U]'; then
-  echo "Release verification requires every recursive submodule at its pinned commit." >&2
-  echo "Run: git submodule update --init --recursive" >&2
-  exit 1
+skip_private_reference="${DEBUGORACLE_SKIP_PRIVATE_REFERENCE:-0}"
+if [ "$skip_private_reference" = "1" ]; then
+  if [ -n "${DEBUGORACLE_RELEASE_TAG:-}" ]; then
+    echo "A tagged release cannot skip the private reference-workspace gate." >&2
+    exit 1
+  fi
+  echo "WARNING: private reference-workspace gate is deferred for this non-tag CI run." >&2
+else
+  submodule_status="$(git submodule status --recursive)"
+  printf '%s\n' "$submodule_status"
+  if printf '%s\n' "$submodule_status" | grep -Eq '^[+-U]'; then
+    echo "Release verification requires every recursive submodule at its pinned commit." >&2
+    echo "Run: git submodule update --init --recursive" >&2
+    exit 1
+  fi
 fi
 
 ./scripts/verify.sh full

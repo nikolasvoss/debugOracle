@@ -68,6 +68,12 @@ Near-term, DebugOracle is:
    add a standalone bootstrap path, and remove recursive submodules from the
    normal user journey. This is deferred beyond release 0.3.0; its supported
    installer continues to use the current checkout-local source override.
+18. Public reference-workspace availability
+   Publish `nikolasvoss/debugoracle-reference-workspaces` after its separate
+   release review, then restore recursive reference-workspace checkout and
+   tests in pull-request and `main` CI. Until then those jobs exercise only the
+   main repository; tagged release validation remains strict and cannot use the
+   temporary exception.
 
 ## Current milestone
 
