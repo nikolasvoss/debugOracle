@@ -211,6 +211,7 @@ class ReleaseVerificationScriptTests(unittest.TestCase):
                 "#!/usr/bin/env bash\n"
                 "set -euo pipefail\n"
                 f"printf 'python %s\\n' \"$*\" >> '{command_log}'\n"
+                f"printf 'umask %s\\n' \"$(umask)\" >> '{command_log}'\n"
                 "if [ \"${1:-}\" = '-m' ] && [ \"${2:-}\" = 'build' ]; then\n"
                 "  while [ \"${1:-}\" != '--outdir' ]; do shift; done\n"
                 '  mkdir -p "$2"\n'
@@ -245,6 +246,7 @@ class ReleaseVerificationScriptTests(unittest.TestCase):
                 capture_output=True,
                 text=True,
                 timeout=10,
+                preexec_fn=lambda: os.umask(0o077),
             )
             logged_commands = command_log.read_text(encoding="utf-8")
             retained_release_directories = list(
@@ -253,6 +255,7 @@ class ReleaseVerificationScriptTests(unittest.TestCase):
 
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("verify full", logged_commands)
+        self.assertIn("umask 0022", logged_commands)
         self.assertEqual(logged_commands.count("python -m build"), 2)
         self.assertIn("python -m twine check", logged_commands)
         self.assertIn("venv-python -m pip install", logged_commands)

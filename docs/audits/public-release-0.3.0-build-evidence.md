@@ -13,7 +13,7 @@ builds
 - Wheel: `debugoracle-0.3.0-py3-none-any.whl`
 - Size: `147806` bytes
 - SHA-256:
-  `d0da3e18707a5749fb288920cc048f7b60a3be318ce1a828246b5e1a71b27715`
+  `05c6c7c012f283f7b53a21718fc7704d4684216de3e8eafc2f8c40550ae8cd30`
 
 Two independent isolated builds produced the same wheel filename, size, and
 SHA-256. After recording the hash and size in `release/install-manifest.json`,
@@ -23,6 +23,9 @@ the manifest is outside the wheel payload.
 The GitHub artifact gate uses the same exact Python 3.12.3 interpreter as this
 canonical build. The separately maintained compatibility matrix continues to
 exercise the current Python 3.10 through 3.14 releases.
+
+Release verification fixes the process umask to `022` before building so that
+the wheel's retained file-mode metadata is independent of the caller's shell.
 
 The two generated source distributions both passed metadata validation but
 were not byte-identical (`c711be3a...` versus `de0db7e...`). The sdist is not a

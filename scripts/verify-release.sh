@@ -10,6 +10,10 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPOSITORY_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 cd -- "$REPOSITORY_ROOT"
 
+# Wheel ZIP entries retain source-file modes. Fix them for identical release
+# bytes regardless of the caller's shell umask.
+umask 022
+
 skip_private_reference="${DEBUGORACLE_SKIP_PRIVATE_REFERENCE:-0}"
 if [ "$skip_private_reference" = "1" ]; then
   if [ -n "${DEBUGORACLE_RELEASE_TAG:-}" ]; then
