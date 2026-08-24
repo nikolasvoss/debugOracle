@@ -69,6 +69,7 @@ fi
 "$PYTHON_BIN" -m twine check "${wheels_one[@]}" "${sdists_one[@]}"
 
 "$PYTHON_BIN" - \
+  "${DEBUGORACLE_RELEASE_TAG:-}" \
   "$REPOSITORY_ROOT/release/install-manifest.json" \
   "${wheels_one[0]}" \
   "${wheels_two[0]}" <<'PY'
@@ -79,10 +80,10 @@ import json
 import sys
 from pathlib import Path
 
-manifest_path = Path(sys.argv[1])
-first_wheel = Path(sys.argv[2])
-second_wheel = Path(sys.argv[3])
-manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+release_tag = sys.argv[1]
+manifest_path = Path(sys.argv[2])
+first_wheel = Path(sys.argv[3])
+second_wheel = Path(sys.argv[4])
 
 
 def sha256(path: Path) -> str:
@@ -99,19 +100,22 @@ if first_hash != second_hash:
     raise SystemExit("Two fixed-epoch wheel builds produced different SHA-256 values.")
 if first_wheel.name != second_wheel.name:
     raise SystemExit("Two fixed-epoch wheel builds produced different filenames.")
-expected_name = f"debugoracle-{manifest['version']}-py3-none-any.whl"
-if first_wheel.name != expected_name:
-    raise SystemExit(
-        f"Built wheel {first_wheel.name!r} does not match manifest version {expected_name!r}."
-    )
-if manifest["artifact_sha256"] == "0" * 64:
-    raise SystemExit("Release manifest still contains the planning checksum placeholder.")
-if manifest["artifact_sha256"] != first_hash:
-    raise SystemExit("Release manifest SHA-256 does not match the reproducible wheel.")
-if manifest["artifact_size"] != first_wheel.stat().st_size:
-    raise SystemExit("Release manifest artifact_size does not match the wheel.")
-if not str(manifest["artifact_url"]).endswith("/" + first_wheel.name):
-    raise SystemExit("Release manifest artifact_url does not name the built wheel.")
+
+if release_tag:
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    expected_name = f"debugoracle-{manifest['version']}-py3-none-any.whl"
+    if first_wheel.name != expected_name:
+        raise SystemExit(
+            f"Built wheel {first_wheel.name!r} does not match manifest version {expected_name!r}."
+        )
+    if manifest["artifact_sha256"] == "0" * 64:
+        raise SystemExit("Release manifest still contains the planning checksum placeholder.")
+    if manifest["artifact_sha256"] != first_hash:
+        raise SystemExit("Release manifest SHA-256 does not match the reproducible wheel.")
+    if manifest["artifact_size"] != first_wheel.stat().st_size:
+        raise SystemExit("Release manifest artifact_size does not match the wheel.")
+    if not str(manifest["artifact_url"]).endswith("/" + first_wheel.name):
+        raise SystemExit("Release manifest artifact_url does not name the built wheel.")
 PY
 
 wheel_listing="$("$PYTHON_BIN" -m zipfile -l "${wheels_one[0]}")"

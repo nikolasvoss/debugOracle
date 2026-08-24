@@ -265,6 +265,8 @@ class ReleaseVerificationScriptTests(unittest.TestCase):
         script_text = SCRIPT_PATH.read_text(encoding="utf-8")
         self.assertIn("SOURCE_DATE_EPOCH", script_text)
         self.assertIn("1787529600", script_text)
+        self.assertIn('"${DEBUGORACLE_RELEASE_TAG:-}"', script_text)
+        self.assertIn("if release_tag:", script_text)
         self.assertIn('manifest["artifact_sha256"]', script_text)
         self.assertIn('manifest["artifact_size"]', script_text)
 
