@@ -37,7 +37,7 @@ class ReleaseVersionMetadataTests(unittest.TestCase):
         pyproject = (REPOSITORY_ROOT / "pyproject.toml").read_text(encoding="utf-8")
 
         self.assertEqual(manifest["version"], __version__)
-        public_repository_url = "https://github.com/nikolasvoss/ai-debugger-v2"
+        public_repository_url = "https://github.com/nikolasvoss/debugOracle"
         self.assertEqual(manifest["schema_version"], "2")
         self.assertEqual(manifest["installer_min_version"], INSTALLER_VERSION)
         self.assertEqual(manifest["artifact_kind"], "wheel")
@@ -58,7 +58,7 @@ class ReleaseVersionMetadataTests(unittest.TestCase):
         self.assertEqual(
             DEFAULT_MANIFEST_URL,
             (
-                "https://raw.githubusercontent.com/nikolasvoss/ai-debugger-v2/"
+                "https://raw.githubusercontent.com/nikolasvoss/debugOracle/"
                 "main/release/install-manifest.json"
             ),
         )

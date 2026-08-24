@@ -613,7 +613,7 @@ def _manifest() -> ReleaseManifest:
         version="0.1.0",
         python_requires=">=3.10",
         installer_min_version="0.1.0",
-        artifact_url="https://github.com/nikolasvoss/ai-debugger-v2/releases/download/v0.1.0/debugoracle-0.1.0-py3-none-any.whl",
+        artifact_url="https://github.com/nikolasvoss/debugOracle/releases/download/v0.1.0/debugoracle-0.1.0-py3-none-any.whl",
         artifact_sha256=hashlib.sha256(content).hexdigest(),
         artifact_kind="wheel",
         artifact_size=len(content),

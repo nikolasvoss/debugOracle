@@ -19,7 +19,7 @@ from .versioning import VersioningError, compare_versions, satisfies
 
 SUPPORTED_SCHEMA_VERSION = "2"
 EXPECTED_PACKAGE_NAME = "debugoracle"
-EXPECTED_REPOSITORY = "/nikolasvoss/ai-debugger-v2"
+EXPECTED_REPOSITORY = "/nikolasvoss/debugOracle"
 _SHA256_PATTERN = re.compile(r"[0-9a-fA-F]{64}")
 
 

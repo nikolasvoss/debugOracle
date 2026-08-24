@@ -29,7 +29,7 @@ from .source import (
 from .versioning import VersioningError, compare_versions, satisfies
 
 INSTALLER_VERSION = "0.2.0"
-DEFAULT_MANIFEST_URL = "https://raw.githubusercontent.com/nikolasvoss/ai-debugger-v2/main/release/install-manifest.json"
+DEFAULT_MANIFEST_URL = "https://raw.githubusercontent.com/nikolasvoss/debugOracle/main/release/install-manifest.json"
 DEFAULT_BINARY_NAME = "dbgoracle"
 
 

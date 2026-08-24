@@ -22,6 +22,8 @@
   artifacts to a restricted manifest.
 - Recorded exact provenance, license evidence, and hashes for retained STM32,
   SVD, Pico SDK, and nested submodule material.
+- Aligned release, installer, security, package, and onboarding URLs with the
+  canonical `nikolasvoss/debugOracle` repository after its GitHub rename.
 
 ### Fixed
 - Restored the declared Python 3.10 CI compatibility for installer imports and

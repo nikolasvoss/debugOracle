@@ -240,8 +240,8 @@ class ManifestFetcherTests(unittest.TestCase):
             "version": "0.1.0",
             "python_requires": ">=3.10",
             "installer_min_version": "0.1.0",
-            "release_notes_url": "https://github.com/nikolasvoss/ai-debugger-v2/releases/tag/v0.1.0",
-            "artifact_url": "https://github.com/nikolasvoss/ai-debugger-v2/releases/download/v0.1.0/debugoracle-0.1.0-py3-none-any.whl",
+            "release_notes_url": "https://github.com/nikolasvoss/debugOracle/releases/tag/v0.1.0",
+            "artifact_url": "https://github.com/nikolasvoss/debugOracle/releases/download/v0.1.0/debugoracle-0.1.0-py3-none-any.whl",
             "artifact_sha256": "a" * 64,
             "artifact_kind": "wheel",
             "artifact_size": 1234,
@@ -284,9 +284,9 @@ class ManifestFetcherTests(unittest.TestCase):
         fetcher = ManifestFetcher()
         for url in (
             "ftp://example.com/manifest.json",
-            "http://raw.githubusercontent.com/nikolasvoss/ai-debugger-v2/main/release/install-manifest.json",
+            "http://raw.githubusercontent.com/nikolasvoss/debugOracle/main/release/install-manifest.json",
             "https://example.com/manifest.json",
-            "https://raw.githubusercontent.com:444/nikolasvoss/ai-debugger-v2/main/release/install-manifest.json",
+            "https://raw.githubusercontent.com:444/nikolasvoss/debugOracle/main/release/install-manifest.json",
         ):
             with self.subTest(url=url), self.assertRaises(ManifestError):
                 fetcher.fetch_payload(url)
@@ -303,7 +303,7 @@ class ManifestFetcherTests(unittest.TestCase):
         ):
             with self.assertRaises(ManifestNetworkError):
                 fetcher.fetch_payload(
-                    "https://raw.githubusercontent.com/nikolasvoss/ai-debugger-v2/main/release/install-manifest.json"
+                    "https://raw.githubusercontent.com/nikolasvoss/debugOracle/main/release/install-manifest.json"
                 )
 
     def test_fetch_payload_bounds_remote_content_and_rejects_redirect_host(
@@ -333,12 +333,12 @@ class ManifestFetcherTests(unittest.TestCase):
             "debugoracle.installer.manifest.ManifestFetcher._open_remote",
             return_value=_Response(
                 b"{not json",
-                "https://raw.githubusercontent.com/nikolasvoss/ai-debugger-v2/main/release/install-manifest.json",
+                "https://raw.githubusercontent.com/nikolasvoss/debugOracle/main/release/install-manifest.json",
             ),
         ):
             with self.assertRaises(ManifestError):
                 fetcher.fetch_payload(
-                    "https://raw.githubusercontent.com/nikolasvoss/ai-debugger-v2/main/release/install-manifest.json"
+                    "https://raw.githubusercontent.com/nikolasvoss/debugOracle/main/release/install-manifest.json"
                 )
 
         with patch(
@@ -347,7 +347,7 @@ class ManifestFetcherTests(unittest.TestCase):
         ):
             with self.assertRaises(ManifestError):
                 fetcher.fetch_payload(
-                    "https://raw.githubusercontent.com/nikolasvoss/ai-debugger-v2/main/release/install-manifest.json"
+                    "https://raw.githubusercontent.com/nikolasvoss/debugOracle/main/release/install-manifest.json"
                 )
 
         oversized = b"{" + b" " * (ManifestFetcher.MAX_MANIFEST_BYTES + 1)
@@ -355,12 +355,12 @@ class ManifestFetcherTests(unittest.TestCase):
             "debugoracle.installer.manifest.ManifestFetcher._open_remote",
             return_value=_Response(
                 oversized,
-                "https://raw.githubusercontent.com/nikolasvoss/ai-debugger-v2/main/release/install-manifest.json",
+                "https://raw.githubusercontent.com/nikolasvoss/debugOracle/main/release/install-manifest.json",
             ),
         ):
             with self.assertRaises(ManifestError):
                 fetcher.fetch_payload(
-                    "https://raw.githubusercontent.com/nikolasvoss/ai-debugger-v2/main/release/install-manifest.json"
+                    "https://raw.githubusercontent.com/nikolasvoss/debugOracle/main/release/install-manifest.json"
                 )
 
     def test_fetch_payload_https_json_error_and_fetch_success(self) -> None:
@@ -375,7 +375,7 @@ class ManifestFetcherTests(unittest.TestCase):
                 return self._payload if size < 0 else self._payload[:size]
 
             def geturl(self) -> str:
-                return "https://raw.githubusercontent.com/nikolasvoss/ai-debugger-v2/main/release/install-manifest.json"
+                return "https://raw.githubusercontent.com/nikolasvoss/debugOracle/main/release/install-manifest.json"
 
             def __enter__(self) -> "_Response":
                 return self
@@ -390,7 +390,7 @@ class ManifestFetcherTests(unittest.TestCase):
             "version": "0.1.0",
             "python_requires": ">=3.10",
             "installer_min_version": "0.1.0",
-            "artifact_url": "https://github.com/nikolasvoss/ai-debugger-v2/releases/download/v0.1.0/debugoracle-0.1.0-py3-none-any.whl",
+            "artifact_url": "https://github.com/nikolasvoss/debugOracle/releases/download/v0.1.0/debugoracle-0.1.0-py3-none-any.whl",
             "artifact_sha256": "a" * 64,
             "artifact_kind": "wheel",
         }
@@ -399,7 +399,7 @@ class ManifestFetcherTests(unittest.TestCase):
             return_value=_Response(json.dumps(full_manifest).encode("utf-8")),
         ):
             manifest = fetcher.fetch(
-                "https://raw.githubusercontent.com/nikolasvoss/ai-debugger-v2/main/release/install-manifest.json"
+                "https://raw.githubusercontent.com/nikolasvoss/debugOracle/main/release/install-manifest.json"
             )
         self.assertEqual(manifest.channel, "stable")
 

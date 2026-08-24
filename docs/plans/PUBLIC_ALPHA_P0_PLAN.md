@@ -19,7 +19,7 @@ items were consciously changed or deferred:
   than creating replacement clean-history repositories.
 - The reproducible text, snapshot, PDF, and README showcase shipped without the
   optional video or animation asset.
-- The public main repository is `nikolasvoss/ai-debugger-v2`, not the provisional
+- The public main repository is `nikolasvoss/debugOracle`, not the provisional
   `nikolasvoss/debugoracle` name in step 13.
 - Optional Docling and semantic installer profiles remain disabled because their
   dependency/model license closure is incomplete.

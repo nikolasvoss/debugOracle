@@ -32,8 +32,8 @@ DebugOracle is operated by a coding agent such as Codex or Claude Code. You do n
    in Codex or Claude Code:
 
 ```bash
-git clone --recurse-submodules https://github.com/nikolasvoss/ai-debugger-v2.git
-cd ai-debugger-v2
+git clone --recurse-submodules https://github.com/nikolasvoss/debugOracle.git
+cd debugOracle
 ```
 
    If you already cloned the repository without submodules, recover them before
@@ -124,4 +124,4 @@ The automated non-HIL compatibility suite covers Python 3.10 through 3.14 on Ubu
 - [Architecture](docs/architecture.md)
 - [Security reporting](SECURITY.md)
 
-For ordinary bugs and setup questions, use [GitHub Issues](https://github.com/nikolasvoss/ai-debugger-v2/issues).
+For ordinary bugs and setup questions, use [GitHub Issues](https://github.com/nikolasvoss/debugOracle/issues).

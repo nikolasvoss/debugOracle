@@ -29,9 +29,9 @@ semantic = ["sentence-transformers>=2.7", "numpy>=1.26"]
 dev = ["pyright", "pytest", "tomli; python_version < '3.11'"]
 
 [project.urls]
-Changelog = "https://github.com/nikolasvoss/ai-debugger-v2/blob/main/changelog.md"
-Issues = "https://github.com/nikolasvoss/ai-debugger-v2/issues"
-Repository = "https://github.com/nikolasvoss/ai-debugger-v2"
+Changelog = "https://github.com/nikolasvoss/debugOracle/blob/main/changelog.md"
+Issues = "https://github.com/nikolasvoss/debugOracle/issues"
+Repository = "https://github.com/nikolasvoss/debugOracle"
 
 [project.scripts]
 dbgoracle = "debugoracle:main"

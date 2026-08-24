@@ -145,7 +145,7 @@ class PublicReleaseContractTests(unittest.TestCase):
 
         self.assertIn("## Supported Versions", security_text)
         self.assertIn(
-            "https://github.com/nikolasvoss/ai-debugger-v2/security/advisories/new",
+            "https://github.com/nikolasvoss/debugOracle/security/advisories/new",
             security_text,
         )
         self.assertNotIn("mailto:", security_text.casefold())
@@ -165,10 +165,10 @@ class PublicReleaseContractTests(unittest.TestCase):
             project["urls"],
             {
                 "Changelog": (
-                    "https://github.com/nikolasvoss/ai-debugger-v2/blob/main/changelog.md"
+                    "https://github.com/nikolasvoss/debugOracle/blob/main/changelog.md"
                 ),
-                "Issues": "https://github.com/nikolasvoss/ai-debugger-v2/issues",
-                "Repository": "https://github.com/nikolasvoss/ai-debugger-v2",
+                "Issues": "https://github.com/nikolasvoss/debugOracle/issues",
+                "Repository": "https://github.com/nikolasvoss/debugOracle",
             },
         )
 

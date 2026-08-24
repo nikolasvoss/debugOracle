@@ -11,9 +11,9 @@ builds
 - Fixed `SOURCE_DATE_EPOCH`: `1787529600` (`2026-08-24T00:00:00Z`)
 - Isolated build backend: `setuptools==84.0.0`
 - Wheel: `debugoracle-0.3.0-py3-none-any.whl`
-- Size: `147822` bytes
+- Size: `147806` bytes
 - SHA-256:
-  `caf3d4896d688b4b4f85d6f8451e6e21b8e52b2127e18b81e264a52b6a17f9b0`
+  `d0da3e18707a5749fb288920cc048f7b60a3be318ce1a828246b5e1a71b27715`
 
 Two independent isolated builds produced the same wheel filename, size, and
 SHA-256. After recording the hash and size in `release/install-manifest.json`,

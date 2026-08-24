@@ -232,7 +232,7 @@ def _manifest(
         python_requires=">=3.10",
         installer_min_version="0.1.0",
         artifact_url=(
-            "https://github.com/nikolasvoss/ai-debugger-v2/releases/download/"
+            "https://github.com/nikolasvoss/debugOracle/releases/download/"
             f"v0.1.0/{artifact_filename}"
         ),
         artifact_sha256=digest or hashlib.sha256(content).hexdigest(),
