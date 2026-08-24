@@ -74,6 +74,10 @@ Near-term, DebugOracle is:
    tests in pull-request and `main` CI. Until then those jobs exercise only the
    main repository; tagged release validation remains strict and cannot use the
    temporary exception.
+19. Python 3.12-only runtime policy
+   For release 0.3.1, narrow the public Linux runtime promise to Python 3.12.x,
+   remove the redundant multi-minor CI matrix, and keep package, installer,
+   manifest, documentation, and release evidence aligned.
 
 ## Current milestone
 
