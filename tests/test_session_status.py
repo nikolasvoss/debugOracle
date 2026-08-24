@@ -377,19 +377,18 @@ class SessionStatusTests(unittest.TestCase):
         workspace = Path(tmpdir)
         session_dir = workspace / ".dbgoracle"
         session_dir.mkdir()
-        bundle = build_bundle_from_files(
-            str(FIXTURES / "sample.mi"),
-            str(FIXTURES / "sample.rtt"),
-        )
-        save_artifact(bundle, str(session_dir / "latest_snapshot.json"))
-        (session_dir / "cortex-debug-shared-mi.log").write_text(
+        gdb_mi_path = session_dir / "cortex-debug-shared-mi.log"
+        rtt_path = session_dir / "session.rtt"
+        gdb_mi_path.write_text(
             (FIXTURES / "sample.mi").read_text(encoding="utf-8"),
             encoding="utf-8",
         )
-        (session_dir / "session.rtt").write_text(
+        rtt_path.write_text(
             (FIXTURES / "sample.rtt").read_text(encoding="utf-8"),
             encoding="utf-8",
         )
+        bundle = build_bundle_from_files(str(gdb_mi_path), str(rtt_path))
+        save_artifact(bundle, str(session_dir / "latest_snapshot.json"))
         return str(workspace)
 
     def _write_attach_workspace(self, workspace: Path) -> None:

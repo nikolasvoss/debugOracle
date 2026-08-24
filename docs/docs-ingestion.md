@@ -6,11 +6,11 @@ Use `dbgoracle docs` to ingest MCU manuals/datasheets into local sidecar artifac
 
 Base requirements:
 
-- Python 3.10+
+- Python 3.10–3.14
 - Installed `dbgoracle` CLI
 
 The Linux installer uses the base profile. Docling, semantic, and combined
-profiles are disabled for the 0.2.0 supported installer because their direct
+profiles are disabled for the currently supported installer because their direct
 dependency and model license audits are incomplete.
 
 Included by default in packaged installs (no extra install needed for normal PDF ingest):
@@ -18,7 +18,7 @@ Included by default in packaged installs (no extra install needed for normal PDF
 - `pypdf`
 
 Optional package extras remain declared for downstream experimentation, but
-they are outside the 0.2.0 supported install path. See the Python dependency
+they are outside the currently supported install path. See the Python dependency
 inventory linked from `THIRD_PARTY_NOTICES.md` before selecting them manually.
 
 If your distro enforces PEP 668 (`error: externally-managed-environment`), install into an isolated environment:
@@ -135,10 +135,12 @@ reported explicitly and make an otherwise usable ingest `partial`. Encrypted
 or malformed PDFs fail explicitly without switching parsers or fabricating
 text.
 
-Docling is an audited optional backend for difficult, scanned, or
-layout-heavy PDFs. When its page mapping cannot be trusted, DebugOracle reports
-the condition and explicitly retries with `pypdf`. If that fallback fails, the
-original Docling evidence is retained with a warning describing the failure.
+Docling is an experimental optional backend outside the supported 0.3.0 install
+path. Its dependency and model license audits are not complete. When an
+independently prepared environment uses it and its page mapping cannot be
+trusted, DebugOracle reports the condition and explicitly retries with
+`pypdf`. If that fallback fails, the original Docling evidence is retained with
+a warning describing the failure.
 
 ## Semantic Search
 
@@ -202,17 +204,17 @@ pypdf import/install issue:
 
 Docling not installed:
 
-- the Docling profile is intentionally unavailable in the 0.2.0 supported installer
+- the Docling profile is intentionally unavailable in the currently supported installer
 - use the base `pypdf` parser
 
 Semantic mode not available:
 
-- the semantic profile is intentionally unavailable in the 0.2.0 supported installer
+- the semantic profile is intentionally unavailable in the currently supported installer
 - base BM25 search remains available
 
 No search results:
 
 - run `dbgoracle docs status` and check for `failed`/`partial`
-- try `--parser docling` for difficult PDFs
+- use the supported `pypdf` parser; the Docling profile remains blocked for this release
 - use exact register/peripheral terms first; search auto-selects hybrid mode when semantic embeddings are available
 - run `dbgoracle docs doctor` to verify parser/semantic dependency readiness

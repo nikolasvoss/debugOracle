@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..outcomes import InstallState
+from ..versioning import VersioningError, compare_versions
 
 
 class PipxError(RuntimeError):
@@ -52,14 +53,21 @@ class PipxBackend:
             if isinstance(candidate, str) and candidate.strip():
                 installed_version = candidate
         binary_path = str(self.bin_dir() / "dbgoracle")
-        if installed_version == target_version:
-            state = InstallState.INSTALLED_SAME_VERSION
-        elif installed_version is None:
-            state = InstallState.INSTALL_IN_PROGRESS
-        elif _compare_versions(installed_version, target_version) < 0:
-            state = InstallState.INSTALLED_OLDER_VERSION
-        else:
-            state = InstallState.INSTALLED_NEWER_VERSION
+        try:
+            if installed_version is None:
+                state = InstallState.INSTALL_IN_PROGRESS
+            else:
+                comparison = compare_versions(installed_version, target_version)
+                if comparison == 0:
+                    state = InstallState.INSTALLED_SAME_VERSION
+                elif comparison < 0:
+                    state = InstallState.INSTALLED_OLDER_VERSION
+                else:
+                    state = InstallState.INSTALLED_NEWER_VERSION
+        except VersioningError as error:
+            raise PipxError(
+                f"pipx reported invalid version metadata: {error}"
+            ) from error
         return InstallationStatus(
             state=state, installed_version=installed_version, binary_path=binary_path
         )
@@ -96,26 +104,32 @@ class PipxBackend:
                     binary = str(candidate)
         if binary is None:
             return False, "Installed binary is not discoverable"
-        completed = subprocess.run(  # nosec B603
-            [binary, "--version"],
-            check=False,
-            capture_output=True,
-            text=True,
-            env=self._env,
-        )
+        try:
+            completed = subprocess.run(  # nosec B603
+                [binary, "--version"],
+                check=False,
+                capture_output=True,
+                text=True,
+                env=self._env,
+            )
+        except (OSError, subprocess.SubprocessError) as error:
+            return False, f"Unable to run installed CLI: {error}"
         if completed.returncode != 0:
             return False, (
                 completed.stderr or completed.stdout or "version check failed"
             ).strip()
         output = (completed.stdout or completed.stderr).strip()
-        if expected_version is not None and expected_version not in output:
+        if expected_version is not None and output != expected_version:
             return False, f"Installed binary reports unexpected version: {output}"
         return True, output
 
     def _run(self, command: list[str]) -> subprocess.CompletedProcess[str]:
-        completed = subprocess.run(  # nosec B603
-            command, check=False, capture_output=True, text=True, env=self._env
-        )
+        try:
+            completed = subprocess.run(  # nosec B603
+                command, check=False, capture_output=True, text=True, env=self._env
+            )
+        except (OSError, subprocess.SubprocessError) as error:
+            raise PipxError(f"Unable to run pipx: {error}") from error
         if completed.returncode != 0:
             raise PipxError(
                 (completed.stderr or completed.stdout or "pipx command failed").strip()
@@ -131,23 +145,3 @@ class PipxBackend:
         if not isinstance(payload, dict):
             raise PipxError("Unexpected pipx JSON payload")
         return payload
-
-
-def _compare_versions(left: str, right: str) -> int:
-    def normalize(raw: str) -> list[int]:
-        values: list[int] = []
-        for piece in raw.split("."):
-            digits = "".join(ch for ch in piece if ch.isdigit())
-            values.append(int(digits or "0"))
-        return values
-
-    left_parts = normalize(left)
-    right_parts = normalize(right)
-    size = max(len(left_parts), len(right_parts))
-    left_parts.extend([0] * (size - len(left_parts)))
-    right_parts.extend([0] * (size - len(right_parts)))
-    if left_parts < right_parts:
-        return -1
-    if left_parts > right_parts:
-        return 1
-    return 0

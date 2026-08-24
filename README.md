@@ -22,13 +22,27 @@ DebugOracle is operated by a coding agent such as Codex or Claude Code. You do n
 
 | For | You need | It enables |
 | --- | --- | --- |
-| Install DebugOracle | Linux, Python 3.10+, `pipx`, and Codex or Claude Code | Installation and agent-guided workspace setup |
+| Install DebugOracle | Linux, Python 3.10–3.14, `pipx`, and Codex or Claude Code | Installation and agent-guided workspace setup |
 | Capture debug evidence | Your firmware project, a built ELF, and your existing debugger setup—normally Cortex-Debug and OpenOCD | Debugger state, runtime logs, and captured target evidence |
 | **Full hardware debugging** | A matching SVD plus the device reference manual and/or datasheet as PDFs | Registers interpreted in hardware context and checked against the manufacturer specification |
 
 ## Get started
 
-1. Clone this repository and open it in Codex or Claude Code.
+1. Clone this repository with its pinned demo and SDK dependencies, then open it
+   in Codex or Claude Code:
+
+```bash
+git clone --recurse-submodules https://github.com/nikolasvoss/debugOracle.git
+cd debugOracle
+```
+
+   If you already cloned the repository without submodules, recover them before
+   running the tests or opening the demo:
+
+```bash
+git submodule update --init --recursive
+```
+
 2. Ask the agent:
 
 ```text
@@ -69,7 +83,12 @@ The folder is not required. Everything in it is optional, and filenames and subf
 
 If PDFs are found, the agent asks permission before preparing them for local search. It may take seconds to several minutes. The tool searches only local PDFs; it does not download vendor documentation. Original files stay unchanged; generated search data is stored under `.dbgoracle/documentation-search/`.
 
-Parser choice affects result quality. The default `pypdf` parser extracts text page by page, but scanned or image-only pages are incomplete, encrypted or malformed PDFs cannot be ingested, and complex tables or layouts may extract less accurately. For difficult scanned or layout-heavy PDFs, use the optional `docling` parser; DebugOracle records the parser and page provenance with the resulting evidence.
+Parser choice affects result quality. The supported 0.3.0 install uses the
+default `pypdf` parser, which extracts text page by page. Scanned or image-only
+pages are incomplete, encrypted or malformed PDFs cannot be ingested, and
+complex tables or layouts may extract less accurately. The optional Docling
+and semantic profiles remain disabled until their dependency and model license
+audits are complete.
 </details>
 
 ## See it work without hardware
@@ -92,7 +111,7 @@ The demo combines runtime output, firmware source, captured registers, and a loc
 
 ## Platform support
 
-Verified public-alpha environment: Ubuntu 24.04 LTS x86-64 with Python 3.12 and `pipx`. Other Linux distributions, architectures, and Python versions are currently unverified.
+The automated non-HIL compatibility suite covers Python 3.10 through 3.14 on Ubuntu. The authoritative public-release environment is Ubuntu 24.04 LTS x86-64 with Python 3.12 and `pipx`. Other Linux distributions and architectures are currently unverified.
 
 ## Help and documentation
 
@@ -105,4 +124,4 @@ Verified public-alpha environment: Ubuntu 24.04 LTS x86-64 with Python 3.12 and 
 - [Architecture](docs/architecture.md)
 - [Security reporting](SECURITY.md)
 
-For ordinary bugs and setup questions, use [GitHub Issues](https://github.com/nikolasvoss/ai-debugger-v2/issues).
+For ordinary bugs and setup questions, use [GitHub Issues](https://github.com/nikolasvoss/debugOracle/issues).

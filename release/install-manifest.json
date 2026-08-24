@@ -1,10 +1,13 @@
 {
-  "schema_version": "1",
+  "schema_version": "2",
   "channel": "stable",
   "package_name": "debugoracle",
-  "version": "0.2.0",
-  "python_requires": ">=3.10",
-  "installer_min_version": "0.1.0",
-  "release_notes_url": "https://github.com/nikolasvoss/ai-debugger-v2/releases/tag/v0.2.0",
-  "source_url": "https://github.com/nikolasvoss/ai-debugger-v2/archive/refs/tags/v0.2.0.tar.gz"
+  "version": "0.3.0",
+  "python_requires": ">=3.10,<3.15",
+  "installer_min_version": "0.2.0",
+  "release_notes_url": "https://github.com/nikolasvoss/debugOracle/releases/tag/v0.3.0",
+  "artifact_url": "https://github.com/nikolasvoss/debugOracle/releases/download/v0.3.0/debugoracle-0.3.0-py3-none-any.whl",
+  "artifact_sha256": "05c6c7c012f283f7b53a21718fc7704d4684216de3e8eafc2f8c40550ae8cd30",
+  "artifact_size": 147806,
+  "artifact_kind": "wheel"
 }

@@ -6,6 +6,7 @@ import socketserver
 import tempfile
 import threading
 import unittest
+from dataclasses import asdict
 from pathlib import Path
 from unittest.mock import patch
 
@@ -26,6 +27,25 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 
 class ArtifactSchemaTests(unittest.TestCase):
+    def test_identical_build_inputs_only_vary_documented_snapshot_fields(self) -> None:
+        gdb_text = '*stopped,reason="breakpoint-hit"\n^done\n'
+        rtt_text = "stable line\n"
+
+        with patch(
+            "debugoracle.builder.utc_now", return_value="2026-08-24T10:00:00+00:00"
+        ):
+            first = asdict(build_bundle_from_text(gdb_text, rtt_text))
+        with patch(
+            "debugoracle.builder.utc_now", return_value="2026-08-24T10:01:00+00:00"
+        ):
+            second = asdict(build_bundle_from_text(gdb_text, rtt_text))
+
+        for payload in (first, second):
+            payload.pop("captured_at")
+            payload.pop("snapshot_id")
+
+        self.assertEqual(first, second)
+
     def test_canonical_artifact_api_supports_round_trip_without_legacy_bundle_names(
         self,
     ) -> None:
@@ -65,6 +85,19 @@ class ArtifactSchemaTests(unittest.TestCase):
 
         self.assertEqual(payload["schema_version"], CURRENT_BUNDLE_SCHEMA_VERSION)
         self.assertEqual(payload["live_state"]["backend"], "demo")
+
+    def test_save_artifact_creates_missing_explicit_parent_directories(self) -> None:
+        artifact = build_bundle_from_text("", "")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "new" / "nested" / "snapshot.json"
+            save_artifact(artifact, str(path))
+
+            self.assertTrue(path.is_file())
+            self.assertEqual(
+                json.loads(path.read_text(encoding="utf-8"))["snapshot_id"],
+                artifact.snapshot_id,
+            )
 
     def test_save_and_load_preserve_structured_variable_evidence(self) -> None:
         bundle = build_bundle_from_text("", "")

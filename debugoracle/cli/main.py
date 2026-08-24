@@ -162,7 +162,7 @@ def build_parser() -> argparse.ArgumentParser:
     capture.add_argument(
         "--port",
         required=True,
-        type=int,
+        type=tcp_port,
         help="RTT TCP port exposed by OpenOCD",
     )
     capture.add_argument(
@@ -218,7 +218,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run.add_argument(
         "--port",
-        type=int,
+        type=tcp_port,
         default=DEFAULT_RUN_PORT,
         help="RTT TCP port exposed by OpenOCD",
     )
@@ -340,8 +340,22 @@ def build_parser() -> argparse.ArgumentParser:
     _add_install_cli_parser(subparsers)
     _add_uninstall_cli_parser(subparsers)
     _add_init_workspace_parser(subparsers)
+    _hide_internal_subcommands(subparsers, {"install-cli", "uninstall-cli"})
 
     return parser
+
+
+def _hide_internal_subcommands(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+    internal_names: set[str],
+) -> None:
+    public_names = [name for name in subparsers.choices if name not in internal_names]
+    subparsers.metavar = "{" + ",".join(public_names) + "}"
+    subparsers._choices_actions[:] = [
+        action
+        for action in subparsers._choices_actions
+        if action.dest not in internal_names
+    ]
 
 
 def _add_docs_parser(
@@ -518,7 +532,7 @@ def _add_fetch_parser(
     )
     fetch.add_argument(
         "--openocd-tcl-port",
-        type=int,
+        type=tcp_port,
         help="Optional OpenOCD Tcl port override used for live peripheral capture and memory reads",
     )
     fetch.add_argument(
@@ -618,7 +632,7 @@ def _add_install_cli_parser(
     )
     install_cli.add_argument(
         "--package-source",
-        help="Optional package source override passed to pipx",
+        help="Checkout-local package source override",
     )
     install_cli.add_argument(
         "--yes",
@@ -705,6 +719,7 @@ def _add_init_workspace_parser(
     )
     init_workspace.add_argument(
         "--rtt-port",
+        type=tcp_port,
         default=DEFAULT_INIT_RTT_PORT,
         help="Default RTT port stored in settings.json",
     )
@@ -758,6 +773,13 @@ def positive_int(value: str) -> int:
     parsed = int(value, 10)
     if parsed <= 0:
         raise argparse.ArgumentTypeError("tail must be a positive integer")
+    return parsed
+
+
+def tcp_port(value: str) -> int:
+    parsed = int(value, 10)
+    if not 1 <= parsed <= 65535:
+        raise argparse.ArgumentTypeError("port must be between 1 and 65535")
     return parsed
 
 

@@ -15,7 +15,7 @@ Provide one deterministic backend for selecting third-party docs tooling after
 ## Responsibilities
 
 - Define docs-tool profiles: `none`, `docling`, `semantic`, `all`.
-- Support only `none` in the 0.2.0 installer while optional dependency and model
+- Support only `none` in the 0.3.0 installer while optional dependency and model
   license evidence remains incomplete.
 - Map each profile to deterministic dependency requirements.
 - Validate install preconditions before injecting dependencies:
@@ -54,7 +54,7 @@ Provide one deterministic backend for selecting third-party docs tooling after
 - `all` -> `["docling", "sentence-transformers", "numpy"]`
 
 The dependency mappings describe the declared package extras. They do not make
-the profiles supported installer selections. For 0.2.0, `docling`, `semantic`,
+the profiles supported installer selections. For 0.3.0, `docling`, `semantic`,
 and `all` return `blocked_license_audit` before inspecting or mutating `pipx`;
 the outcome contains no installation requirements. The interactive bootstrap
 does not offer those profiles. `none` remains the supported base-CLI path.

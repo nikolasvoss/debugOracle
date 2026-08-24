@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import importlib
 import io
 import json
 import runpy
+import sys
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -16,15 +18,52 @@ from debugoracle.cli.commands import run_stop
 from debugoracle.rtt import RttCaptureState
 
 
+cli_main_module = importlib.import_module("debugoracle.cli.main")
+
+
+def _identity(pid: int, workspace: Path) -> run_stop.ProcessIdentity:
+    return run_stop.ProcessIdentity(
+        pid=pid,
+        start_time_ticks=100,
+        executable=str(Path(sys.executable).resolve()),
+        argv=(
+            sys.executable,
+            "-m",
+            "debugoracle",
+            "run",
+            "--workspace-root",
+            str(workspace.resolve()),
+        ),
+    )
+
+
+def _write_runtime(
+    path: Path, workspace: Path, identity: run_stop.ProcessIdentity
+) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": run_stop.RUN_METADATA_SCHEMA_VERSION,
+                "pid": identity.pid,
+                "start_time_ticks": identity.start_time_ticks,
+                "executable": identity.executable,
+                "argv": list(identity.argv),
+                "workspace_root": str(workspace.resolve()),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 class EntryPointTests(unittest.TestCase):
     def test_package_main_delegates_to_cli_main(self) -> None:
-        with patch("debugoracle.cli.main.main", return_value=7) as main_mock:
+        with patch.object(cli_main_module, "main", return_value=7) as main_mock:
             exit_code = package_entry(["status"])
         self.assertEqual(exit_code, 7)
         main_mock.assert_called_once_with(["status"])
 
     def test_module_main_raises_system_exit_with_cli_code(self) -> None:
-        with patch("debugoracle.cli.main.main", return_value=3):
+        with patch.object(cli_main_module, "main", return_value=3):
             with self.assertRaises(SystemExit) as cm:
                 runpy.run_module("debugoracle", run_name="__main__")
         self.assertEqual(cm.exception.code, 3)
@@ -50,18 +89,13 @@ class RunStopHelpersTests(unittest.TestCase):
             self.assertIn("Invalid runtime metadata", stdout.getvalue())
             self.assertFalse(runtime.exists())
 
-            runtime.write_text(json.dumps({"pid": 9999}), encoding="utf-8")
+            identity = _identity(9999, workspace)
+            _write_runtime(runtime, workspace, identity)
             stdout = io.StringIO()
-            with (
-                patch(
-                    "debugoracle.cli.commands.run_stop.is_pid_running",
-                    return_value=False,
-                ),
-                redirect_stdout(stdout),
-            ):
+            with redirect_stdout(stdout):
                 code = cli_main(["stop", "--workspace-root", str(workspace)])
             self.assertEqual(code, 0)
-            self.assertIn("is not running", stdout.getvalue())
+            self.assertIn("stale", stdout.getvalue().lower())
             self.assertFalse(runtime.exists())
 
     def test_stop_reports_signal_and_force_kill_failures(self) -> None:
@@ -69,43 +103,50 @@ class RunStopHelpersTests(unittest.TestCase):
             workspace = Path(tmpdir)
             runtime = workspace / ".dbgoracle" / run_stop.DEFAULT_RUN_METADATA
             runtime.parent.mkdir(parents=True, exist_ok=True)
-            runtime.write_text(json.dumps({"pid": 4242}), encoding="utf-8")
+            identity = _identity(4242, workspace)
+            _write_runtime(runtime, workspace, identity)
 
             stderr = io.StringIO()
             with (
                 patch(
-                    "debugoracle.cli.commands.run_stop.is_pid_running",
-                    return_value=True,
+                    "debugoracle.cli.commands.run_stop.capture_process_identity",
+                    return_value=identity,
                 ),
                 patch(
-                    "debugoracle.cli.commands.run_stop.is_owned_run_process",
-                    return_value=True,
+                    "debugoracle.cli.commands.run_stop.open_process_handle",
+                    return_value=71,
                 ),
                 patch(
-                    "debugoracle.cli.commands.run_stop.os.kill",
+                    "debugoracle.cli.commands.run_stop.signal_process_handle",
                     side_effect=OSError("sigterm failed"),
                 ),
+                patch("debugoracle.cli.commands.run_stop.os.close"),
                 redirect_stderr(stderr),
             ):
                 code = cli_main(["stop", "--workspace-root", str(workspace)])
             self.assertEqual(code, 1)
             self.assertIn("Failed to signal detached RTT run", stderr.getvalue())
 
-            runtime.write_text(json.dumps({"pid": 4242}), encoding="utf-8")
+            _write_runtime(runtime, workspace, identity)
             stderr = io.StringIO()
             with (
                 patch(
-                    "debugoracle.cli.commands.run_stop.is_pid_running",
-                    side_effect=[True, True, True],
+                    "debugoracle.cli.commands.run_stop.capture_process_identity",
+                    side_effect=[identity, identity],
                 ),
                 patch(
-                    "debugoracle.cli.commands.run_stop.is_owned_run_process",
-                    return_value=True,
+                    "debugoracle.cli.commands.run_stop.open_process_handle",
+                    return_value=71,
                 ),
                 patch(
-                    "debugoracle.cli.commands.run_stop.os.kill",
+                    "debugoracle.cli.commands.run_stop.signal_process_handle",
                     side_effect=[None, OSError("sigkill failed")],
                 ),
+                patch(
+                    "debugoracle.cli.commands.run_stop.wait_for_process_exit",
+                    return_value=False,
+                ),
+                patch("debugoracle.cli.commands.run_stop.os.close"),
                 redirect_stderr(stderr),
             ):
                 code = cli_main(
@@ -120,18 +161,24 @@ class RunStopHelpersTests(unittest.TestCase):
             runtime = workspace / ".dbgoracle" / run_stop.DEFAULT_RUN_METADATA
             runtime.parent.mkdir(parents=True, exist_ok=True)
 
-            runtime.write_text(json.dumps({"pid": 3333}), encoding="utf-8")
+            identity = _identity(3333, workspace)
+            _write_runtime(runtime, workspace, identity)
             stdout = io.StringIO()
             with (
                 patch(
-                    "debugoracle.cli.commands.run_stop.is_pid_running",
-                    side_effect=[True, True, False],
+                    "debugoracle.cli.commands.run_stop.capture_process_identity",
+                    side_effect=[identity, identity],
                 ),
                 patch(
-                    "debugoracle.cli.commands.run_stop.is_owned_run_process",
-                    return_value=True,
+                    "debugoracle.cli.commands.run_stop.open_process_handle",
+                    return_value=71,
                 ),
-                patch("debugoracle.cli.commands.run_stop.os.kill", return_value=None),
+                patch("debugoracle.cli.commands.run_stop.signal_process_handle"),
+                patch(
+                    "debugoracle.cli.commands.run_stop.wait_for_process_exit",
+                    side_effect=[False, True],
+                ),
+                patch("debugoracle.cli.commands.run_stop.os.close"),
                 redirect_stdout(stdout),
             ):
                 code = cli_main(
@@ -140,18 +187,23 @@ class RunStopHelpersTests(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertIn("after force-kill", stdout.getvalue())
 
-            runtime.write_text(json.dumps({"pid": 3333}), encoding="utf-8")
+            _write_runtime(runtime, workspace, identity)
             stderr = io.StringIO()
             with (
                 patch(
-                    "debugoracle.cli.commands.run_stop.is_pid_running",
-                    side_effect=[True, True, True],
+                    "debugoracle.cli.commands.run_stop.capture_process_identity",
+                    side_effect=[identity, identity],
                 ),
                 patch(
-                    "debugoracle.cli.commands.run_stop.is_owned_run_process",
-                    return_value=True,
+                    "debugoracle.cli.commands.run_stop.open_process_handle",
+                    return_value=71,
                 ),
-                patch("debugoracle.cli.commands.run_stop.os.kill", return_value=None),
+                patch("debugoracle.cli.commands.run_stop.signal_process_handle"),
+                patch(
+                    "debugoracle.cli.commands.run_stop.wait_for_process_exit",
+                    return_value=False,
+                ),
+                patch("debugoracle.cli.commands.run_stop.os.close"),
                 redirect_stderr(stderr),
             ):
                 code = cli_main(
@@ -248,9 +300,11 @@ class RunStopHelpersTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "runtime.json"
             path.write_text("[]", encoding="utf-8")
-            self.assertIsNone(run_stop.load_runtime_metadata(path))
+            with self.assertRaises(run_stop.RuntimeMetadataError):
+                run_stop.load_runtime_metadata(path)
             path.write_text("{broken", encoding="utf-8")
-            self.assertIsNone(run_stop.load_runtime_metadata(path))
+            with self.assertRaises(run_stop.RuntimeMetadataError):
+                run_stop.load_runtime_metadata(path)
 
         with patch(
             "debugoracle.cli.commands.run_stop.read_process_cmdline",

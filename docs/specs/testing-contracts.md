@@ -57,7 +57,7 @@ Fixtures do not require a metadata header in Phase 1. In Phase 3 (replay fixture
 
 ### Fixture versioning (`__version__` — Living)
 
-JSON artifact fixtures carry a `schema_version` field (currently `"4"`). Tests that load fixture JSON must:
+JSON artifact fixtures carry a `schema_version` field (currently `"5"`). Tests that load fixture JSON must:
 1. Check `schema_version` matches `CURRENT_BUNDLE_SCHEMA_VERSION`, or
 2. Explicitly document that they are testing strict-load failure behavior for unsupported schemas.
 

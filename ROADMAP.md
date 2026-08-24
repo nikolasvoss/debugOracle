@@ -61,6 +61,19 @@ Near-term, DebugOracle is:
    Reuse the same evidence surfaces with saved sessions when hardware is unavailable.
 16. Advanced live views
    Add higher-level live inspection such as watch expressions, structured fault decoding, and RTOS-aware views after safety and trust are mature.
+17. Verified release-wheel onboarding
+   Make the verified GitHub Release wheel the default installation path for
+   ordinary users without changing DebugOracle's runtime behavior or current
+   Linux support. Retain an explicit checkout installation for contributors,
+   add a standalone bootstrap path, and remove recursive submodules from the
+   normal user journey. This is deferred beyond release 0.3.0; its supported
+   installer continues to use the current checkout-local source override.
+18. Public reference-workspace availability
+   Publish `nikolasvoss/debugoracle-reference-workspaces` after its separate
+   release review, then restore recursive reference-workspace checkout and
+   tests in pull-request and `main` CI. Until then those jobs exercise only the
+   main repository; tagged release validation remains strict and cannot use the
+   temporary exception.
 
 ## Current milestone
 

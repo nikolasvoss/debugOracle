@@ -26,7 +26,7 @@ class InstallDocsToolingTests(unittest.TestCase):
         self.assertEqual(outcome.code, "blocked_license_audit")
         self.assertEqual(outcome.selection, DOCS_MODE_DOCLING)
         self.assertEqual(outcome.requirements, [])
-        self.assertIn("not supported for the 0.2.0 public alpha", outcome.message)
+        self.assertIn("not supported for the current public alpha", outcome.message)
         self.assertIn("dependency license inventory", outcome.remediation)
         runner.assert_not_called()
         which.assert_not_called()

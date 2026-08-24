@@ -1,19 +1,31 @@
 {
   "schema_version": 1,
-  "release": "0.2.0",
+  "release": "0.3.0",
   "audit_basis": {
     "configuration": "pyproject.toml",
     "lockfile": null,
     "local_metadata_api": "importlib.metadata",
-    "remote_release_metadata": "https://pypi.org/project/pypdf/6.16.1/",
-    "environment": "repository development environment plus official PyPI release metadata for the security-updated base dependency",
-    "limitation": "No dependency lockfile is present. The pypdf 6.16.1 version, license, hashes, and provenance are official PyPI release evidence; the local development environment remained on 6.9.2 during this audit. Other observed versions and licenses are evidence for locally installed direct packages only and do not prove the transitive closure of an unpinned extra."
+    "remote_release_metadata": [
+      "https://pypi.org/project/pypdf/6.16.1/",
+      "https://pypi.org/project/packaging/26.0/"
+    ],
+    "environment": "repository development environment plus official PyPI release metadata for the pinned base dependencies",
+    "limitation": "No dependency lockfile is present. The pypdf 6.16.1 and packaging 26.0 versions, licenses, hashes, and provenance are official PyPI release evidence. Other observed versions and licenses are evidence for locally installed direct packages only and do not prove the transitive closure of an unpinned extra."
   },
   "profiles": [
     {
       "name": "base",
       "installer_status": "supported",
       "dependencies": [
+        {
+          "requirement": "packaging==26.0",
+          "observed_version": "26.0",
+          "license": "Apache-2.0 OR BSD-2-Clause",
+          "source": "https://github.com/pypa/packaging",
+          "evidence": "Official PyPI 26.0 release metadata declares Apache-2.0 OR BSD-2-Clause, Python >=3.8, no runtime dependencies, and wheel SHA-256 b36f1fef9334a5588b4166f8bcd26a14e521f2b55e6b9de3aaa80d3ff7a37529",
+          "security_evidence": [],
+          "audit_status": "compatible"
+        },
         {
           "requirement": "pypdf==6.16.1",
           "observed_version": "6.16.1",
@@ -93,6 +105,14 @@
           "license": "MIT",
           "source": "https://github.com/pytest-dev/pytest",
           "evidence": "Installed pytest 7.4.4 core metadata License and MIT classifier",
+          "audit_status": "development_only_unlocked"
+        },
+        {
+          "requirement": "tomli; python_version < '3.11'",
+          "observed_version": "2.4.1",
+          "license": "MIT",
+          "source": "https://pypi.org/project/tomli/",
+          "evidence": "Official PyPI project metadata identifies Tomli 2.4.1 as an MIT-licensed backport of tomllib for Python 3.8 and newer",
           "audit_status": "development_only_unlocked"
         }
       ],

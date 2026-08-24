@@ -50,8 +50,8 @@ def collect_docs_doctor_checks(
             key="docling",
             required=False,
             remedy=(
-                "pipx inject debugoracle docling\n"
-                f"  or: {quoted_executable} -m pip install 'debugoracle[docling]'"
+                "Unavailable in the supported 0.3.0 installer while the "
+                "optional-profile dependency and model license audit is open."
             ),
         )
     )
@@ -60,16 +60,16 @@ def collect_docs_doctor_checks(
         key="numpy",
         required=False,
         remedy=(
-            "pipx inject debugoracle sentence-transformers numpy\n"
-            f"  or: {quoted_executable} -m pip install 'debugoracle[semantic]'"
+            "Unavailable in the supported 0.3.0 installer while the semantic "
+            "dependency and model license audit is open."
         ),
     )
     semantic_st = _module_check(
         key="sentence_transformers",
         required=False,
         remedy=(
-            "pipx inject debugoracle sentence-transformers numpy\n"
-            f"  or: {quoted_executable} -m pip install 'debugoracle[semantic]'"
+            "Unavailable in the supported 0.3.0 installer while the semantic "
+            "dependency and model license audit is open."
         ),
     )
     checks.extend([semantic_numpy, semantic_st])

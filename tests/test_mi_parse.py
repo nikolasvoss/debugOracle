@@ -2,10 +2,38 @@ from __future__ import annotations
 
 import unittest
 
-from debugoracle.mi import parse_mi_record
+from debugoracle.mi import MIParseError, parse_mi_record
 
 
 class MIParseTests(unittest.TestCase):
+    def test_mismatched_list_closer_raises_instead_of_hanging(self) -> None:
+        with self.assertRaisesRegex(MIParseError, "position"):
+            parse_mi_record("^done,result=[}]")
+
+    def test_malformed_collections_fail_with_a_position(self) -> None:
+        malformed = [
+            "^done,result={]",
+            "^done,result=",
+            "^done,result=[,]",
+            "^done,result=[value,]",
+            "^done,result={value=one,}",
+            "^done,result=[{value=one]}",
+            "^done,result=[value",
+            '^done,result="unterminated',
+            '^done,result="escape\\',
+        ]
+        for record in malformed:
+            with (
+                self.subTest(record=record),
+                self.assertRaisesRegex(MIParseError, "position"),
+            ):
+                parse_mi_record(record)
+
+    def test_excessive_nesting_fails_closed(self) -> None:
+        record = "^done,result=" + "[" * 129 + "value" + "]" * 129
+        with self.assertRaisesRegex(MIParseError, "Nesting exceeds limit"):
+            parse_mi_record(record)
+
     def test_parse_mi_record_accepts_token_prefix(self) -> None:
         record = parse_mi_record('15^done,foo="bar"')
         self.assertIsNotNone(record)

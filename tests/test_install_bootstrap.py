@@ -29,7 +29,7 @@ class InstallBootstrapTests(unittest.TestCase):
             selection = bootstrap_module._ask_docs_tools_choice()
 
         self.assertEqual(selection, bootstrap_module.DOCS_MODE_NONE)
-        self.assertIn("disabled for the 0.2.0 public alpha", stdout.getvalue())
+        self.assertIn("disabled for the current public alpha", stdout.getvalue())
         self.assertNotIn("Install docling", stdout.getvalue())
         input_mock.assert_not_called()
 

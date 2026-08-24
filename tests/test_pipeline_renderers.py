@@ -19,6 +19,21 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 
 class PipelineAndRendererTests(unittest.TestCase):
+    def test_raw_export_safely_creates_a_new_nested_directory(self) -> None:
+        gdb_text = (FIXTURES / "sample.mi").read_text(encoding="utf-8")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            export_dir = Path(tmpdir) / "new" / "raw"
+            artifact = build_bundle_from_text(
+                gdb_text,
+                export_raw=True,
+                export_dir=export_dir,
+            )
+
+            exported = export_dir / "raw-gdb-mi.log"
+            self.assertEqual(exported.read_text(encoding="utf-8"), gdb_text)
+            self.assertEqual(artifact.provenance["gdb_mi_raw_path"], str(exported))
+
     def test_transcript_accumulates_variable_entries_across_multiple_result_records(
         self,
     ) -> None:

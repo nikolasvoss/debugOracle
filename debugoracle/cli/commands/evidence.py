@@ -4,6 +4,7 @@ import argparse
 import os
 import re
 import sys
+import unicodedata
 from pathlib import Path
 from typing import TypedDict
 
@@ -24,6 +25,7 @@ from ...openocd import (
 from ...policy.halted_analysis import evaluate_artifact_live_state
 from ...policy.trust import evaluate_artifact_trust
 from ...renderers.report import ReportRenderOptions, render_report
+from ...safe_io import SafeIOError, atomic_write_text
 from ...session import (
     collect_session_status,
     DEFAULT_GDB_MI_FILENAME,
@@ -34,12 +36,22 @@ from ...session import (
 )
 from ._shared import parse_jsonc, resolve_workspace_path
 
+_FETCH_STDERR_WARNING_LIMIT = 8
+_FETCH_STDERR_WARNING_CHAR_LIMIT = 512
+_MI_PARSE_WARNING_PREFIX = re.compile(r"^Line ([0-9]+): unable to parse MI record:")
+
 
 def cmd_fetch(args: argparse.Namespace) -> int:
     workspace_root = Path(args.workspace_root).resolve()
     discovery = resolve_fetch_inputs(args, workspace_root)
     gdb_mi = discovery["gdb_mi"]
     rtt = discovery["rtt"]
+    if gdb_mi is None and rtt is None:
+        print(
+            missing_inputs_error("fetch", workspace_root, False),
+            file=sys.stderr,
+        )
+        return 2
     state_out = resolve_state_out_path(
         workspace_root=workspace_root,
         requested_state_out=args.state_out,
@@ -758,13 +770,65 @@ def _finalize_fetch_result(
     state_out: str,
     workspace_root: Path,
 ) -> int:
-    save_artifact(bundle, state_out)
+    try:
+        save_artifact(bundle, state_out, workspace_root=workspace_root)
+    except SafeIOError as error:
+        raise SystemExit(
+            f"fetch failed to safely write its snapshot: {error}"
+        ) from error
+    _emit_fetch_warnings(bundle)
     emit_fetch_summary(bundle, state_out, workspace_root=str(workspace_root))
     if bundle.has_embedded_memory_source and bundle.sources.memory.success_count == 0:
         raise SystemExit(
             "No memory ranges were captured successfully. Snapshot was still saved with failure entries."
         )
     return 0
+
+
+def _emit_fetch_warnings(bundle: InvestigationArtifact) -> None:
+    messages = [*bundle.parse_warnings, *_critical_warnings(bundle, None)]
+    unique_messages = list(dict.fromkeys(messages))
+    visible_messages = unique_messages[:_FETCH_STDERR_WARNING_LIMIT]
+    for message in visible_messages:
+        print(f"Warning: {_warning_for_stderr(message)}", file=sys.stderr)
+    omitted_count = len(unique_messages) - len(visible_messages)
+    if omitted_count:
+        print(
+            f"Warning: {omitted_count} additional warnings omitted; "
+            "full details are retained in the snapshot.",
+            file=sys.stderr,
+        )
+
+
+def _warning_for_stderr(message: str) -> str:
+    parse_warning = _MI_PARSE_WARNING_PREFIX.match(message)
+    if parse_warning is not None:
+        message = (
+            f"Line {parse_warning.group(1)}: unable to parse MI record; "
+            "details retained in the snapshot."
+        )
+
+    rendered: list[str] = []
+    rendered_length = 0
+    for character in message:
+        replacement = _escaped_control_character(character)
+        if rendered_length + len(replacement) > _FETCH_STDERR_WARNING_CHAR_LIMIT - 3:
+            rendered.append("...")
+            break
+        rendered.append(replacement)
+        rendered_length += len(replacement)
+    return "".join(rendered)
+
+
+def _escaped_control_character(character: str) -> str:
+    if not unicodedata.category(character).startswith("C"):
+        return character
+    codepoint = ord(character)
+    if codepoint <= 0xFF:
+        return f"\\x{codepoint:02x}"
+    if codepoint <= 0xFFFF:
+        return f"\\u{codepoint:04x}"
+    return f"\\U{codepoint:08x}"
 
 
 def _is_memory_capture_error(message: str) -> bool:
@@ -1073,8 +1137,11 @@ def resolve_state_out_path(
 def emit(output: str, path: str | None) -> int:
     if path:
         target = Path(path)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(output, encoding="utf-8")
+        try:
+            atomic_write_text(target, output)
+        except OSError as error:
+            print(f"Could not safely write output: {error}", file=sys.stderr)
+            return 1
     else:
         print(output, end="")
     return 0

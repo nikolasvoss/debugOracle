@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=77"]
+requires = ["setuptools==84.0.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,29 +8,30 @@ dynamic = ["version"]
 description = "Passive embedded debug evidence packager for ChatGPT"
 readme = "README.md"
 license = "Apache-2.0"
-requires-python = ">=3.10"
+license-files = ["LICENSE"]
+requires-python = ">=3.10,<3.15"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: Apache Software License",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
     "Topic :: Software Development :: Debuggers",
 ]
 dependencies = [
+    "packaging==26.0",
     "pypdf==6.16.1",
 ]
 
 [project.optional-dependencies]
 docling = ["docling>=2.0"]
 semantic = ["sentence-transformers>=2.7", "numpy>=1.26"]
-dev = ["pyright", "pytest"]
+dev = ["pyright", "pytest", "tomli; python_version < '3.11'"]
 
 [project.urls]
-Changelog = "https://github.com/nikolasvoss/ai-debugger-v2/blob/main/changelog.md"
-Issues = "https://github.com/nikolasvoss/ai-debugger-v2/issues"
-Repository = "https://github.com/nikolasvoss/ai-debugger-v2"
+Changelog = "https://github.com/nikolasvoss/debugOracle/blob/main/changelog.md"
+Issues = "https://github.com/nikolasvoss/debugOracle/issues"
+Repository = "https://github.com/nikolasvoss/debugOracle"
 
 [project.scripts]
 dbgoracle = "debugoracle:main"

@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 from ...renderers.status import render_session_status
+from ...safe_io import atomic_write_text
 from ...session import SessionConfig, collect_session_status
 from ...sources.streams.rtt import (
     RttCaptureTimeoutError,
@@ -68,8 +69,11 @@ def cmd_capture_rtt(args: argparse.Namespace) -> int:
 def emit(output: str, path: str | None) -> int:
     if path:
         target = Path(path)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(output, encoding="utf-8")
+        try:
+            atomic_write_text(target, output)
+        except OSError as error:
+            print(f"Could not safely write output: {error}", file=sys.stderr)
+            return 1
     else:
         print(output, end="")
     return 0
