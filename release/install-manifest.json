@@ -7,7 +7,7 @@
   "installer_min_version": "0.2.0",
   "release_notes_url": "https://github.com/nikolasvoss/ai-debugger-v2/releases/tag/v0.3.0",
   "artifact_url": "https://github.com/nikolasvoss/ai-debugger-v2/releases/download/v0.3.0/debugoracle-0.3.0-py3-none-any.whl",
-  "artifact_sha256": "117723d68e343ead2ae268e302611631c94a70592ad6b9a10ffc1f84a010b1da",
-  "artifact_size": 147801,
+  "artifact_sha256": "caf3d4896d688b4b4f85d6f8451e6e21b8e52b2127e18b81e264a52b6a17f9b0",
+  "artifact_size": 147822,
   "artifact_kind": "wheel"
 }
