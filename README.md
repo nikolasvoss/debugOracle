@@ -1,6 +1,6 @@
 # DebugOracle
 
-DebugOracle helps your coding agent investigate embedded bugs using real evidence from your project, debugger, runtime logs, and manufacturer documentation.
+DebugOracle is a command-line (CLI) tool used by a coding agent to investigate embedded bugs using real evidence from your project, debugger, runtime logs, and manufacturer documentation.
 
 It turns scattered debug information into a reusable report that separates observed facts from conclusions.
 
@@ -16,7 +16,7 @@ DebugOracle grounds agent investigations in captured debugger data, runtime logs
 - Search local reference manuals and datasheets with page-level references.
 - Report the evidence used, what remains unknown, and the next useful action.
 
-DebugOracle is operated by a coding agent such as Codex or Claude Code. You do not need to learn its commands to get started.
+DebugOracle is operated through its CLI by a coding agent such as Codex or Claude Code. You do not need to learn its commands to get started.
 
 ## What you need
 
