@@ -18,28 +18,21 @@ DebugOracle is operated through its CLI by a coding agent such as Codex or Claud
 
 ## What you need
 
-| For | You need | It enables |
-| --- | --- | --- |
-| Install DebugOracle | Linux, Python 3.10–3.14, `pipx`, and Codex or Claude Code | Installation and agent-guided workspace setup |
-| Capture debug evidence | Your firmware project, a built ELF, and your existing debugger setup—normally Cortex-Debug and OpenOCD | Debugger state, runtime logs, and captured target evidence |
-| **Full hardware debugging** | A matching SVD plus the device reference manual and/or datasheet as PDFs | Registers interpreted in hardware context and checked against the manufacturer specification |
+| For | You need |
+| --- | --- |
+| Install DebugOracle | Linux, Python 3.10–3.14, `pipx`, and Codex or Claude Code |
+| Capture debug evidence | Your firmware project, a built ELF, and your existing debugger setup—normally Cortex-Debug and OpenOCD |
+| **Full hardware debugging** | A matching SVD plus the device reference manual and/or datasheet as PDFs |
 
 ## Get started
 
-1. Clone this repository, then open it in Codex or Claude Code:
-
-```bash
-git clone https://github.com/nikolasvoss/debugOracle.git
-cd debugOracle
-```
-
-2. Ask the agent:
+1. Clone this repository, then open the folder in Codex or Claude Code:
 
 ```text
 Install DebugOracle for this user with the supported installer. Read the project instructions and README first. Explain optional components before installing them, make only routine per-user changes, and confirm that `dbgoracle --version` works.
 ```
 
-3. **In your firmware project**, open an agent session and ask:
+2. **In your firmware project**, open an agent session and ask:
 
 ```text
 Set up DebugOracle for this project. Discover the available inputs, configure everything that is safe and unambiguous, and explain clearly what is missing. Ask me before preparing manuals or datasheets for search. Do not overwrite my existing project configuration without showing me the required change.
