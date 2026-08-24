@@ -2,11 +2,9 @@
 
 DebugOracle is a command-line (CLI) tool used by a coding agent to investigate embedded bugs using real evidence from your project, debugger, runtime logs, and manufacturer documentation.
 
-It turns scattered debug information into a reusable report that separates observed facts from conclusions.
+It provides debugger data, runtime logs, peripheral registers, and vendor documentation to the workspace agent to significantly improve its reasoning basis.
 
 ![DebugOracle evidence report for a UART failure](docs/assets/readme/evidence-reviewed-uart-demo.png)
-
-DebugOracle grounds agent investigations in captured debugger data, runtime logs, peripheral registers, firmware source, and vendor documentation.
 
 ## What it can do
 
