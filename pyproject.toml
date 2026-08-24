@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=77"]
+requires = ["setuptools==84.0.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,17 +8,18 @@ dynamic = ["version"]
 description = "Passive embedded debug evidence packager for ChatGPT"
 readme = "README.md"
 license = "Apache-2.0"
-requires-python = ">=3.10"
+license-files = ["LICENSE"]
+requires-python = ">=3.10,<3.15"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: Apache Software License",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
     "Topic :: Software Development :: Debuggers",
 ]
 dependencies = [
+    "packaging==26.0",
     "pypdf==6.16.1",
 ]
 

@@ -225,7 +225,13 @@ class RttParityTests(unittest.TestCase):
     def test_capture_rtt_impl_state_sequence_to_eof(self) -> None:
         observed_statuses: list[str] = []
 
-        def fake_write_state(_path: Path, state: rtt.RttCaptureState) -> None:
+        def fake_write_state(
+            _path: Path,
+            state: rtt.RttCaptureState,
+            *,
+            workspace_root: str | Path | None,
+        ) -> None:
+            self.assertIsNone(workspace_root)
             observed_statuses.append(state.status)
 
         class FakeConnection:
@@ -296,7 +302,13 @@ class RttParityTests(unittest.TestCase):
     def test_capture_rtt_impl_connect_timeout_sequence(self) -> None:
         observed_statuses: list[str] = []
 
-        def fake_write_state(_path: Path, state: rtt.RttCaptureState) -> None:
+        def fake_write_state(
+            _path: Path,
+            state: rtt.RttCaptureState,
+            *,
+            workspace_root: str | Path | None,
+        ) -> None:
+            self.assertIsNone(workspace_root)
             observed_statuses.append(state.status)
 
         class FakeSocketModule:

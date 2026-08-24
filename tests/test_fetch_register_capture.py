@@ -848,12 +848,15 @@ class FetchRegisterCaptureTests(unittest.TestCase):
             previous = os.getcwd()
             try:
                 os.chdir(tmpdir)
-                code, stdout, stderr = self._run_cli_expect_system_exit(["fetch"])
+                stdout_buffer = io.StringIO()
+                stderr_buffer = io.StringIO()
+                with redirect_stdout(stdout_buffer), redirect_stderr(stderr_buffer):
+                    code = main(["fetch"])
             finally:
                 os.chdir(previous)
 
-        self.assertNotEqual(code, 0)
-        message = (stdout + stderr).strip()
+        self.assertEqual(code, 2)
+        message = (stdout_buffer.getvalue() + stderr_buffer.getvalue()).strip()
         self.assertIn("could not auto-resolve an input source", message)
         self.assertIn("cortex-debug-shared-mi.log", message)
         self.assertIn("session.rtt", message)

@@ -13,6 +13,7 @@ from ..artifacts.models import (
     RttSource,
     VariableEvidence,
 )
+from ..safe_io import atomic_write_text
 
 
 def build_artifact_from_sources(
@@ -225,16 +226,15 @@ def _export_raw_inputs(
     rtt_text: str,
     export_dir: Path,
 ) -> dict[str, Any]:
-    export_dir.mkdir(parents=True, exist_ok=True)
     payload: dict[str, Any] = {"raw_export_root": str(export_dir)}
     if gdb_text:
         gdb_path = export_dir / "raw-gdb-mi.log"
-        gdb_path.write_text(gdb_text, encoding="utf-8")
+        atomic_write_text(gdb_path, gdb_text)
         payload["gdb_mi_raw_path"] = str(gdb_path)
         payload["gdb_mi_raw_bytes"] = gdb_path.stat().st_size
     if rtt_text:
         rtt_path = export_dir / "raw-rtt.log"
-        rtt_path.write_text(rtt_text, encoding="utf-8")
+        atomic_write_text(rtt_path, rtt_text)
         payload["rtt_raw_path"] = str(rtt_path)
         payload["rtt_raw_bytes"] = rtt_path.stat().st_size
     return payload

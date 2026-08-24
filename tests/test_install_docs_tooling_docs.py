@@ -12,7 +12,7 @@ class InstallDocsToolingDocsTests(unittest.TestCase):
     def test_docs_ingestion_marks_optional_installer_profiles_disabled(self) -> None:
         guide = Path("docs/docs-ingestion.md").read_text(encoding="utf-8")
 
-        self.assertIn("disabled for the 0.2.0 supported installer", guide)
+        self.assertIn("disabled for the currently supported installer", guide)
         self.assertNotIn("./scripts/install/linux.sh --docs-tools docling", guide)
         self.assertNotIn("./scripts/install/linux.sh --docs-tools semantic", guide)
         self.assertNotIn("./scripts/install/install-docs-tools.sh", guide)

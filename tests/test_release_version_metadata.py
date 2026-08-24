@@ -9,7 +9,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 
 from debugoracle.cli.main import build_parser
-from debugoracle.installer.core import DEFAULT_MANIFEST_URL
+from debugoracle.installer.core import DEFAULT_MANIFEST_URL, INSTALLER_VERSION
 from debugoracle.version import __version__
 
 
@@ -28,8 +28,8 @@ def validate_release_tag(release_tag: str | None) -> None:
 
 
 class ReleaseVersionMetadataTests(unittest.TestCase):
-    def test_canonical_public_alpha_version_is_0_2_0(self) -> None:
-        self.assertEqual(__version__, "0.2.0")
+    def test_canonical_public_alpha_version_is_0_3_0(self) -> None:
+        self.assertEqual(__version__, "0.3.0")
 
     def test_release_version_metadata_is_consistent(self) -> None:
         manifest_path = REPOSITORY_ROOT / "release" / "install-manifest.json"
@@ -38,10 +38,19 @@ class ReleaseVersionMetadataTests(unittest.TestCase):
 
         self.assertEqual(manifest["version"], __version__)
         public_repository_url = "https://github.com/nikolasvoss/ai-debugger-v2"
+        self.assertEqual(manifest["schema_version"], "2")
+        self.assertEqual(manifest["installer_min_version"], INSTALLER_VERSION)
+        self.assertEqual(manifest["artifact_kind"], "wheel")
         self.assertEqual(
-            manifest["source_url"],
-            f"{public_repository_url}/archive/refs/tags/v{__version__}.tar.gz",
+            manifest["artifact_url"],
+            (
+                f"{public_repository_url}/releases/download/v{__version__}/"
+                f"debugoracle-{__version__}-py3-none-any.whl"
+            ),
         )
+        self.assertRegex(manifest["artifact_sha256"], r"^[0-9a-f]{64}$")
+        self.assertNotEqual(manifest["artifact_sha256"], "0" * 64)
+        self.assertGreater(manifest["artifact_size"], 0)
         self.assertEqual(
             manifest["release_notes_url"],
             f"{public_repository_url}/releases/tag/v{__version__}",

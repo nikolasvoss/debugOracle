@@ -3,15 +3,12 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from itertools import pairwise
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from debugoracle.installer.backend.pipx import (
-    PipxBackend,
-    PipxError,
-    _compare_versions,
-)
+from debugoracle.installer.backend.pipx import PipxBackend, PipxError
 from debugoracle.installer.manifest import (
     ManifestError,
     ManifestFetcher,
@@ -19,6 +16,11 @@ from debugoracle.installer.manifest import (
     ReleaseManifest,
 )
 from debugoracle.installer.outcomes import InstallState
+from debugoracle.installer.versioning import (
+    VersioningError,
+    compare_versions,
+    satisfies,
+)
 
 
 class PipxBackendTests(unittest.TestCase):
@@ -100,6 +102,19 @@ class PipxBackendTests(unittest.TestCase):
             status_progress = backend.inspect_installation("debugoracle", "0.2.0")
         self.assertEqual(status_progress.state, InstallState.INSTALL_IN_PROGRESS)
 
+    def test_inspect_installation_rejects_invalid_pipx_version_metadata(self) -> None:
+        backend = PipxBackend(env={"HOME": "/tmp/home"})
+        payload = {
+            "venvs": {
+                "debugoracle": {
+                    "metadata": {"main_package": {"package_version": "not-a-version"}}
+                }
+            }
+        }
+        with patch.object(backend, "_run_json", return_value=payload):
+            with self.assertRaises(PipxError):
+                backend.inspect_installation("debugoracle", "0.2.0")
+
     def test_install_upgrade_and_uninstall_dispatch_to_run(self) -> None:
         backend = PipxBackend(env={"PATH": "/bin"})
         with patch.object(backend, "_run") as run_mock:
@@ -154,15 +169,23 @@ class PipxBackendTests(unittest.TestCase):
 
         with patch(
             "debugoracle.installer.backend.pipx.subprocess.run",
-            return_value=SimpleNamespace(
-                returncode=0, stdout="dbgoracle 0.2.0", stderr=""
-            ),
+            return_value=SimpleNamespace(returncode=0, stdout="0.2.0\n", stderr=""),
         ):
             ok, message = backend.verify_cli(
                 "dbgoracle", binary_path="/tmp/dbgoracle", expected_version="0.2.0"
             )
         self.assertTrue(ok)
-        self.assertEqual(message, "dbgoracle 0.2.0")
+        self.assertEqual(message, "0.2.0")
+
+        with patch(
+            "debugoracle.installer.backend.pipx.subprocess.run",
+            return_value=SimpleNamespace(returncode=0, stdout="10.2.0\n", stderr=""),
+        ):
+            ok, message = backend.verify_cli(
+                "dbgoracle", binary_path="/tmp/dbgoracle", expected_version="0.2.0"
+            )
+        self.assertFalse(ok)
+        self.assertIn("unexpected version", message)
 
     def test_run_raises_on_nonzero_exit(self) -> None:
         backend = PipxBackend(env={"PATH": "/bin"})
@@ -184,10 +207,23 @@ class PipxBackendTests(unittest.TestCase):
             with self.assertRaises(PipxError):
                 backend._run_json(["pipx", "list", "--json"])
 
-    def test_compare_versions_handles_mixed_tokens(self) -> None:
-        self.assertEqual(_compare_versions("1.0", "1.0.0"), 0)
-        self.assertGreater(_compare_versions("1.0rc1", "1.0.2"), 0)
-        self.assertGreater(_compare_versions("2.0", "1.9.9"), 0)
+    def test_pep_440_version_ordering_and_specifiers(self) -> None:
+        ordered = [
+            "1!0.1.dev1",
+            "1!0.1rc1",
+            "1!0.1",
+            "1!0.1+local",
+            "1!0.1.post1",
+        ]
+        for left, right in pairwise(ordered):
+            self.assertLess(compare_versions(left, right), 0)
+        self.assertEqual(compare_versions("1.0", "1.0.0"), 0)
+        self.assertTrue(satisfies("3.12.0", ">=3.10,<3.13"))
+        self.assertFalse(satisfies("3.13.0", ">=3.10,<3.13"))
+        with self.assertRaises(VersioningError):
+            compare_versions("not-a-version", "1.0")
+        with self.assertRaises(VersioningError):
+            satisfies("3.12", "not-a-specifier")
 
 
 class ManifestFetcherTests(unittest.TestCase):
@@ -198,22 +234,39 @@ class ManifestFetcherTests(unittest.TestCase):
             ReleaseManifest.from_mapping({"schema_version": "1"})
 
         payload = {
-            "schema_version": "1",
+            "schema_version": "2",
             "channel": "stable",
             "package_name": "debugoracle",
             "version": "0.1.0",
             "python_requires": ">=3.10",
             "installer_min_version": "0.1.0",
-            "release_notes_url": "https://example.com/release",
-            "source_url": "https://example.com/source",
+            "release_notes_url": "https://github.com/nikolasvoss/ai-debugger-v2/releases/tag/v0.1.0",
+            "artifact_url": "https://github.com/nikolasvoss/ai-debugger-v2/releases/download/v0.1.0/debugoracle-0.1.0-py3-none-any.whl",
+            "artifact_sha256": "a" * 64,
+            "artifact_kind": "wheel",
+            "artifact_size": 1234,
         }
         manifest = ReleaseManifest.from_mapping(payload)
         self.assertEqual(manifest.version, "0.1.0")
+        self.assertEqual(manifest.artifact_sha256, "a" * 64)
 
         bad_optional = dict(payload)
         bad_optional["release_notes_url"] = 123
         with self.assertRaises(ManifestError):
             ReleaseManifest.from_mapping(bad_optional)
+
+        for field, value in (
+            ("schema_version", "1"),
+            ("package_name", "other-project"),
+            ("artifact_kind", "sdist"),
+            ("artifact_sha256", "not-a-digest"),
+            ("artifact_size", 0),
+            ("package_source_override", "/tmp/other-checkout"),
+        ):
+            invalid = dict(payload)
+            invalid[field] = value
+            with self.subTest(field=field), self.assertRaises(ManifestError):
+                ReleaseManifest.from_mapping(invalid)
 
     def test_fetch_payload_from_file_path_and_file_scheme(self) -> None:
         fetcher = ManifestFetcher()
@@ -227,10 +280,16 @@ class ManifestFetcherTests(unittest.TestCase):
         self.assertEqual(payload_from_path, {"schema_version": "1"})
         self.assertEqual(payload_from_file_uri, {"schema_version": "1"})
 
-    def test_fetch_payload_rejects_scheme_and_wraps_errors(self) -> None:
+    def test_fetch_payload_rejects_non_https_remote_urls_and_wraps_errors(self) -> None:
         fetcher = ManifestFetcher()
-        with self.assertRaises(ManifestError):
-            fetcher.fetch_payload("ftp://example.com/manifest.json")
+        for url in (
+            "ftp://example.com/manifest.json",
+            "http://raw.githubusercontent.com/nikolasvoss/ai-debugger-v2/main/release/install-manifest.json",
+            "https://example.com/manifest.json",
+            "https://raw.githubusercontent.com:444/nikolasvoss/ai-debugger-v2/main/release/install-manifest.json",
+        ):
+            with self.subTest(url=url), self.assertRaises(ManifestError):
+                fetcher.fetch_payload(url)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "manifest.json"
@@ -239,21 +298,30 @@ class ManifestFetcherTests(unittest.TestCase):
                 fetcher.fetch_payload(str(path))
 
         with patch(
-            "debugoracle.installer.manifest.urlopen",
+            "debugoracle.installer.manifest.ManifestFetcher._open_remote",
             side_effect=OSError("network down"),
         ):
             with self.assertRaises(ManifestNetworkError):
-                fetcher.fetch_payload("https://example.com/manifest.json")
+                fetcher.fetch_payload(
+                    "https://raw.githubusercontent.com/nikolasvoss/ai-debugger-v2/main/release/install-manifest.json"
+                )
 
-    def test_fetch_payload_http_json_error_and_fetch_success(self) -> None:
+    def test_fetch_payload_bounds_remote_content_and_rejects_redirect_host(
+        self,
+    ) -> None:
         fetcher = ManifestFetcher()
 
         class _Response:
-            def __init__(self, payload: bytes) -> None:
+            def __init__(self, payload: bytes, final_url: str) -> None:
                 self._payload = payload
+                self._final_url = final_url
+                self.headers: dict[str, str] = {}
 
-            def read(self) -> bytes:
-                return self._payload
+            def read(self, size: int = -1) -> bytes:
+                return self._payload if size < 0 else self._payload[:size]
+
+            def geturl(self) -> str:
+                return self._final_url
 
             def __enter__(self) -> "_Response":
                 return self
@@ -262,25 +330,77 @@ class ManifestFetcherTests(unittest.TestCase):
                 return None
 
         with patch(
-            "debugoracle.installer.manifest.urlopen",
-            return_value=_Response(b"{not json"),
+            "debugoracle.installer.manifest.ManifestFetcher._open_remote",
+            return_value=_Response(
+                b"{not json",
+                "https://raw.githubusercontent.com/nikolasvoss/ai-debugger-v2/main/release/install-manifest.json",
+            ),
         ):
             with self.assertRaises(ManifestError):
-                fetcher.fetch_payload("https://example.com/manifest.json")
+                fetcher.fetch_payload(
+                    "https://raw.githubusercontent.com/nikolasvoss/ai-debugger-v2/main/release/install-manifest.json"
+                )
+
+        with patch(
+            "debugoracle.installer.manifest.ManifestFetcher._open_remote",
+            return_value=_Response(b"{}", "https://evil.example/manifest.json"),
+        ):
+            with self.assertRaises(ManifestError):
+                fetcher.fetch_payload(
+                    "https://raw.githubusercontent.com/nikolasvoss/ai-debugger-v2/main/release/install-manifest.json"
+                )
+
+        oversized = b"{" + b" " * (ManifestFetcher.MAX_MANIFEST_BYTES + 1)
+        with patch(
+            "debugoracle.installer.manifest.ManifestFetcher._open_remote",
+            return_value=_Response(
+                oversized,
+                "https://raw.githubusercontent.com/nikolasvoss/ai-debugger-v2/main/release/install-manifest.json",
+            ),
+        ):
+            with self.assertRaises(ManifestError):
+                fetcher.fetch_payload(
+                    "https://raw.githubusercontent.com/nikolasvoss/ai-debugger-v2/main/release/install-manifest.json"
+                )
+
+    def test_fetch_payload_https_json_error_and_fetch_success(self) -> None:
+        fetcher = ManifestFetcher()
+
+        class _Response:
+            def __init__(self, payload: bytes) -> None:
+                self._payload = payload
+                self.headers: dict[str, str] = {}
+
+            def read(self, size: int = -1) -> bytes:
+                return self._payload if size < 0 else self._payload[:size]
+
+            def geturl(self) -> str:
+                return "https://raw.githubusercontent.com/nikolasvoss/ai-debugger-v2/main/release/install-manifest.json"
+
+            def __enter__(self) -> "_Response":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> None:
+                return None
 
         full_manifest = {
-            "schema_version": "1",
+            "schema_version": "2",
             "channel": "stable",
             "package_name": "debugoracle",
             "version": "0.1.0",
             "python_requires": ">=3.10",
             "installer_min_version": "0.1.0",
+            "artifact_url": "https://github.com/nikolasvoss/ai-debugger-v2/releases/download/v0.1.0/debugoracle-0.1.0-py3-none-any.whl",
+            "artifact_sha256": "a" * 64,
+            "artifact_kind": "wheel",
         }
         with patch(
-            "debugoracle.installer.manifest.urlopen",
+            "debugoracle.installer.manifest.ManifestFetcher._open_remote",
             return_value=_Response(json.dumps(full_manifest).encode("utf-8")),
         ):
-            manifest = fetcher.fetch("https://example.com/manifest.json")
+            manifest = fetcher.fetch(
+                "https://raw.githubusercontent.com/nikolasvoss/ai-debugger-v2/main/release/install-manifest.json"
+            )
         self.assertEqual(manifest.channel, "stable")
 
 

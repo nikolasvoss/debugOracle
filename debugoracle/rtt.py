@@ -36,6 +36,7 @@ def capture_rtt(
     idle_timeout: float | None = None,
     append: bool = False,
     on_connect: Callable[[RttCaptureState], None] | None = None,
+    workspace_root: str | Path | None = None,
 ) -> RttCaptureState:
     # Keep the legacy module as a compatibility patch surface for tests/callers
     # that monkeypatch `debugoracle.rtt.socket` or `debugoracle.rtt.time`.
@@ -49,6 +50,7 @@ def capture_rtt(
         idle_timeout=idle_timeout,
         append=append,
         on_connect=on_connect,
+        workspace_root=workspace_root,
         socket_module=socket,
         time_module=time,
     )

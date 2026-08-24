@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -12,6 +14,7 @@ from debugoracle.installer.manifest import (
     ReleaseManifest,
 )
 from debugoracle.installer.outcomes import InstallState, InstallerOutcomeCode
+from debugoracle.installer.source import ArtifactError
 from debugoracle.installer.backend.pipx import PipxError
 
 
@@ -102,11 +105,72 @@ class InstallerCoreTests(unittest.TestCase):
         )
 
         outcome = installer.run(
-            InstallerOptions(package_source_override="/tmp/src", doctor=False)
+            InstallerOptions(package_source_override="/tmp", doctor=False)
         )
 
         self.assertEqual(outcome.code, InstallerOutcomeCode.SUCCESS_NEEDS_PATH_STEP)
-        self.assertEqual(backend.upgrade_calls, [("debugoracle", "/tmp/src")])
+        self.assertEqual(backend.upgrade_calls, [("debugoracle", "/tmp")])
+
+    def test_remote_install_passes_only_verified_local_wheel_to_pipx_and_cleans_it(
+        self,
+    ) -> None:
+        backend = _FakeBackend(
+            statuses=[
+                _status(InstallState.NOT_INSTALLED),
+                _status(InstallState.INSTALLED_SAME_VERSION, "0.1.0"),
+            ]
+        )
+        downloader = _FakeDownloader()
+        installer = InstallerCore(
+            backend=backend,
+            fetcher=_FakeFetcher(_manifest()),
+            downloader=downloader,
+            env=_env(),
+            sleep=lambda _seconds: None,
+        )
+
+        outcome = installer.run(InstallerOptions(doctor=False))
+
+        self.assertTrue(outcome.success)
+        staged_path = Path(backend.install_calls[0])
+        self.assertEqual(staged_path.name, "debugoracle-0.1.0-py3-none-any.whl")
+        self.assertFalse(staged_path.exists())
+        self.assertNotEqual(backend.install_calls[0], _manifest().artifact_url)
+
+    def test_artifact_integrity_failure_does_not_call_pipx(self) -> None:
+        backend = _FakeBackend(statuses=[_status(InstallState.NOT_INSTALLED)])
+        installer = InstallerCore(
+            backend=backend,
+            fetcher=_FakeFetcher(_manifest()),
+            downloader=_FakeDownloader(error=ArtifactError("checksum mismatch")),
+            env=_env(),
+            sleep=lambda _seconds: None,
+        )
+
+        outcome = installer.run(InstallerOptions(doctor=False))
+
+        self.assertEqual(outcome.code, InstallerOutcomeCode.FAILED_ARTIFACT)
+        self.assertEqual(backend.install_calls, [])
+        self.assertIn("checksum mismatch", outcome.details)
+
+    def test_package_source_override_rejects_remote_urls(self) -> None:
+        backend = _FakeBackend(statuses=[_status(InstallState.NOT_INSTALLED)])
+        installer = InstallerCore(
+            backend=backend,
+            fetcher=_FakeFetcher(_manifest()),
+            env=_env(),
+            sleep=lambda _seconds: None,
+        )
+
+        outcome = installer.run(
+            InstallerOptions(
+                package_source_override="https://evil.example/package.whl",
+                doctor=False,
+            )
+        )
+
+        self.assertEqual(outcome.code, InstallerOutcomeCode.FAILED_ARTIFACT)
+        self.assertEqual(backend.install_calls, [])
 
     def test_invalid_manifest_stops_without_retrying_install(self) -> None:
         backend = _FakeBackend()
@@ -118,6 +182,23 @@ class InstallerCoreTests(unittest.TestCase):
         )
 
         outcome = installer.run(InstallerOptions())
+
+        self.assertEqual(outcome.code, InstallerOutcomeCode.BLOCKED_MANIFEST)
+        self.assertEqual(backend.install_calls, [])
+
+    def test_manifest_requiring_newer_installer_blocks_before_backend_mutation(
+        self,
+    ) -> None:
+        backend = _FakeBackend()
+        manifest = replace(_manifest(), installer_min_version="0.2.1")
+        installer = InstallerCore(
+            backend=backend,
+            fetcher=_FakeFetcher(manifest),
+            env=_env(),
+            sleep=lambda _seconds: None,
+        )
+
+        outcome = installer.run(InstallerOptions(doctor=False))
 
         self.assertEqual(outcome.code, InstallerOutcomeCode.BLOCKED_MANIFEST)
         self.assertEqual(backend.install_calls, [])
@@ -135,7 +216,7 @@ class InstallerCoreTests(unittest.TestCase):
         )
 
         outcome = installer.run(
-            InstallerOptions(package_source_override="/tmp/src", doctor=False)
+            InstallerOptions(package_source_override="/tmp", doctor=False)
         )
 
         self.assertEqual(outcome.code, InstallerOutcomeCode.FAILED_INSTALL)
@@ -154,11 +235,79 @@ class InstallerCoreTests(unittest.TestCase):
         )
 
         outcome = installer.run(
-            InstallerOptions(package_source_override="/tmp/src", doctor=False)
+            InstallerOptions(package_source_override="/tmp", doctor=False)
         )
 
         self.assertEqual(outcome.code, InstallerOutcomeCode.FAILED_VERIFY)
         self.assertEqual(backend.uninstall_calls, ["debugoracle"])
+
+    def test_post_install_inspection_failure_is_structured_and_cleans_fresh_install(
+        self,
+    ) -> None:
+        backend = _FakeBackend(
+            statuses=[_status(InstallState.NOT_INSTALLED), PipxError("list failed")]
+        )
+        installer = InstallerCore(
+            backend=backend,
+            fetcher=_FakeFetcher(_manifest()),
+            env=_env(),
+            sleep=lambda _seconds: None,
+        )
+
+        outcome = installer.run(
+            InstallerOptions(package_source_override="/tmp", doctor=False)
+        )
+
+        self.assertEqual(
+            outcome.code, InstallerOutcomeCode.FAILED_POST_INSTALL_INSPECTION
+        )
+        self.assertEqual(backend.uninstall_calls, ["debugoracle"])
+        self.assertIn("list failed", outcome.details)
+        self.assertIn("pipx list --json", outcome.details[1])
+
+    def test_upgrade_inspection_failure_reports_unknown_state_without_more_mutation(
+        self,
+    ) -> None:
+        backend = _FakeBackend(
+            statuses=[
+                _status(InstallState.INSTALLED_OLDER_VERSION, "0.0.9"),
+                PipxError("list failed"),
+            ]
+        )
+        installer = InstallerCore(
+            backend=backend,
+            fetcher=_FakeFetcher(_manifest()),
+            env=_env(),
+            sleep=lambda _seconds: None,
+        )
+
+        outcome = installer.run(
+            InstallerOptions(package_source_override="/tmp", doctor=False)
+        )
+
+        self.assertEqual(
+            outcome.code, InstallerOutcomeCode.FAILED_POST_INSTALL_INSPECTION
+        )
+        self.assertEqual(backend.upgrade_calls, [("debugoracle", "/tmp")])
+        self.assertEqual(backend.uninstall_calls, [])
+        self.assertIn("resulting state could not be inspected", outcome.message)
+
+    def test_backend_verification_exception_is_structured(self) -> None:
+        backend = _FakeBackend(
+            statuses=[_status(InstallState.INSTALLED_SAME_VERSION, "0.1.0")],
+            verify_error=PipxError("verification process failed"),
+        )
+        installer = InstallerCore(
+            backend=backend,
+            fetcher=_FakeFetcher(_manifest()),
+            env=_env(),
+            sleep=lambda _seconds: None,
+        )
+
+        outcome = installer.run(InstallerOptions(doctor=False))
+
+        self.assertEqual(outcome.code, InstallerOutcomeCode.FAILED_VERIFY)
+        self.assertIn("verification process failed", outcome.details[0])
 
     def test_path_prompt_can_apply_profile_update(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -299,7 +448,7 @@ class InstallerCoreTests(unittest.TestCase):
         )
         with patch("debugoracle.installer.core.shutil.which", return_value=None):
             outcome = installer.run(
-                InstallerOptions(package_source_override="/tmp/src", doctor=True)
+                InstallerOptions(package_source_override="/tmp", doctor=True)
             )
 
         self.assertEqual(outcome.code, InstallerOutcomeCode.SUCCESS_NEEDS_PATH_STEP)
@@ -376,6 +525,7 @@ class _FakeBackend:
         upgrade_error: Exception | None = None,
         uninstall_error: Exception | None = None,
         verify_result: tuple[bool, str] = (True, "dbgoracle 0.1.0"),
+        verify_error: Exception | None = None,
         bin_dir: str = "/tmp/fake-bin",
     ) -> None:
         self.available = available
@@ -384,6 +534,7 @@ class _FakeBackend:
         self.upgrade_error = upgrade_error
         self.uninstall_error = uninstall_error
         self.verify_result = verify_result
+        self.verify_error = verify_error
         self._bin_dir = Path(bin_dir)
         self.install_calls: list[str] = []
         self.install_force_calls: list[str] = []
@@ -398,7 +549,10 @@ class _FakeBackend:
 
     def inspect_installation(self, package_name: str, target_version: str):
         if self.statuses:
-            return self.statuses.pop(0)
+            result = self.statuses.pop(0)
+            if isinstance(result, Exception):
+                raise result
+            return result
         return _status(InstallState.NOT_INSTALLED)
 
     def install(self, source_spec: str, *, force: bool = False) -> None:
@@ -425,6 +579,8 @@ class _FakeBackend:
         binary_path: str | None = None,
         expected_version: str | None = None,
     ) -> tuple[bool, str]:
+        if self.verify_error is not None:
+            raise self.verify_error
         return self.verify_result
 
 
@@ -449,15 +605,32 @@ def _status(
 
 
 def _manifest() -> ReleaseManifest:
+    content = b"wheel-content"
     return ReleaseManifest(
-        schema_version="1",
+        schema_version="2",
         channel="stable",
         package_name="debugoracle",
         version="0.1.0",
         python_requires=">=3.10",
         installer_min_version="0.1.0",
+        artifact_url="https://github.com/nikolasvoss/ai-debugger-v2/releases/download/v0.1.0/debugoracle-0.1.0-py3-none-any.whl",
+        artifact_sha256=hashlib.sha256(content).hexdigest(),
+        artifact_kind="wheel",
+        artifact_size=len(content),
         release_notes_url="https://example.com/release",
     )
+
+
+class _FakeDownloader:
+    def __init__(self, error: Exception | None = None) -> None:
+        self.error = error
+
+    def download(self, manifest: ReleaseManifest, destination_dir: Path) -> Path:
+        if self.error is not None:
+            raise self.error
+        destination = destination_dir / "debugoracle-0.1.0-py3-none-any.whl"
+        destination.write_bytes(b"wheel-content")
+        return destination
 
 
 def _env(home: Path | None = None) -> dict[str, str]:

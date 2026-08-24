@@ -26,6 +26,22 @@ class DocsDiagnosticsTests(unittest.TestCase):
         ).lower()
         self.assertNotIn("pymupdf", rendered)
 
+    def test_docs_doctor_does_not_offer_blocked_optional_profile_install_commands(
+        self,
+    ) -> None:
+        with patch(
+            "debugoracle.diagnostics.importlib.util.find_spec", return_value=None
+        ):
+            checks = collect_docs_doctor_checks()
+
+        optional_guidance = "\n".join(
+            check.remedy for check in checks if not check.required
+        ).lower()
+        self.assertNotIn("pipx inject", optional_guidance)
+        self.assertNotIn("debugoracle[docling]", optional_guidance)
+        self.assertNotIn("debugoracle[semantic]", optional_guidance)
+        self.assertIn("license", optional_guidance)
+
 
 if __name__ == "__main__":
     unittest.main()

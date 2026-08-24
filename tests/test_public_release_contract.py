@@ -46,12 +46,15 @@ def _tracked_gitlinks(repository: Path) -> set[str]:
 
 
 class PublicReleaseContractTests(unittest.TestCase):
-    def test_base_dependency_is_the_audited_pypdf_release(self) -> None:
+    def test_base_dependencies_are_the_audited_runtime_releases(self) -> None:
         pyproject = tomllib.loads(
             (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
         )
 
-        self.assertEqual(pyproject["project"]["dependencies"], ["pypdf==6.16.1"])
+        self.assertEqual(
+            pyproject["project"]["dependencies"],
+            ["packaging==26.0", "pypdf==6.16.1"],
+        )
 
     def test_direct_dependency_license_inventory_matches_package_config(self) -> None:
         pyproject = tomllib.loads(
@@ -111,9 +114,11 @@ class PublicReleaseContractTests(unittest.TestCase):
 
         self.assertIn("pypdf 6.16.1", notices)
         self.assertIn("BSD-3-Clause", notices)
+        self.assertIn("packaging 26.0", notices)
+        self.assertIn("Apache-2.0 OR BSD-2-Clause", notices)
         self.assertRegex(
             notices,
-            r"Docling, semantic, and all are disabled for the 0\.2\.0 supported\s+installer",
+            r"Docling, semantic, and all are disabled for the 0\.3\.0 supported\s+installer",
         )
         self.assertIn(
             "docs/audits/public-alpha-p0-python-dependency-licenses.json", notices

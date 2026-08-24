@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from ..safe_io import atomic_write_text
 from .models import CURRENT_BUNDLE_SCHEMA_VERSION, InvestigationArtifact
 
 SUPPORTED_ARTIFACT_SCHEMA_VERSIONS = {CURRENT_BUNDLE_SCHEMA_VERSION}
@@ -39,13 +40,21 @@ def load_artifact(path: str, *, strict: bool = False) -> InvestigationArtifact:
     return artifact
 
 
-def save_artifact(artifact: InvestigationArtifact, path: str) -> None:
+def save_artifact(
+    artifact: InvestigationArtifact,
+    path: str,
+    *,
+    workspace_root: str | Path | None = None,
+) -> None:
     target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
     payload = artifact.to_dict()
     if not artifact.schema_version:
         payload["schema_version"] = CURRENT_BUNDLE_SCHEMA_VERSION
-    target.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    atomic_write_text(
+        target,
+        json.dumps(payload, indent=2),
+        workspace_root=workspace_root,
+    )
 
 
 def _resolve_schema_version(raw: dict[str, object], *, path: str) -> str:

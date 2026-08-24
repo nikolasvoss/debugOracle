@@ -41,7 +41,7 @@ def _parse_bootstrap_args(argv: list[str]) -> tuple[str, list[str]]:
 
 
 def _render_docs_tools_intro() -> None:
-    print("Optional docs tooling is disabled for the 0.2.0 public alpha.")
+    print("Optional docs tooling is disabled for the current public alpha.")
     print(
         "The direct dependency and model license audit is incomplete; "
         "the base pypdf CLI remains supported."
@@ -133,7 +133,7 @@ def bootstrap(argv: list[str] | None = None) -> int:
             print(
                 "Skipping optional docs tooling prompt because stdin is non-interactive."
             )
-            print("Optional profiles are disabled for the 0.2.0 public alpha.")
+            print("Optional profiles are disabled for the current public alpha.")
     return _install_docs_tools(selected_mode)
 
 

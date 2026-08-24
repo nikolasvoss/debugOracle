@@ -44,7 +44,7 @@ implementation lives in:
 - `debugoracle/cli/commands/run_stop.py` for `run` and `stop`
 - `debugoracle/cli/commands/find_tcl_port.py` for `find-tcl-port`
 - `debugoracle/cli/commands/guard_openocd_launch.py` for `guard-openocd-launch`
-- `debugoracle/cli/commands/docs_cli.py` for `docs ingest`, `docs search`, and `docs status`
+- `debugoracle/cli/commands/docs_cli.py` for `docs ingest`, `docs search`, `docs status`, and `docs doctor`
 - `debugoracle/cli/commands/evidence.py` for `fetch` and `report`
 - `debugoracle/cli/commands/install_cli.py` for the internal Linux installer hook
 - `debugoracle/cli/commands/uninstall_cli.py` for the internal Linux uninstall hook
@@ -58,7 +58,7 @@ The CLI has six behavioral layers:
    Command: `init-workspace`
    Readiness commands: `doctor host`, `workspace plan`, `session doctor`
 3. Local reference-manual sidecar
-   Commands: `docs ingest`, `docs search`, `docs status`
+   Commands: `docs ingest`, `docs search`, `docs status`, `docs doctor`
 4. Transport and workspace health
    Commands: `status`, `capture-rtt`, `run`, `stop`, `find-tcl-port`, `guard-openocd-launch`
 5. Evidence capture and stabilization
@@ -205,7 +205,9 @@ Outputs:
 - Human-readable status line
 
 Meaning:
-- Stops only managed DebugOracle run processes and cleans up stale runtime metadata.
+- Stops only the exact managed Linux process instance bound by the runtime
+  metadata and a `pidfd`; it fails closed when strong identity evidence is
+  unavailable and cleans metadata only after confirmed process exit.
 
 ### `find-tcl-port`
 
@@ -281,7 +283,9 @@ Purpose:
 
 Inputs:
 - Workspace root
-- Required executable path
+- Optional explicit executable path for manual setup
+- Optional `--auto` discovery mode for independently actionable capabilities
+- Optional `--yes` authorization for local document ingestion in auto mode
 - Optional workspace-default SVD path
 - Optional RTT-related workspace defaults
 
@@ -291,6 +295,10 @@ Outputs:
 
 Meaning:
 - `init-workspace` is a setup helper, not an evidence command.
+- Without `--auto`, an explicit executable remains required.
+- With `--auto`, documentation, SVD, executable, and OpenOCD capabilities are
+  resolved independently; missing executable evidence does not discard safe
+  documentation- or SVD-only progress.
 - It refuses to overwrite existing user-owned VS Code config files by default.
 - It may return `partial` when setup is recoverable but needs follow-up edits or software dependencies.
 

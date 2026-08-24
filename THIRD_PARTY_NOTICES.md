@@ -1,10 +1,12 @@
 # Third-Party Notices
 
-This file records third-party material retained in the planned DebugOracle
-public-alpha source snapshots. It does not replace the license text or notices
-shipped with a component. The evidence and release-blocking gaps behind this
-summary are recorded in
-[`docs/audits/public-alpha-p0-release-inventory.md`](docs/audits/public-alpha-p0-release-inventory.md).
+This file records third-party material retained in DebugOracle source
+snapshots. It does not replace the license text or notices shipped with a
+component. The original inventory and the release-0.3.0 closure receipt are
+recorded in
+[`docs/audits/public-alpha-p0-release-inventory.md`](docs/audits/public-alpha-p0-release-inventory.md)
+and
+[`docs/audits/public-release-0.3.0-provenance.md`](docs/audits/public-release-0.3.0-provenance.md).
 
 ## Main repository
 
@@ -15,9 +17,15 @@ summary are recorded in
   1.0
 - **Copyright:** Copyright (c) 2024 STMicroelectronics
 - **License:** Apache License 2.0, stated in the file header
-- **Source:** STMicroelectronics STM32 CMSIS-SVD data. The snapshot does not
-  retain the exact upstream URL, tag, or download receipt; this is a
-  release-blocking provenance gap.
+- **Exact source:** modm's normalized STM32 CMSIS-SVD archive at commit
+  `e79021accd49bf19bd0b16065f5471fb073ff3ac`, path
+  `stm32l4/STM32L432.svd`
+- **Integrity:** the pinned download and retained file both have SHA-256
+  `d47c563ef28e9588a15ce4c158be8545929d702f0c9878e5410cff251e773edd`
+
+The upstream archive records that its STM32 SVDs came from ST's site and were
+normalized for line endings and trailing whitespace. The retained file header
+is the license evidence.
 
 `tests/fixtures/sample.svd` is a small project-authored synthetic fixture, not
 the ST SVD.
@@ -54,10 +62,11 @@ Retained third-party components inside every tree are:
   terms stated by `Drivers/STM32L4xx_HAL_Driver/LICENSE.txt`; copyright and
   component-license notices remain in the source files.
 - **STM32CubeMX-generated Core/startup/linker content**, STMicroelectronics.
-  Existing per-file notices are retained, but the package-level
-  `Package_license` referenced by component notices is absent. This content is
-  blocked from public release until the exact STM32CubeL4 1.18.2 package
-  license is added and reviewed.
+  Existing per-file notices are retained. The exact official STM32CubeL4
+  v1.18.2 package-license table is retained at
+  `docs/audits/sources/STM32CubeL4-v1.18.2-LICENSE.md`; the pinned source commit,
+  retrieval hash, generated-tree hash, and scope decision are recorded in the
+  0.3.0 provenance receipt.
 
 The five generated trees were byte-identical at the audited baseline. Their
 deterministic relative-path/file-hash manifest SHA-256 was
@@ -72,8 +81,11 @@ deterministic relative-path/file-hash manifest SHA-256 was
   exceptions/notices remain governed by the recursively checked-out upstream
   tree.
 
-The baseline checkout did not initialize this submodule, so its license and
-recursive submodule closure must be verified in the clean-clone release gate.
+The recursive closure was verified for release 0.3.0. The provenance receipt
+records every pinned nested gitlink and license-file hash. BTstack and the
+CYW43 driver include non-commercial conditions; downstream users must review
+those upstream terms for their intended use. DebugOracle does not relicense
+submodule content.
 
 ## Excluded vendor material
 
@@ -98,9 +110,17 @@ Trusted-Publishing provenance statement, and links the signed upstream tag.
 This security release replaces the locally observed 6.9.2 baseline, which is
 affected by published resource-consumption advisories in PDF parsing paths.
 
+The base install also pins **packaging 26.0** for one canonical PEP 440
+implementation shared by the installer. Official PyPI metadata declares
+**Apache-2.0 OR BSD-2-Clause**, no runtime dependencies, and wheel SHA-256
+`b36f1fef9334a5588b4166f8bcd26a14e521f2b55e6b9de3aaa80d3ff7a37529`.
+Using the established PyPA implementation avoids divergent version ordering;
+its exact pin keeps runtime resolution reproducible and adds one small,
+dependency-free wheel.
+
 The declared `docling`, `semantic`, and development extras remain visible in
 package configuration so downstream experimentation does not require hidden
-dependencies. Docling, semantic, and all are disabled for the 0.2.0 supported
+dependencies. Docling, semantic, and all are disabled for the 0.3.0 supported
 installer: the local audit has no authoritative Docling or
 sentence-transformers package metadata, no dependency lockfile exists, and no
 Docling or embedding model/license selection is recorded. NumPy 1.26.4 was

@@ -22,10 +22,12 @@ Expose local docs sidecar ingest/search/status workflows with deterministic text
 - Allow interactive confirmation prompts for `docs ingest` in TTY text mode, with `--no-interactive` override.
 - Forward parser and indexing options to the sidecar layer:
   - ingest: `--parser`, `--semantic`, `--force`, `--no-interactive`
-  - search: `--semantic`
+- `docs search` selects hybrid ranking automatically when compatible semantic
+  embeddings are already present; it does not expose a `--semantic` flag.
 - Show ingest progress in text mode, including long-run heartbeat labels for coarse parser phases.
 - Accept `--parser pypdf|docling`, default to `pypdf`, and reject removed parser names.
-- Surface Docling install/use hints when pypdf quality is degraded.
+- Surface Docling quality limitations when pypdf quality is degraded, but do
+  not emit install commands while the optional-profile license gate is open.
 - Surface deterministic docs dependency diagnostics via `docs doctor`.
 
 ## Acceptance Criteria

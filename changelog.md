@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-24
+
 ### Changed
 - Reworked onboarding around an agent-first README, with plain-language
   capabilities, requirements, a hardware-free demo, and linked setup guides.
@@ -12,6 +14,27 @@
 - Archived the public-alpha P0 planning set with the actual release outcome,
   accepted deviations, and residual risks.
 - Clarified the contribution policy for third-party runtime dependencies.
+- Added recursive-submodule and isolated-artifact release gates across the
+  supported Python compatibility matrix.
+- Centralized PEP 440 handling and cryptographically bound remote installer
+  artifacts to a restricted manifest.
+- Recorded exact provenance, license evidence, and hashes for retained STM32,
+  SVD, Pico SDK, and nested submodule material.
+
+### Fixed
+- Hardened workspace-derived paths against symlink traversal and made
+  canonical state publication atomic.
+- Made malformed GDB/MI input fail deterministically instead of risking a
+  parser stall.
+- Bound detached `stop` operations to the recorded Linux process instance and
+  exact workspace/argument identity.
+- Corrected `fetch` resolution exit codes, partial-evidence warning streams,
+  and TCP port validation.
+- Kept repeated artifact builds deterministic outside the documented
+  `captured_at` and `snapshot_id` fields.
+- Removed unsupported Docling and semantic installation commands from
+  `docs doctor` while their license gate remains open.
+- Pinned the audited base PDF parser to `pypdf` 6.16.1.
 
 ## [0.2.0] - 2026-08-21
 

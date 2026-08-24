@@ -30,7 +30,7 @@ _DISABLED_LICENSE_PROFILES = {
 }
 
 LICENSE_AUDIT_REMEDIATION = (
-    "Use --docs-tools none; see the 0.2.0 dependency license inventory."
+    "Use --docs-tools none; see the current dependency license inventory."
 )
 
 
@@ -92,7 +92,7 @@ def install_docs_tooling(
             success=False,
             message=(
                 f"The {selection} docs-tools profile is not supported for the "
-                "0.2.0 public alpha because its dependency and model license "
+                "current public alpha because its dependency and model license "
                 "audit is incomplete."
             ),
             selection=selection,

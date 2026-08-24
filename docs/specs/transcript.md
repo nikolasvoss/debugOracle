@@ -3,7 +3,7 @@
 - Module: `transcript`
 - Code Path: `debugoracle/sources/debuggers/gdb/transcript.py`
 - Public Entrypoints: `GDB_TRANSCRIPT_SOURCE`, `GdbTranscriptParseResult`, `parse_gdb_transcript`
-- Last Updated: `2026-03-20`
+- Last Updated: `2026-08-24`
 
 # SPEC: GDB Transcript Source
 
@@ -16,6 +16,10 @@ Parse bounded GDB/MI transcript input as the canonical stream-shaped GDB source.
 - Expose explicit stream-source metadata for GDB transcript evidence.
 - Parse MI records and preserve non-MI context as session events.
 - Extract stop, stack, register, and structured variable-evidence state from transcript responses.
+- Preserve an event timestamp only when it is present in source evidence. Raw
+  GDB/MI lines without a source timestamp produce an empty event `timestamp`;
+  the snapshot-level `captured_at` records acquisition time and must not be
+  duplicated as a synthetic per-line observation.
 - Preserve the full raw transcript text so snapshots can embed it alongside parsed events.
 
 ## Variable Evidence Notes

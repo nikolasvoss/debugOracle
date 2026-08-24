@@ -23,6 +23,36 @@ class VerifyWorkflowDocsTests(unittest.TestCase):
             workflow,
         )
 
+    def test_release_ci_covers_recursive_clone_python_matrix_and_wheel_smoke(
+        self,
+    ) -> None:
+        workflow = Path(".github/workflows/quality-and-traceability.yml").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertGreaterEqual(workflow.count("submodules: recursive"), 3)
+        self.assertGreaterEqual(workflow.count("git submodule status --recursive"), 3)
+        self.assertIn("compatibility-gate:", workflow)
+        self.assertIn(
+            'python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]', workflow
+        )
+        self.assertIn("artifact-gate:", workflow)
+        self.assertIn("./scripts/verify-release.sh", workflow)
+
+    def test_readme_clone_instructions_initialize_recursive_submodules(self) -> None:
+        readme = Path("README.md").read_text(encoding="utf-8")
+
+        self.assertIn("git clone --recurse-submodules", readme)
+        self.assertIn("git submodule update --init --recursive", readme)
+
+    def test_readme_distinguishes_ci_compatibility_from_verified_environment(
+        self,
+    ) -> None:
+        readme = Path("README.md").read_text(encoding="utf-8")
+
+        self.assertIn("Python 3.10 through 3.14", readme)
+        self.assertIn("Ubuntu 24.04 LTS x86-64 with Python 3.12", readme)
+
     def test_plan_template_includes_fast_and_full_verification_commands(self) -> None:
         plan_template = Path("docs/workflows/plan-template.md").read_text(
             encoding="utf-8"

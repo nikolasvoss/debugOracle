@@ -14,9 +14,9 @@ from unittest.mock import patch
 
 from debugoracle.artifacts.repository import save_artifact
 from debugoracle.builder import build_bundle_from_files
-from debugoracle.cli import main
+from debugoracle.cli.commands.evidence import _warning_for_stderr
 from debugoracle.cli.commands.find_tcl_port import OpenOcdCandidate
-from debugoracle.cli.main import build_parser
+from debugoracle.cli.main import build_parser, main
 from debugoracle.readiness import ReadinessState, collect_host_readiness
 
 
@@ -440,6 +440,15 @@ class DebugOracleCliTests(unittest.TestCase):
 
         self.assertEqual(parsed.command, "uninstall_cli")
         self.assertTrue(parsed.force_legacy_path_cleanup)
+
+    def test_internal_installer_commands_are_hidden_from_top_level_help(self) -> None:
+        parser = build_parser()
+
+        help_text = parser.format_help()
+
+        self.assertNotIn("install-cli", help_text)
+        self.assertNotIn("uninstall-cli", help_text)
+        self.assertNotIn("==SUPPRESS==", help_text)
 
     def test_uninstall_cli_rejects_manifest_url(self) -> None:
         parser = build_parser()
@@ -1752,15 +1761,189 @@ class DebugOracleCliTests(unittest.TestCase):
             previous = os.getcwd()
             try:
                 os.chdir(tmpdir)
-                code, stdout, stderr = self._run_cli_expect_system_exit(["fetch"])
+                stdout, stderr, code = self._run_cli_capture(["fetch"])
             finally:
                 os.chdir(previous)
 
-        self.assertNotEqual(code, 0)
+        self.assertEqual(code, 2)
         message = (stdout + stderr).strip()
         self.assertIn("could not auto-resolve an input source", message)
         self.assertIn("cortex-debug-shared-mi.log", message)
         self.assertIn("session.rtt", message)
+
+    def test_fetch_without_valid_input_returns_resolution_exit_code(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            stdout, stderr, exit_code = self._run_cli_capture(
+                ["fetch", "--workspace-root", tmpdir]
+            )
+
+        self.assertEqual(exit_code, 2)
+        self.assertEqual(stdout, "")
+        self.assertIn("could not auto-resolve an input source", stderr)
+
+    def test_fetch_with_gdb_only_emits_structured_warning_on_stderr(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            snapshot_path = Path(tmpdir) / "snapshot.json"
+            stdout, stderr, exit_code = self._run_cli_capture(
+                [
+                    "fetch",
+                    "--gdb-mi",
+                    str(FIXTURES / "sample.mi"),
+                    "--workspace-root",
+                    tmpdir,
+                    "--state-out",
+                    str(snapshot_path),
+                ]
+            )
+            payload = json.loads(snapshot_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("DebugOracle Fetch Summary", stdout)
+        self.assertIn("No RTT lines were available", stderr)
+        self.assertIn(
+            "No RTT lines were available for this snapshot.",
+            payload["parse_warnings"],
+        )
+
+    def test_fetch_with_rtt_only_emits_missing_gdb_warning_once(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            snapshot_path = Path(tmpdir) / "snapshot.json"
+            _, stderr, exit_code = self._run_cli_capture(
+                [
+                    "fetch",
+                    "--rtt",
+                    str(FIXTURES / "sample.rtt"),
+                    "--workspace-root",
+                    tmpdir,
+                    "--state-out",
+                    str(snapshot_path),
+                ]
+            )
+            payload = json.loads(snapshot_path.read_text(encoding="utf-8"))
+
+        warning = "No GDB/MI input was provided before building this snapshot."
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stderr.count(warning), 1)
+        self.assertIn(warning, payload["parse_warnings"])
+
+    def test_fetch_bounds_and_redacts_parse_warnings_on_stderr(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir)
+            gdb_mi = workspace / "untrusted.mi"
+            gdb_mi.write_text(
+                "\n".join(
+                    f'^done,locals={{value="TOPSECRET-{index}\x1b[31m",'
+                    for index in range(12)
+                ),
+                encoding="utf-8",
+            )
+            snapshot_path = workspace / "snapshot.json"
+
+            _, stderr, exit_code = self._run_cli_capture(
+                [
+                    "fetch",
+                    "--gdb-mi",
+                    str(gdb_mi),
+                    "--workspace-root",
+                    str(workspace),
+                    "--state-out",
+                    str(snapshot_path),
+                ]
+            )
+            payload = json.loads(snapshot_path.read_text(encoding="utf-8"))
+
+        warning_lines = [
+            line for line in stderr.splitlines() if line.startswith("Warning:")
+        ]
+        self.assertEqual(exit_code, 0)
+        self.assertNotIn("TOPSECRET", stderr)
+        self.assertNotIn("\x1b", stderr)
+        self.assertIn("details retained in the snapshot", stderr)
+        self.assertRegex(stderr, r"\d+ additional warnings omitted")
+        self.assertLessEqual(len(warning_lines), 9)
+        self.assertTrue(
+            any("TOPSECRET" in warning for warning in payload["parse_warnings"])
+        )
+
+    def test_fetch_warning_rendering_escapes_controls_and_bounds_length(self) -> None:
+        rendered = _warning_for_stderr("\0\x1b\n\t\u202e" + "x" * 1024)
+
+        self.assertLessEqual(len(rendered), 512)
+        self.assertNotIn("\0", rendered)
+        self.assertNotIn("\x1b", rendered)
+        self.assertNotIn("\n", rendered)
+        self.assertNotIn("\t", rendered)
+        self.assertNotIn("\u202e", rendered)
+        self.assertIn(r"\x1b", rendered)
+        self.assertIn(r"\u202e", rendered)
+        self.assertTrue(rendered.endswith("..."))
+
+    def test_fetch_rejects_symlinked_workspace_state_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            workspace = Path(tmpdir) / "workspace"
+            workspace.mkdir()
+            sentinel = Path(tmpdir) / "outside.json"
+            sentinel.write_text("sentinel", encoding="utf-8")
+            state_out = workspace / "snapshot.json"
+            state_out.symlink_to(sentinel)
+
+            code, stdout, stderr = self._run_cli_expect_system_exit(
+                [
+                    "fetch",
+                    "--gdb-mi",
+                    str(FIXTURES / "sample.mi"),
+                    "--workspace-root",
+                    str(workspace),
+                    "--state-out",
+                    str(state_out),
+                ]
+            )
+            sentinel_content = sentinel.read_text(encoding="utf-8")
+
+        self.assertNotEqual(code, 0)
+        self.assertEqual(stdout, "")
+        self.assertIn("safely write", stderr.lower())
+        self.assertEqual(sentinel_content, "sentinel")
+
+    def test_capture_rtt_rejects_out_of_range_port_before_connecting(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch(
+                "debugoracle.cli.commands.status_capture.capture_rtt"
+            ) as capture:
+                code, stdout, stderr = self._run_cli_expect_system_exit(
+                    [
+                        "capture-rtt",
+                        "--port",
+                        "70000",
+                        "--output",
+                        str(Path(tmpdir) / "session.rtt"),
+                    ]
+                )
+
+        self.assertEqual(code, 2)
+        self.assertEqual(stdout, "")
+        self.assertIn("port must be between 1 and 65535", stderr)
+        capture.assert_not_called()
+
+    def test_all_tcp_cli_surfaces_reject_out_of_range_ports(self) -> None:
+        invalid_commands = [
+            ["run", "--port", "0"],
+            [
+                "fetch",
+                "--gdb-mi",
+                str(FIXTURES / "sample.mi"),
+                "--openocd-tcl-port",
+                "65536",
+            ],
+            ["init-workspace", "--auto", "--rtt-port", "-1"],
+        ]
+
+        for argv in invalid_commands:
+            with self.subTest(argv=argv):
+                code, stdout, stderr = self._run_cli_expect_system_exit(argv)
+                self.assertEqual(code, 2)
+                self.assertEqual(stdout, "")
+                self.assertIn("port must be between 1 and 65535", stderr)
 
     def _write_snapshot(self, path: Path, svd_file: Path | None = None) -> Path:
         if svd_file is None:

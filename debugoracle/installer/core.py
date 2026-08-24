@@ -4,9 +4,11 @@ import os
 import shutil
 import sys
 import time
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Protocol
+from urllib.parse import urlparse
 
 from ..diagnostics import build_installer_doctor_notes
 from .backend.pipx import InstallationStatus, PipxBackend, PipxError
@@ -18,8 +20,15 @@ from .manifest import (
 )
 from .outcomes import InstallState, InstallerOutcome, InstallerOutcomeCode, PathAction
 from .platform import linux as linux_platform
+from .source import (
+    ArtifactDownloader,
+    ArtifactError,
+    ArtifactNetworkError,
+    ArtifactSource,
+)
+from .versioning import VersioningError, compare_versions, satisfies
 
-INSTALLER_VERSION = "0.1.0"
+INSTALLER_VERSION = "0.2.0"
 DEFAULT_MANIFEST_URL = "https://raw.githubusercontent.com/nikolasvoss/ai-debugger-v2/main/release/install-manifest.json"
 DEFAULT_BINARY_NAME = "dbgoracle"
 
@@ -33,12 +42,41 @@ class InstallerOptions:
     doctor: bool = True
 
 
+class InstallerBackend(Protocol):
+    def is_available(self) -> bool: ...
+
+    def bin_dir(self) -> Path: ...
+
+    def inspect_installation(
+        self, package_name: str, target_version: str
+    ) -> InstallationStatus: ...
+
+    def install(self, source_spec: str, *, force: bool = False) -> None: ...
+
+    def upgrade(self, package_name: str, source_spec: str | None = None) -> None: ...
+
+    def uninstall(self, package_name: str) -> None: ...
+
+    def verify_cli(
+        self,
+        binary_name: str,
+        *,
+        binary_path: str | None = None,
+        expected_version: str | None = None,
+    ) -> tuple[bool, str]: ...
+
+
+class ManifestSource(Protocol):
+    def fetch(self, manifest_url: str) -> ReleaseManifest: ...
+
+
 class InstallerCore:
     def __init__(
         self,
         *,
-        backend: PipxBackend,
-        fetcher: ManifestFetcher,
+        backend: InstallerBackend,
+        fetcher: ManifestSource,
+        downloader: ArtifactSource | None = None,
         env: dict[str, str] | None = None,
         python_version: tuple[int, int, int] | None = None,
         sleep: Callable[[float], None] | None = None,
@@ -46,6 +84,7 @@ class InstallerCore:
     ) -> None:
         self.backend = backend
         self.fetcher = fetcher
+        self.downloader = downloader or ArtifactDownloader()
         self.env = dict(os.environ if env is None else env)
         self.python_version = python_version or sys.version_info[:3]
         self.sleep = sleep or time.sleep
@@ -95,7 +134,19 @@ class InstallerCore:
                 message="The installer manifest channel did not match the requested channel.",
                 details=[f"Expected {options.channel}, got {manifest.channel}"],
             )
-        if not _python_satisfies(self.python_version, manifest.python_requires):
+        python_version = ".".join(str(part) for part in self.python_version)
+        try:
+            python_supported = satisfies(python_version, manifest.python_requires)
+            installer_supported = (
+                compare_versions(INSTALLER_VERSION, manifest.installer_min_version) >= 0
+            )
+        except VersioningError as error:
+            return InstallerOutcome(
+                code=InstallerOutcomeCode.BLOCKED_MANIFEST,
+                message="The installer manifest contains invalid version policy.",
+                details=[str(error)],
+            )
+        if not python_supported:
             return InstallerOutcome(
                 code=InstallerOutcomeCode.BLOCKED_MISSING_PYTHON,
                 message="Your Python version does not satisfy the release requirements.",
@@ -104,7 +155,7 @@ class InstallerCore:
                     f"Required: {manifest.python_requires}",
                 ],
             )
-        if _compare_versions(INSTALLER_VERSION, manifest.installer_min_version) < 0:
+        if not installer_supported:
             return InstallerOutcome(
                 code=InstallerOutcomeCode.BLOCKED_MANIFEST,
                 message="This installer is older than the minimum supported installer version.",
@@ -150,11 +201,51 @@ class InstallerCore:
             self._finalize_success(outcome, current, options)
             return outcome
 
-        source_spec = (
-            options.package_source_override
-            or manifest.source_url
-            or f"{manifest.package_name}=={manifest.version}"
-        )
+        if options.package_source_override is not None:
+            try:
+                local_source = _resolve_local_source(options.package_source_override)
+            except ArtifactError as error:
+                return InstallerOutcome(
+                    code=InstallerOutcomeCode.FAILED_ARTIFACT,
+                    message="The package source override must be a local checkout path.",
+                    version=manifest.version,
+                    details=[str(error)],
+                )
+            outcome = self._install_source(
+                manifest, current, str(local_source), options
+            )
+            outcome.details.append(
+                f"Package source: explicit local checkout {local_source}"
+            )
+            return outcome
+        try:
+            with tempfile.TemporaryDirectory(prefix="debugoracle-installer-") as tmpdir:
+                source_path = self.downloader.download(manifest, Path(tmpdir))
+                return self._install_source(
+                    manifest, current, str(source_path), options
+                )
+        except ArtifactError as error:
+            return InstallerOutcome(
+                code=InstallerOutcomeCode.FAILED_ARTIFACT,
+                message="The release artifact failed integrity validation.",
+                version=manifest.version,
+                details=[str(error)],
+            )
+        except ArtifactNetworkError as error:
+            return InstallerOutcome(
+                code=InstallerOutcomeCode.FAILED_NETWORK_TRANSIENT,
+                message="Unable to download the verified release artifact.",
+                version=manifest.version,
+                details=[str(error)],
+            )
+
+    def _install_source(
+        self,
+        manifest: ReleaseManifest,
+        current: InstallationStatus,
+        source_spec: str,
+        options: InstallerOptions,
+    ) -> InstallerOutcome:
         try:
             if current.state == InstallState.INSTALLED_OLDER_VERSION:
                 self.backend.upgrade(manifest.package_name, source_spec)
@@ -169,9 +260,14 @@ class InstallerCore:
         except PipxError as error:
             return self._handle_install_failure(error, manifest, current)
 
-        post_install = self.backend.inspect_installation(
-            manifest.package_name, manifest.version
-        )
+        try:
+            post_install = self.backend.inspect_installation(
+                manifest.package_name, manifest.version
+            )
+        except PipxError as error:
+            return self._handle_post_install_inspection_failure(
+                manifest, current, error
+            )
         verified, verify_message = self._verify_status_binary(
             post_install, manifest.version
         )
@@ -186,6 +282,34 @@ class InstallerCore:
         )
         self._finalize_success(outcome, post_install, options)
         return outcome
+
+    def _handle_post_install_inspection_failure(
+        self,
+        manifest: ReleaseManifest,
+        current: InstallationStatus,
+        error: PipxError,
+    ) -> InstallerOutcome:
+        details = [
+            str(error),
+            "Run 'pipx list --json' and 'dbgoracle --version' before retrying.",
+        ]
+        if current.state == InstallState.NOT_INSTALLED:
+            try:
+                self.backend.uninstall(manifest.package_name)
+            except PipxError as cleanup_error:
+                return InstallerOutcome(
+                    code=InstallerOutcomeCode.FAILED_CLEANUP,
+                    message="Post-install inspection failed and cleanup could not restore a clean state.",
+                    version=manifest.version,
+                    details=[*details, str(cleanup_error)],
+                )
+        return InstallerOutcome(
+            code=InstallerOutcomeCode.FAILED_POST_INSTALL_INSPECTION,
+            message="pipx changed the installation, but its resulting state could not be inspected.",
+            version=manifest.version,
+            installed_version=current.installed_version,
+            details=details,
+        )
 
     def _fetch_manifest_with_retry(self, manifest_url: str) -> ReleaseManifest:
         try:
@@ -253,9 +377,17 @@ class InstallerCore:
                     details=[verify_message, str(cleanup_error)],
                 )
         else:
-            restored = self.backend.inspect_installation(
-                manifest.package_name, current.installed_version or "0"
-            )
+            try:
+                restored = self.backend.inspect_installation(
+                    manifest.package_name, current.installed_version or "0"
+                )
+            except PipxError as inspect_error:
+                return InstallerOutcome(
+                    code=InstallerOutcomeCode.FAILED_CLEANUP,
+                    message="CLI verification failed and the previous installation could not be inspected.",
+                    version=manifest.version,
+                    details=[verify_message, str(inspect_error)],
+                )
             if restored.installed_version != current.installed_version:
                 return InstallerOutcome(
                     code=InstallerOutcomeCode.FAILED_CLEANUP,
@@ -334,11 +466,14 @@ class InstallerCore:
         binary_path = status.binary_path or str(
             self.backend.bin_dir() / DEFAULT_BINARY_NAME
         )
-        return self.backend.verify_cli(
-            DEFAULT_BINARY_NAME,
-            binary_path=binary_path,
-            expected_version=expected_version,
-        )
+        try:
+            return self.backend.verify_cli(
+                DEFAULT_BINARY_NAME,
+                binary_path=binary_path,
+                expected_version=expected_version,
+            )
+        except (PipxError, OSError) as error:
+            return False, f"Unable to run post-install CLI verification: {error}"
 
 
 def create_default_installer(
@@ -350,54 +485,23 @@ def create_default_installer(
     return InstallerCore(
         backend=PipxBackend(env=runtime_env),
         fetcher=ManifestFetcher(),
+        downloader=ArtifactDownloader(),
         env=runtime_env,
         input_func=input_func,
     )
 
 
-def _python_satisfies(version: tuple[int, int, int], specifier: str) -> bool:
-    clauses = [piece.strip() for piece in specifier.split(",") if piece.strip()]
-    for clause in clauses:
-        operator = next(
-            (
-                candidate
-                for candidate in (">=", "<=", "==", ">", "<")
-                if clause.startswith(candidate)
-            ),
-            None,
+def _resolve_local_source(raw_source: str) -> Path:
+    if urlparse(raw_source).scheme:
+        raise ArtifactError("Remote package source overrides are not permitted.")
+    try:
+        source = Path(raw_source).expanduser().resolve(strict=True)
+    except OSError as error:
+        raise ArtifactError(
+            f"Local package source does not exist or cannot be resolved: {raw_source}"
+        ) from error
+    if not source.is_dir():
+        raise ArtifactError(
+            "Local package source override must be a checkout directory."
         )
-        if operator is None:
-            return False
-        expected = tuple(int(part) for part in clause[len(operator) :].split("."))
-        padded_version = version + (0,) * (len(expected) - len(version))
-        if operator == ">=" and not (padded_version >= expected):
-            return False
-        if operator == ">" and not (padded_version > expected):
-            return False
-        if operator == "<=" and not (padded_version <= expected):
-            return False
-        if operator == "<" and not (padded_version < expected):
-            return False
-        if operator == "==" and not (padded_version == expected):
-            return False
-    return True
-
-
-def _compare_versions(left: str, right: str) -> int:
-    def normalize(raw: str) -> list[int]:
-        values: list[int] = []
-        for piece in raw.split("."):
-            digits = "".join(ch for ch in piece if ch.isdigit())
-            values.append(int(digits or "0"))
-        return values
-
-    left_parts = normalize(left)
-    right_parts = normalize(right)
-    size = max(len(left_parts), len(right_parts))
-    left_parts.extend([0] * (size - len(left_parts)))
-    right_parts.extend([0] * (size - len(right_parts)))
-    if left_parts < right_parts:
-        return -1
-    if left_parts > right_parts:
-        return 1
-    return 0
+    return source

@@ -129,7 +129,7 @@ def build_bundle_from_text(
     mem_selectors: list[str] | None = None,
 ) -> InvestigationArtifact:
     captured_at = utc_now()
-    transcript = parse_gdb_transcript(gdb_text, now_text=utc_now)
+    transcript = parse_gdb_transcript(gdb_text, now_text=lambda: "")
     halt_snapshot = build_halt_snapshot(
         latest_stop=transcript.latest_stop,
         latest_stack=transcript.latest_stack,
