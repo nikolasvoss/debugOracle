@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import io
 import json
 import runpy
@@ -15,6 +16,9 @@ from debugoracle import main as package_entry
 from debugoracle.cli import main as cli_main
 from debugoracle.cli.commands import run_stop
 from debugoracle.rtt import RttCaptureState
+
+
+cli_main_module = importlib.import_module("debugoracle.cli.main")
 
 
 def _identity(pid: int, workspace: Path) -> run_stop.ProcessIdentity:
@@ -53,13 +57,13 @@ def _write_runtime(
 
 class EntryPointTests(unittest.TestCase):
     def test_package_main_delegates_to_cli_main(self) -> None:
-        with patch("debugoracle.cli.main.main", return_value=7) as main_mock:
+        with patch.object(cli_main_module, "main", return_value=7) as main_mock:
             exit_code = package_entry(["status"])
         self.assertEqual(exit_code, 7)
         main_mock.assert_called_once_with(["status"])
 
     def test_module_main_raises_system_exit_with_cli_code(self) -> None:
-        with patch("debugoracle.cli.main.main", return_value=3):
+        with patch.object(cli_main_module, "main", return_value=3):
             with self.assertRaises(SystemExit) as cm:
                 runpy.run_module("debugoracle", run_name="__main__")
         self.assertEqual(cm.exception.code, 3)

@@ -27,6 +27,8 @@
 - Restored the declared Python 3.10 CI compatibility for installer imports and
   release-contract tests, and made workspace initialization tests independent
   of host OpenOCD availability.
+- Kept artifact verification reproducible by pinning its Twine version to the
+  retained `packaging==26.0` dependency contract.
 - Hardened workspace-derived paths against symlink traversal and made
   canonical state publication atomic.
 - Made malformed GDB/MI input fail deterministically instead of risking a
