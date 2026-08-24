@@ -4,15 +4,73 @@ DebugOracle helps your coding agent investigate embedded bugs using real evidenc
 
 It turns scattered debug information into a reusable report that separates observed facts from conclusions.
 
+![DebugOracle evidence report for a UART failure](docs/assets/readme/evidence-reviewed-uart-demo.png)
+
+DebugOracle grounds agent investigations in captured debugger data, runtime logs, peripheral registers, firmware source, and vendor documentation.
+
 ## What it can do
 
-- Read captured debugger information: stop reason, call stack, registers, and local variables.
-- Use optional RTT runtime logs.
-- Use a matching SVD file for safe, read-only peripheral-register evidence.
-- Search local manuals and datasheets with page-level references.
-- Tell your agent what evidence is available, what is missing, and what to do next.
+- Read captured debugger state: stop reason, call stack, registers, and local variables.
+- Compare optional RTT logs with firmware source and captured hardware state.
+- Decode peripheral registers safely and read-only with a matching SVD file.
+- Search local reference manuals and datasheets with page-level references.
+- Report the evidence used, what remains unknown, and the next useful action.
 
 DebugOracle is operated by a coding agent such as Codex or Claude Code. You do not need to learn its commands to get started.
+
+## What you need
+
+| For | You need | It enables |
+| --- | --- | --- |
+| Install DebugOracle | Linux, Python 3.10+, `pipx`, and Codex or Claude Code | Installation and agent-guided workspace setup |
+| Capture debug evidence | Your firmware project, a built ELF, and your existing debugger setup—normally Cortex-Debug and OpenOCD | Debugger state, runtime logs, and captured target evidence |
+| **Full hardware debugging** | A matching SVD plus the device reference manual and/or datasheet as PDFs | Registers interpreted in hardware context and checked against the manufacturer specification |
+
+## Get started
+
+1. Clone this repository and open it in Codex or Claude Code.
+2. Ask the agent:
+
+```text
+Install DebugOracle for this user with the supported installer. Read the project instructions and README first. Explain optional components before installing them, make only routine per-user changes, and confirm that `dbgoracle --version` works.
+```
+
+3. **In your firmware project**, open an agent session and ask:
+
+```text
+Set up DebugOracle for this project. Discover the available inputs, configure everything that is safe and unambiguous, and explain clearly what is missing. Ask me before preparing manuals or datasheets for search. Do not overwrite my existing project configuration without showing me the required change.
+```
+
+> The supported installer is Linux-only. It installs DebugOracle, not OpenOCD, VS Code, Cortex-Debug, drivers, or board-specific tooling.
+
+## Add files to supercharge your debugging
+
+Use the optional `debugoracle-input/` folder for any helpful project files:
+
+- Reference manuals or datasheets (`.pdf`)
+- A matching peripheral description (`.svd`)
+- A built firmware image (`.elf`)
+- Existing debugger configuration
+- Captured logs
+
+```text
+debugoracle-input/
+├── documentation/
+├── device.svd
+├── firmware.elf
+├── debugger-config/
+└── captured-logs/
+```
+
+The folder is not required. Everything in it is optional, and filenames and subfolders do not matter. DebugOracle also checks common project locations such as `docs/`, `.dbgoracle/`, existing VS Code configuration, and known build-output locations.
+
+<details>
+<summary>How document search works</summary>
+
+If PDFs are found, the agent asks permission before preparing them for local search. It may take seconds to several minutes. The tool searches only local PDFs; it does not download vendor documentation. Original files stay unchanged; generated search data is stored under `.dbgoracle/documentation-search/`.
+
+Parser choice affects result quality. The default `pypdf` parser extracts text page by page, but scanned or image-only pages are incomplete, encrypted or malformed PDFs cannot be ingested, and complex tables or layouts may extract less accurately. For difficult scanned or layout-heavy PDFs, use the optional `docling` parser; DebugOracle records the parser and page provenance with the resulting evidence.
+</details>
 
 ## See it work without hardware
 
@@ -24,46 +82,17 @@ Set up the DebugOracle demo. Show the available evidence, investigate the serial
 
 The demo combines runtime output, firmware source, captured registers, and a local register reference to identify a serial clock/divider mismatch with evidence rather than a guess.
 
-## What you need
-
-- To install: Linux, Python 3.10+, `pipx`, and Codex or Claude Code.
-- To debug a device: your firmware project, a built firmware file (ELF), and your existing debugger setup—normally Cortex-Debug and OpenOCD.
-- Recommended: manufacturer manuals or datasheets as PDFs, plus a matching SVD file for peripheral-register support.
-
-## Get started
-
-1. Clone this repository and open it in Codex or Claude Code.
-2. Ask the agent:
-
-```text
-Install DebugOracle for this user with the supported installer. Read the project instructions and README first. Explain optional components before installing them, make only routine per-user changes, and confirm that `dbgoracle --version` works.
-```
-
-3. Open your firmware project in an agent session and ask:
-
-```text
-Set up DebugOracle for this project. Discover the available inputs, configure everything that is safe and unambiguous, and explain clearly what is missing. Ask me before preparing manuals or datasheets for search. Do not overwrite my existing project configuration without showing me the required change.
-```
-
-The supported installer is Linux-only. It installs DebugOracle, not OpenOCD, VS Code, Cortex-Debug, drivers, or board-specific tooling.
-
-## Add files if you have them
-
-Fresh workspace setup creates an optional `debugoracle-input/` folder. Put any project-related files there—manuals, datasheets, SVD files, ELF files, debugger configuration, or captured logs. Filenames and subfolders do not matter.
-
-The folder is not required. DebugOracle also checks common workspace locations, including the project root, `docs/`, `.dbgoracle/`, existing VS Code configuration, and known build-output locations. It uses only supported file types, leaves other files alone, and asks rather than guessing when several choices are credible.
-
-If PDFs are found, the agent asks permission before preparing them for local search. It explains why that helps and that it may take seconds to several minutes. Original files are unchanged; new agent-driven search data lives under `.dbgoracle/documentation-search/`.
-
 ## What DebugOracle changes
 
-During fresh setup, DebugOracle can create `.dbgoracle/`, `debugoracle-input/`, DebugOracle-owned VS Code setup files, and narrow `.gitignore` rules so inputs and generated evidence stay local.
-
-It does not modify firmware, flash or control the target, download vendor documents, change supplied files, or overwrite user-owned VS Code configuration.
+| DebugOracle may create | DebugOracle does not |
+| --- | --- |
+| `.dbgoracle/` and `debugoracle-input/` | Modify firmware or supplied files |
+| DebugOracle-owned VS Code setup files | Flash or control the target |
+| Narrow `.gitignore` rules for local inputs and generated evidence | Download vendor documents or overwrite user-owned VS Code configuration |
 
 ## Platform support
 
-The verified public-alpha environment is Ubuntu 24.04 LTS x86-64 with Python 3.12 and `pipx`. Other Linux distributions, architectures, and Python versions are currently unverified.
+Verified public-alpha environment: Ubuntu 24.04 LTS x86-64 with Python 3.12 and `pipx`. Other Linux distributions, architectures, and Python versions are currently unverified.
 
 ## Help and documentation
 
