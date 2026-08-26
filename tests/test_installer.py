@@ -44,6 +44,41 @@ class InstallerCoreTests(unittest.TestCase):
         self.assertEqual(outcome.code, InstallerOutcomeCode.BLOCKED_MISSING_PIPX)
         self.assertFalse(outcome.success)
 
+    def test_python_311_is_blocked_before_backend_or_manifest_access(self) -> None:
+        backend = _FakeBackend()
+        fetcher = _FakeFetcher(_manifest())
+        installer = InstallerCore(
+            backend=backend,
+            fetcher=fetcher,
+            env=_env(),
+            python_version=(3, 11, 9),
+            sleep=lambda _seconds: None,
+        )
+
+        outcome = installer.run(InstallerOptions())
+
+        self.assertEqual(outcome.code, InstallerOutcomeCode.BLOCKED_MISSING_PYTHON)
+        self.assertEqual(backend.available_checks, 0)
+        self.assertEqual(fetcher.calls, 0)
+
+    def test_python_313_is_rejected_by_manifest_before_pipx_mutation(self) -> None:
+        backend = _FakeBackend()
+        fetcher = _FakeFetcher(replace(_manifest(), python_requires=">=3.12,<3.13"))
+        installer = InstallerCore(
+            backend=backend,
+            fetcher=fetcher,
+            env=_env(),
+            python_version=(3, 13, 0),
+            sleep=lambda _seconds: None,
+        )
+
+        outcome = installer.run(InstallerOptions())
+
+        self.assertEqual(outcome.code, InstallerOutcomeCode.BLOCKED_MISSING_PYTHON)
+        self.assertEqual(fetcher.calls, 1)
+        self.assertEqual(backend.install_calls, [])
+        self.assertEqual(backend.upgrade_calls, [])
+
     def test_fresh_install_retries_manifest_then_succeeds(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             home = Path(tmpdir)
@@ -579,6 +614,7 @@ class _FakeBackend:
         bin_dir: str = "/tmp/fake-bin",
     ) -> None:
         self.available = available
+        self.available_checks = 0
         self.statuses = list(statuses or [_status(InstallState.NOT_INSTALLED)])
         self.install_error = install_error
         self.upgrade_error = upgrade_error
@@ -592,6 +628,7 @@ class _FakeBackend:
         self.uninstall_calls: list[str] = []
 
     def is_available(self) -> bool:
+        self.available_checks += 1
         return self.available
 
     def bin_dir(self) -> Path:

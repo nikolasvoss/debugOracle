@@ -8,10 +8,7 @@ import subprocess
 import unittest
 from pathlib import Path
 
-try:
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover - Python 3.10 compatibility
-    import tomli as tomllib
+import tomllib
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]

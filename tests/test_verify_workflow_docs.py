@@ -33,9 +33,9 @@ class VerifyWorkflowDocsTests(unittest.TestCase):
         conditional_checkout = (
             "submodules: ${{ github.ref_type == 'tag' && 'recursive' || 'false' }}"
         )
-        self.assertGreaterEqual(workflow.count(conditional_checkout), 3)
+        self.assertGreaterEqual(workflow.count(conditional_checkout), 2)
         self.assertGreaterEqual(
-            workflow.count("DEBUGORACLE_SKIP_PRIVATE_REFERENCE:"), 3
+            workflow.count("DEBUGORACLE_SKIP_PRIVATE_REFERENCE:"), 2
         )
         self.assertIn("tests/test_reference_workspace_samples.py", workflow)
         self.assertIn(
@@ -46,10 +46,9 @@ class VerifyWorkflowDocsTests(unittest.TestCase):
         )
         self.assertIn("if: github.ref_type == 'tag'", workflow)
         self.assertIn("git submodule status --recursive", workflow)
-        self.assertIn("compatibility-gate:", workflow)
-        self.assertIn(
-            'python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]', workflow
-        )
+        self.assertNotIn("compatibility-gate:", workflow)
+        self.assertIn("installer-platform-gate:", workflow)
+        self.assertIn('python-version: "3.12"', workflow)
         self.assertIn("artifact-gate:", workflow)
         self.assertIn("./scripts/verify-release.sh", workflow)
 
@@ -58,7 +57,11 @@ class VerifyWorkflowDocsTests(unittest.TestCase):
     ) -> None:
         readme = Path("README.md").read_text(encoding="utf-8")
 
-        self.assertIn("Python 3.10 through 3.14", readme)
+        self.assertIn("Python 3.12.x only", readme)
+        self.assertIn(
+            "current Apple Silicon macOS, current Intel macOS, and current Windows",
+            readme,
+        )
         self.assertIn("Ubuntu 24.04 LTS x86-64 with Python 3.12", readme)
 
     def test_plan_template_includes_fast_and_full_verification_commands(self) -> None:

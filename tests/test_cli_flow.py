@@ -39,6 +39,13 @@ class DebugOracleCliTests(unittest.TestCase):
         cortex_debug = next(item for item in report.items if item.key == "cortex_debug")
         self.assertEqual(cortex_debug.state, ReadinessState.READY)
 
+    def test_host_readiness_blocks_python_311(self) -> None:
+        with patch("debugoracle.readiness.sys.version_info", (3, 11, 9)):
+            report = collect_host_readiness(path="", home=Path("/tmp"))
+
+        python = next(item for item in report.items if item.key == "python")
+        self.assertEqual(python.state, ReadinessState.BLOCKED)
+
     def test_doctor_host_reports_read_only_json_readiness(self) -> None:
         stdout, stderr, exit_code = self._run_cli_capture(
             ["doctor", "host", "--format", "json"]
