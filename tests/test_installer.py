@@ -20,6 +20,11 @@ from debugoracle.installer.backend.pipx import PipxError
 
 
 class InstallerCoreTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._platform_patch = patch("debugoracle.installer.core.sys.platform", "linux")
+        self._platform_patch.start()
+        self.addCleanup(self._platform_patch.stop)
+
     def test_manifest_missing_required_fields_is_rejected(self) -> None:
         with self.assertRaises(ManifestError):
             ReleaseManifest.from_mapping({"schema_version": "1"})

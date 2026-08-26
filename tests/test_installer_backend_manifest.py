@@ -147,7 +147,7 @@ class PipxBackendTests(unittest.TestCase):
         )
 
     def test_verify_cli_failure_paths_and_success(self) -> None:
-        backend = PipxBackend(env={"PATH": "/bin", "HOME": "/tmp/home"})
+        backend = PipxBackend(env={"PATH": "/bin", "PIPX_BIN_DIR": "/tmp/pipx-bin"})
         with (
             patch("debugoracle.installer.backend.pipx.shutil.which", return_value=None),
             patch("pathlib.Path.is_file", return_value=False),

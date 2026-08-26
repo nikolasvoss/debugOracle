@@ -12,6 +12,7 @@ from pathlib import Path
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 
+@unittest.skipIf(os.name == "nt", "macOS launcher execution is verified on macOS")
 class MacosLauncherTests(unittest.TestCase):
     def test_checkout_launcher_forwards_arguments_to_shared_bootstrap(self) -> None:
         launcher = REPOSITORY_ROOT / "scripts" / "install" / "macos.sh"
