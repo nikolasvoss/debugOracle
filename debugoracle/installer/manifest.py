@@ -200,11 +200,12 @@ class ManifestFetcher:
             raise ManifestError(f"Unsupported manifest URL scheme '{parsed.scheme}'.")
         try:
             if is_windows_path or parsed.scheme in {"", "file"}:
-                path = Path(
-                    manifest_url
-                    if is_windows_path or parsed.scheme == ""
-                    else parsed.path
-                )
+                path_text = manifest_url
+                if parsed.scheme == "file":
+                    path_text = unquote(parsed.path)
+                    if path_text.startswith("/") and _is_windows_path(path_text[1:]):
+                        path_text = path_text[1:]
+                path = Path(path_text)
                 raw = path.read_bytes()
                 if len(raw) > self.MAX_MANIFEST_BYTES:
                     raise ManifestError("Installer manifest exceeds the size limit.")

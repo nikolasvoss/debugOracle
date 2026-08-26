@@ -289,6 +289,16 @@ class ManifestFetcherTests(unittest.TestCase):
         self.assertEqual(payload_from_path, {"schema_version": "1"})
         self.assertEqual(payload_from_file_uri, {"schema_version": "1"})
 
+    def test_fetch_payload_normalizes_windows_file_uri_drive_prefix(self) -> None:
+        fetcher = ManifestFetcher()
+        with patch("debugoracle.installer.manifest.Path") as path_class:
+            path_class.return_value.read_bytes.return_value = b'{"schema_version": "1"}'
+
+            payload = fetcher.fetch_payload("file:///C:/temp/manifest.json")
+
+        path_class.assert_called_once_with("C:/temp/manifest.json")
+        self.assertEqual(payload, {"schema_version": "1"})
+
     def test_fetch_payload_rejects_non_https_remote_urls_and_wraps_errors(self) -> None:
         fetcher = ManifestFetcher()
         for url in (
