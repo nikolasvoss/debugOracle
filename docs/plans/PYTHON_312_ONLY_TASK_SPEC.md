@@ -11,10 +11,11 @@ need.
 
 ## Scope
 
-- In scope: release `0.3.1` supports Linux with Python 3.12.x only.
+- In scope: release `0.3.1` supports Linux, current macOS on Apple Silicon and
+  Intel, and current Windows PowerShell with Python 3.12.x only.
 - In scope: package metadata, installer policy, release manifest, CI, active
   documentation, and contract tests state the same policy.
-- Out of scope: support for another Python minor, platforms, or architectures.
+- Out of scope: support for another Python minor, platform, or architecture.
 - Out of scope: changing the published 0.3.0 artifact or its manifest.
 
 ## Invariants Touched
@@ -31,8 +32,9 @@ need.
   manifest.
 - AC-002: the installer blocks Python below 3.12 before backend or network
   mutation and blocks non-3.12 versions through the manifest requirement.
-- AC-003: CI runs all quality and artifact gates on Python 3.12 without the
-  3.10--3.14 compatibility matrix.
+- AC-003: CI runs quality and artifact gates on Python 3.12 without the
+  3.10--3.14 compatibility matrix, while retaining installer contract gates on
+  Linux, current Apple Silicon macOS, current Intel macOS, and current Windows.
 - AC-004: active public installation documentation promises Python 3.12.x
   only; historical 0.3.0 evidence remains unchanged.
 - AC-005: the 0.3.1 wheel, manifest hash/size, release URLs, and CLI version

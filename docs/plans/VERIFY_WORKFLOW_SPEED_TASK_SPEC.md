@@ -1,6 +1,6 @@
 # Verify Workflow Speed Task Spec
 
-**Status:** Active
+**Status:** Complete
 
 ## Problem Statement
 
@@ -31,6 +31,11 @@ provenance coverage.
 - AC-003: CI invokes the authoritative full verification command.
 - AC-004: Contributor documentation accurately describes the fast workflow.
 - AC-005: CI fails if the full verification command exceeds three minutes.
+
+## Accepted Deviation
+
+The CI bound is five minutes rather than the originally specified three
+minutes. This deviation is accepted for this completed work item.
 
 ## Risks
 

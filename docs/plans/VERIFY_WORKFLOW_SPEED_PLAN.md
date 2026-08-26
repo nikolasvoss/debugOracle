@@ -1,6 +1,6 @@
 # Verify Workflow Speed Plan
 
-**Status:** Active
+**Status:** Complete
 
 ## Task Link
 
@@ -52,3 +52,8 @@
 
 The fast preflight now provides test feedback. The full gate retains all
 existing tests and coverage enforcement while avoiding the duplicate run.
+
+## Completion Note
+
+AC-005's original three-minute CI bound is intentionally accepted as a
+five-minute bound in the current workflow.

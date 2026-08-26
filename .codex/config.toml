@@ -4,6 +4,7 @@ approval_policy = "on-request"
 sandbox_mode = "workspace-write"
 apps.filesystem.default_tools_approval_mode = "approve"
 
+web_search = "live"
 [features]
 multi_agent = true
 use_linux_sandbox_bwrap = true

@@ -84,7 +84,7 @@ audits are complete.
 
 ## Platform support
 
-The automated non-HIL compatibility suite covers Python 3.10 through 3.14 on Ubuntu. Installer contracts also run on Linux, current Apple Silicon macOS, current Intel macOS, and current Windows. The authoritative public-release environment remains Ubuntu 24.04 LTS x86-64 with Python 3.12 and `pipx`.
+The automated non-HIL compatibility suite covers Python 3.10 through 3.14 on Ubuntu. Installer contracts also run on Linux, current Apple Silicon macOS, current Intel macOS, and current Windows. Full end-to-end user installation workflows on macOS and Windows are currently unverified; the authoritative public-release environment remains Ubuntu 24.04 LTS x86-64 with Python 3.12 and `pipx`.
 
 ## Help and documentation
 
