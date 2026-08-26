@@ -191,11 +191,20 @@ class ManifestFetcher:
 
     def fetch_payload(self, manifest_url: str) -> dict[str, object]:
         parsed = urlparse(manifest_url)
-        if parsed.scheme and parsed.scheme not in {"file", "https"}:
+        is_windows_path = _is_windows_path(manifest_url)
+        if (
+            parsed.scheme
+            and not is_windows_path
+            and parsed.scheme not in {"file", "https"}
+        ):
             raise ManifestError(f"Unsupported manifest URL scheme '{parsed.scheme}'.")
         try:
-            if parsed.scheme in {"", "file"}:
-                path = Path(parsed.path if parsed.scheme == "file" else manifest_url)
+            if is_windows_path or parsed.scheme in {"", "file"}:
+                path = Path(
+                    manifest_url
+                    if is_windows_path or parsed.scheme == ""
+                    else parsed.path
+                )
                 raw = path.read_bytes()
                 if len(raw) > self.MAX_MANIFEST_BYTES:
                     raise ManifestError("Installer manifest exceeds the size limit.")
@@ -238,6 +247,15 @@ class ManifestFetcher:
             _URLResponse,
             opener.open(Request(manifest_url), timeout=5.0),  # nosec B310
         )
+
+
+def _is_windows_path(value: str) -> bool:
+    return (
+        len(value) >= 3
+        and value[1] == ":"
+        and value[0].isalpha()
+        and value[2] in {"/", "\\"}
+    )
 
 
 def _validate_manifest_remote_url(url: str) -> None:

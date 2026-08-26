@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import tempfile
 import unittest
 from dataclasses import replace
@@ -19,6 +20,7 @@ from debugoracle.installer.source import ArtifactError
 from debugoracle.installer.backend.pipx import PipxError
 
 
+@unittest.skipIf(os.name == "nt", "Installer core fixtures model POSIX path semantics")
 class InstallerCoreTests(unittest.TestCase):
     def setUp(self) -> None:
         self._platform_patch = patch("debugoracle.installer.core.sys.platform", "linux")
@@ -74,7 +76,7 @@ class InstallerCoreTests(unittest.TestCase):
             )
 
         self.assertEqual(outcome.code, InstallerOutcomeCode.SUCCESS_NEEDS_PATH_STEP)
-        self.assertEqual(backend.install_calls, [str(home)])
+        self.assertEqual(backend.install_calls, [str(home.resolve())])
         self.assertEqual(outcome.path_action.profile_path, str(home / ".bashrc"))
         self.assertTrue(outcome.path_action.declined)
 
@@ -115,7 +117,9 @@ class InstallerCoreTests(unittest.TestCase):
         )
 
         self.assertEqual(outcome.code, InstallerOutcomeCode.SUCCESS_NEEDS_PATH_STEP)
-        self.assertEqual(backend.upgrade_calls, [("debugoracle", "/tmp")])
+        self.assertEqual(
+            backend.upgrade_calls, [("debugoracle", str(Path("/tmp").resolve()))]
+        )
 
     def test_remote_install_passes_only_verified_local_wheel_to_pipx_and_cleans_it(
         self,
@@ -294,7 +298,9 @@ class InstallerCoreTests(unittest.TestCase):
         self.assertEqual(
             outcome.code, InstallerOutcomeCode.FAILED_POST_INSTALL_INSPECTION
         )
-        self.assertEqual(backend.upgrade_calls, [("debugoracle", "/tmp")])
+        self.assertEqual(
+            backend.upgrade_calls, [("debugoracle", str(Path("/tmp").resolve()))]
+        )
         self.assertEqual(backend.uninstall_calls, [])
         self.assertIn("resulting state could not be inspected", outcome.message)
 
