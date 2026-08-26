@@ -75,6 +75,9 @@ For required final validation before completion:
 ```
 
 - `full` runs `pre-commit run --all-files` with no skipped hooks.
+- If a command-output window ends before validation does, continue waiting on
+  the same process; the cutoff is not a validation result.
+- Do not rerun full validation solely because a wait window elapsed.
 
 Run:
 
