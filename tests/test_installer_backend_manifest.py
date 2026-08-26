@@ -39,9 +39,18 @@ class PipxBackendTests(unittest.TestCase):
         backend = PipxBackend(env={"PIPX_BIN_DIR": "~/custom-bin", "HOME": "/tmp/home"})
         self.assertEqual(backend.bin_dir(), Path("~/custom-bin").expanduser())
 
-    def test_bin_dir_defaults_to_home_local_bin(self) -> None:
+    def test_bin_dir_uses_the_effective_pipx_application_directory(self) -> None:
         backend = PipxBackend(env={"HOME": "/tmp/home"})
-        self.assertEqual(backend.bin_dir(), Path("/tmp/home/.local/bin"))
+        with patch.object(
+            backend,
+            "_run",
+            return_value=SimpleNamespace(stdout="/tmp/effective-pipx-bin\n"),
+        ) as run_mock:
+            self.assertEqual(backend.bin_dir(), Path("/tmp/effective-pipx-bin"))
+
+        run_mock.assert_called_once_with(
+            ["pipx", "environment", "--value", "PIPX_BIN_DIR"]
+        )
 
     def test_inspect_installation_not_installed(self) -> None:
         backend = PipxBackend(env={"HOME": "/tmp/home"})

@@ -10,6 +10,8 @@ from typing import Any
 from ...installer.backend.pipx import PipxBackend, PipxError
 from ...installer.outcomes import InstallState
 from ...installer.platform import linux as linux_platform
+from ...installer.platform import macos as macos_platform
+from ...installer.platform import windows as windows_platform
 
 PACKAGE_NAME = "debugoracle"
 CLI_NAME = "dbgoracle"
@@ -49,13 +51,13 @@ def _confirm_uninstall() -> bool:
 
 
 def cmd_uninstall_cli(args: Any) -> int:
-    if not sys.platform.startswith("linux"):
+    if not sys.platform.startswith(("linux", "darwin", "win32")):
         return _emit_outcome(
             args,
             UninstallOutcome(
                 code="blocked_platform",
                 success=False,
-                message="Linux v1 installer support is the only supported platform right now.",
+                message="Installer support is available only on Linux, macOS, and Windows.",
                 details=[f"Detected platform: {sys.platform}"],
             ),
         )
@@ -136,7 +138,8 @@ def cmd_uninstall_cli(args: Any) -> int:
         return _emit_outcome(args, outcome)
 
     home = Path(os.environ.get("HOME", str(Path.home()))).expanduser()
-    plan = linux_platform.build_path_plan(
+    platform_adapter = _platform_adapter()
+    plan = platform_adapter.build_path_plan(
         backend.bin_dir(), os.environ.get("SHELL"), home, os.environ
     )
     profile_path = plan.profile_path
@@ -152,7 +155,7 @@ def cmd_uninstall_cli(args: Any) -> int:
         outcome.details.append("No supported shell profile detected for PATH cleanup.")
         return _emit_outcome(args, outcome)
 
-    cleanup = linux_platform.cleanup_path_line(
+    cleanup = platform_adapter.cleanup_path_line(
         profile_path,
         export_line,
         force_legacy=bool(args.force_legacy_path_cleanup),
@@ -216,3 +219,11 @@ def _emit_outcome(args: Any, outcome: UninstallOutcome) -> int:
                     f"Profile cleanup error: {outcome.path_cleanup.error}", file=stream
                 )
     return 0 if outcome.success else 1
+
+
+def _platform_adapter():
+    if sys.platform.startswith("win32"):
+        return windows_platform
+    if sys.platform.startswith("darwin"):
+        return macos_platform
+    return linux_platform

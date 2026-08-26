@@ -9,14 +9,15 @@
 
 ## Purpose
 
-Provide a narrow CLI surface that a Linux launcher can call to reuse the package-owned installer core.
+Provide a narrow CLI surface that Linux, macOS, and Windows launchers can call
+to reuse the package-owned installer core.
 
 ## Responsibilities
 
 - Translate parser arguments into installer-core options.
 - Render installer outcomes in `text` or `json` form.
 - Keep install policy out of shell wrappers while accepting launcher-provided source overrides.
-- Accept checkout-local package source overrides from the Linux launcher.
+- Accept checkout-local package source overrides from platform launchers.
 
 ## Constraints
 
@@ -30,7 +31,7 @@ Provide a narrow CLI surface that a Linux launcher can call to reuse the package
   `debugoracle.version.__version__` value.
 - The checkout manifest's `version`, release tag, and wheel filename must match
   that canonical version.
-- The checkout launcher must continue to pass its local repository path as the
+- Every checkout launcher must continue to pass its local repository path as the
   package source override. That override takes precedence over the manifest
   source so an audited checkout installs its own contents.
 - Release installation uses a project-owned GitHub Release wheel. PyPI is not
@@ -102,9 +103,8 @@ reported as unknown and the installer performs no unbound rollback download or
 additional mutation: an automatic rollback would require a separately
 manifest-bound hash for the previous wheel.
 
-## Verified Alpha Environment
+## Verified Compatibility Environments
 
 - Release evidence is produced on Ubuntu 24.04 LTS x86-64 with Python 3.12 and
-  `pipx`.
-- Other distributions, architectures, and Python versions remain unverified
-  until the release compatibility matrix records them.
+  `pipx`. Installer contract CI also covers current Apple Silicon macOS,
+  current Intel macOS, and current Windows PowerShell.

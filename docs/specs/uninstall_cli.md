@@ -9,11 +9,13 @@
 
 ## Purpose
 
-Provide a narrow CLI surface that a Linux launcher can call to remove DebugOracle safely.
+Provide a narrow CLI surface that Linux, macOS, and Windows launchers can call
+to remove DebugOracle safely.
 
 ## Responsibilities
 
-- Reuse existing installer backend/platform helpers for pipx state and PATH profile handling.
+- Reuse existing installer backend/platform helpers for pipx state and safe,
+  platform-specific PATH handling.
 - Remove the `debugoracle` pipx package when installed.
 - Prompt interactive users before uninstalling bundled docs tooling from the same pipx environment.
 - Clean shell-profile PATH lines only when they are installer-managed by marker.

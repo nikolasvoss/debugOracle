@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -72,9 +73,8 @@ def append_path_line(profile_path: Path, export_line: str) -> tuple[bool, str | 
         if profile_path.parent and not profile_path.parent.exists():
             profile_path.parent.mkdir(parents=True, exist_ok=True)
         prefix = "" if existing.endswith("\n") or not existing else "\n"
-        profile_path.write_text(
-            f"{existing}{prefix}{PATH_MARKER}\n{export_line}\n",
-            encoding="utf-8",
+        _write_text_atomic(
+            profile_path, f"{existing}{prefix}{PATH_MARKER}\n{export_line}\n"
         )
         return True, None
     except OSError as error:
@@ -132,7 +132,7 @@ def cleanup_path_line(
             rebuilt = "\n".join(updated_lines)
             if rebuilt and original_had_trailing_newline:
                 rebuilt += "\n"
-            profile_path.write_text(rebuilt, encoding="utf-8")
+            _write_text_atomic(profile_path, rebuilt)
         manual_action = None
         if marker_line_requires_manual_action:
             manual_action = (
@@ -197,3 +197,21 @@ def _line_matches_path_export(
     if stripped.startswith("#"):
         return False
     return managed_bin_dir in stripped and "$PATH" in stripped
+
+
+def _write_text_atomic(path: Path, content: str) -> None:
+    mode = path.stat().st_mode if path.exists() else None
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"
+    )
+    temporary_path = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        if mode is not None:
+            os.chmod(temporary_path, mode)
+        os.replace(temporary_path, path)
+    finally:
+        temporary_path.unlink(missing_ok=True)

@@ -20,6 +20,8 @@ from .manifest import (
 )
 from .outcomes import InstallState, InstallerOutcome, InstallerOutcomeCode, PathAction
 from .platform import linux as linux_platform
+from .platform import macos as macos_platform
+from .platform import windows as windows_platform
 from .source import (
     ArtifactDownloader,
     ArtifactError,
@@ -78,6 +80,7 @@ class InstallerCore:
         fetcher: ManifestSource,
         downloader: ArtifactSource | None = None,
         env: dict[str, str] | None = None,
+        platform: str | None = None,
         python_version: tuple[int, int, int] | None = None,
         sleep: Callable[[float], None] | None = None,
         input_func: Callable[[str], str] | None = None,
@@ -86,16 +89,17 @@ class InstallerCore:
         self.fetcher = fetcher
         self.downloader = downloader or ArtifactDownloader()
         self.env = dict(os.environ if env is None else env)
+        self.platform = platform or sys.platform
         self.python_version = python_version or sys.version_info[:3]
         self.sleep = sleep or time.sleep
         self.input_func = input_func or input
 
     def run(self, options: InstallerOptions) -> InstallerOutcome:
-        if not sys.platform.startswith("linux"):
+        if not self.platform.startswith(("linux", "darwin", "win32")):
             return InstallerOutcome(
                 code=InstallerOutcomeCode.BLOCKED_PLATFORM,
-                message="Linux v1 installer support is the only supported platform right now.",
-                details=[f"Detected platform: {sys.platform}"],
+                message="Installer support is available only on Linux, macOS, and Windows.",
+                details=[f"Detected platform: {self.platform}"],
             )
         if self.python_version < (3, 10, 0):
             return InstallerOutcome(
@@ -417,7 +421,8 @@ class InstallerCore:
         if self._is_binary_discoverable(binary_path):
             return
         home = Path(self.env.get("HOME", str(Path.home()))).expanduser()
-        plan = linux_platform.build_path_plan(
+        platform_adapter = self._platform_adapter()
+        plan = platform_adapter.build_path_plan(
             binary_dir, self.env.get("SHELL"), home, self.env
         )
         path_action = PathAction(
@@ -434,7 +439,7 @@ class InstallerCore:
         else:
             path_action.declined = True
         if accepted and plan.profile_path and plan.export_line:
-            applied, error = linux_platform.append_path_line(
+            applied, error = platform_adapter.append_path_line(
                 plan.profile_path, plan.export_line
             )
             path_action.applied = applied
@@ -456,9 +461,16 @@ class InstallerCore:
                 return discovered_path.samefile(target_path)
             except OSError:
                 return discovered_path.resolve() == target_path.resolve()
-        return linux_platform.path_contains(
+        return self._platform_adapter().path_contains(
             Path(binary_path).parent, self.env.get("PATH")
         )
+
+    def _platform_adapter(self):
+        if self.platform.startswith("win32"):
+            return windows_platform
+        if self.platform.startswith("darwin"):
+            return macos_platform
+        return linux_platform
 
     def _verify_status_binary(
         self, status: InstallationStatus, expected_version: str

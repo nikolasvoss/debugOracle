@@ -20,7 +20,7 @@ DebugOracle is operated through its CLI by a coding agent such as Codex or Claud
 
 | For | You need |
 | --- | --- |
-| Install DebugOracle | Linux, Python 3.10–3.14, `pipx`, and Codex or Claude Code |
+| Install DebugOracle | Linux, current macOS, or current Windows PowerShell; Python 3.10–3.14; `pipx`; and Codex or Claude Code |
 | Capture debug evidence | Your firmware project, a built ELF, and your existing debugger setup—normally Cortex-Debug and OpenOCD |
 | **Full hardware debugging** | A matching SVD plus the device reference manual and/or datasheet as PDFs |
 
@@ -38,7 +38,7 @@ Install DebugOracle for this user with the supported installer. Read the project
 Set up DebugOracle for this project. Discover the available inputs, configure everything that is safe and unambiguous, and explain clearly what is missing. Ask me before preparing manuals or datasheets for search. Do not overwrite my existing project configuration without showing me the required change.
 ```
 
-> The supported installer is Linux-only. It installs DebugOracle, not OpenOCD, VS Code, Cortex-Debug, drivers, or board-specific tooling.
+> The supported installer is available on Linux, current macOS, and current Windows PowerShell. It installs DebugOracle, not OpenOCD, VS Code, Cortex-Debug, drivers, or board-specific tooling.
 
 ## Add files to supercharge your debugging
 
@@ -84,7 +84,7 @@ audits are complete.
 
 ## Platform support
 
-The automated non-HIL compatibility suite covers Python 3.10 through 3.14 on Ubuntu. The authoritative public-release environment is Ubuntu 24.04 LTS x86-64 with Python 3.12 and `pipx`. Other Linux distributions and architectures are currently unverified.
+The automated non-HIL compatibility suite covers Python 3.10 through 3.14 on Ubuntu. Installer contracts also run on Linux, current Apple Silicon macOS, current Intel macOS, and current Windows. The authoritative public-release environment remains Ubuntu 24.04 LTS x86-64 with Python 3.12 and `pipx`.
 
 ## Help and documentation
 

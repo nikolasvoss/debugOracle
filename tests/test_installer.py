@@ -14,6 +14,7 @@ from debugoracle.installer.manifest import (
     ReleaseManifest,
 )
 from debugoracle.installer.outcomes import InstallState, InstallerOutcomeCode
+from debugoracle.installer.platform import linux as linux_platform
 from debugoracle.installer.source import ArtifactError
 from debugoracle.installer.backend.pipx import PipxError
 
@@ -479,17 +480,55 @@ class InstallerCoreTests(unittest.TestCase):
         self.assertEqual(outcome.code, InstallerOutcomeCode.FAILED_VERIFY)
         self.assertIn("unexpected version", outcome.details[0])
 
-    def test_non_linux_platform_returns_structured_block(self) -> None:
+    def test_macos_installs_through_the_shared_installer(self) -> None:
         installer = InstallerCore(
-            backend=_FakeBackend(),
+            backend=_FakeBackend(
+                statuses=[_status(InstallState.INSTALLED_SAME_VERSION, "0.1.0")]
+            ),
             fetcher=_FakeFetcher(_manifest()),
             env=_env(),
+            platform="darwin",
             sleep=lambda _seconds: None,
         )
-        with patch("debugoracle.installer.core.sys.platform", "darwin"):
-            outcome = installer.run(InstallerOptions())
+        outcome = installer.run(InstallerOptions(doctor=False))
 
-        self.assertEqual(outcome.code, InstallerOutcomeCode.BLOCKED_PLATFORM)
+        self.assertTrue(outcome.success)
+        self.assertNotEqual(outcome.code, InstallerOutcomeCode.BLOCKED_PLATFORM)
+
+    def test_windows_installs_through_the_shared_installer(self) -> None:
+        installer = InstallerCore(
+            backend=_FakeBackend(
+                statuses=[_status(InstallState.INSTALLED_SAME_VERSION, "0.1.0")]
+            ),
+            fetcher=_FakeFetcher(_manifest()),
+            env=_env(),
+            platform="win32",
+            sleep=lambda _seconds: None,
+        )
+        outcome = installer.run(InstallerOptions(doctor=False))
+
+        self.assertTrue(outcome.success)
+        self.assertNotEqual(outcome.code, InstallerOutcomeCode.BLOCKED_PLATFORM)
+
+
+class LinuxPathSafetyTests(unittest.TestCase):
+    def test_path_write_failure_preserves_existing_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            profile = Path(tmpdir) / ".bashrc"
+            original = "export KEEP_ME=1\n"
+            profile.write_text(original, encoding="utf-8")
+
+            with patch(
+                "debugoracle.installer.platform.linux.os.replace",
+                side_effect=OSError("nope"),
+            ):
+                applied, error = linux_platform.append_path_line(
+                    profile, 'export PATH="/tmp/bin:$PATH"'
+                )
+
+            self.assertFalse(applied)
+            self.assertIn("nope", error or "")
+            self.assertEqual(profile.read_text(encoding="utf-8"), original)
 
 
 class _FakeFetcher:

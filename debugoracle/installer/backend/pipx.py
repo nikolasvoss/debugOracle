@@ -33,8 +33,11 @@ class PipxBackend:
         configured = self._env.get("PIPX_BIN_DIR")
         if configured:
             return Path(configured).expanduser()
-        home = Path(self._env.get("HOME", str(Path.home()))).expanduser()
-        return home / ".local" / "bin"
+        completed = self._run(["pipx", "environment", "--value", "PIPX_BIN_DIR"])
+        resolved = completed.stdout.strip()
+        if not resolved:
+            raise PipxError("pipx did not report its application binary directory")
+        return Path(resolved).expanduser()
 
     def inspect_installation(
         self, package_name: str, target_version: str

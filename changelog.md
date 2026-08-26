@@ -1,5 +1,17 @@
 ## [Unreleased]
 
+### Added
+- Added native checkout install and uninstall launchers for current macOS and
+  Windows PowerShell, backed by the existing verified pipx installer core.
+
+### Changed
+- Expanded installer contract CI to Linux, Apple Silicon macOS, Intel macOS,
+  and Windows, and added a release-time dependency vulnerability audit.
+
+### Fixed
+- Made managed PATH updates atomic and hardened Windows PATH ownership and
+  concurrent-update recovery so uninstall never removes an unproven entry.
+
 ## [0.3.0] - 2026-08-24
 
 ### Changed

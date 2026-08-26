@@ -15,6 +15,26 @@ from debugoracle.installer.outcomes import InstallState
 
 
 class UninstallCliTests(unittest.TestCase):
+    def test_windows_json_uninstall_uses_the_shared_pipx_flow(self) -> None:
+        fake_backend = _FakeBackend(
+            InstallState.INSTALLED_SAME_VERSION, "/tmp/fake-bin"
+        )
+        args = SimpleNamespace(
+            format="json", keep_path=True, force_legacy_path_cleanup=False
+        )
+        with (
+            patch(
+                "debugoracle.cli.commands.uninstall_cli.PipxBackend",
+                return_value=fake_backend,
+            ),
+            patch("debugoracle.cli.commands.uninstall_cli.sys.platform", "win32"),
+            redirect_stdout(StringIO()) as out,
+        ):
+            exit_code = cmd_uninstall_cli(args)
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(json.loads(out.getvalue())["code"], "success_uninstalled")
+
     def test_interactive_decline_cancels_uninstall_cleanly(self) -> None:
         fake_backend = _FakeBackend(
             InstallState.INSTALLED_SAME_VERSION, "/tmp/fake-bin"

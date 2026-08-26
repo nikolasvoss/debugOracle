@@ -1,8 +1,18 @@
 # Installation
 
-The supported public-alpha installer is Linux with Python 3.10–3.14 and `pipx`;
-the authoritative release environment is Ubuntu 24.04 x86-64 with Python 3.12.
-The Docling, semantic, and combined profiles remain disabled until their
-dependency and model license audits are complete.
+The supported public-alpha installer requires Python 3.10–3.14 and `pipx`.
+Linux, current macOS on Apple Silicon and Intel, and current Windows with
+PowerShell are supported. The Docling, semantic, and combined profiles remain
+disabled until their dependency and model license audits are complete.
 
-From a checkout, run `./scripts/install/linux.sh --docs-tools none`. It installs `dbgoracle`, not OpenOCD, VS Code, Cortex-Debug, drivers, or board tooling. Remove it with `./scripts/install/uninstall.sh`; workspace files remain untouched.
+From a checkout, use the command for your platform:
+
+| Platform | Install | Uninstall |
+| --- | --- | --- |
+| Linux | `./scripts/install/linux.sh --docs-tools none` | `./scripts/install/uninstall.sh` |
+| macOS | `./scripts/install/macos.sh --docs-tools none` | `./scripts/install/uninstall-macos.sh` |
+| Windows PowerShell | `.\scripts\install\windows.ps1 --docs-tools none` | `.\scripts\install\uninstall-windows.ps1` |
+
+The launchers install `dbgoracle`, not OpenOCD, VS Code, Cortex-Debug, drivers,
+or board tooling. They never request elevation or bypass PowerShell execution
+policy. Workspace files remain untouched.
