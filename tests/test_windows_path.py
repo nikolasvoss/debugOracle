@@ -66,7 +66,9 @@ class WindowsPathRecordTests(unittest.TestCase):
         with patch.object(windows, "_load_winreg", return_value=registry):
             self.assertEqual(windows._read_user_path(), "")
 
-    def test_path_change_before_install_write_fails_without_claiming_ownership(self) -> None:
+    def test_path_change_before_install_write_fails_without_claiming_ownership(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             record_path = Path(tmpdir) / "managed-path.json"
             with (

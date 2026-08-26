@@ -43,11 +43,14 @@ class MacosLauncherTests(unittest.TestCase):
             self.assertEqual(completed.returncode, 0, completed.stderr)
             forwarded = json.loads(capture_path.read_text(encoding="utf-8"))
             self.assertEqual(
-                forwarded[0], str(REPOSITORY_ROOT / "scripts" / "install" / "bootstrap.py")
+                forwarded[0],
+                str(REPOSITORY_ROOT / "scripts" / "install" / "bootstrap.py"),
             )
             self.assertEqual(forwarded[1:], ["--docs-tools", "none"])
 
-    def test_checkout_uninstaller_forwards_arguments_to_shared_uninstaller(self) -> None:
+    def test_checkout_uninstaller_forwards_arguments_to_shared_uninstaller(
+        self,
+    ) -> None:
         launcher = REPOSITORY_ROOT / "scripts" / "install" / "uninstall-macos.sh"
         with tempfile.TemporaryDirectory() as tmpdir:
             capture_path = Path(tmpdir) / "arguments.json"
@@ -67,13 +70,16 @@ class MacosLauncherTests(unittest.TestCase):
             self.assertEqual(completed.returncode, 0, completed.stderr)
             forwarded = json.loads(capture_path.read_text(encoding="utf-8"))
             self.assertEqual(
-                forwarded[0], str(REPOSITORY_ROOT / "scripts" / "install" / "uninstall.py")
+                forwarded[0],
+                str(REPOSITORY_ROOT / "scripts" / "install" / "uninstall.py"),
             )
             self.assertEqual(forwarded[1:], ["--keep-path"])
 
 
 class WindowsLauncherContractTests(unittest.TestCase):
-    def test_installer_uses_direct_argument_forwarding_without_policy_bypass(self) -> None:
+    def test_installer_uses_direct_argument_forwarding_without_policy_bypass(
+        self,
+    ) -> None:
         launcher = REPOSITORY_ROOT / "scripts" / "install" / "windows.ps1"
 
         content = launcher.read_text(encoding="utf-8")
@@ -83,7 +89,9 @@ class WindowsLauncherContractTests(unittest.TestCase):
         self.assertNotIn("Invoke-Expression", content)
         self.assertNotIn("ExecutionPolicy", content)
 
-    def test_uninstaller_uses_direct_argument_forwarding_without_policy_bypass(self) -> None:
+    def test_uninstaller_uses_direct_argument_forwarding_without_policy_bypass(
+        self,
+    ) -> None:
         launcher = REPOSITORY_ROOT / "scripts" / "install" / "uninstall-windows.ps1"
 
         content = launcher.read_text(encoding="utf-8")

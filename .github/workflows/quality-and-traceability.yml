@@ -168,7 +168,7 @@ jobs:
           .venv/bin/python -m pip install -e ".[dev]"
 
       - name: Audit runtime dependencies
-        run: .venv/bin/pip-audit --strict
+        run: .venv/bin/pip-audit --strict --skip-editable
 
       - name: Build and smoke release artifacts
         run: PATH="$PWD/.venv/bin:$PATH" timeout 10m ./scripts/verify-release.sh

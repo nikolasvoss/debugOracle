@@ -59,7 +59,7 @@ class PipxBackendTests(unittest.TestCase):
         self.assertEqual(status.state, InstallState.NOT_INSTALLED)
 
     def test_inspect_installation_state_transitions(self) -> None:
-        backend = PipxBackend(env={"HOME": "/tmp/home"})
+        backend = PipxBackend(env={"PIPX_BIN_DIR": "/tmp/pipx-bin"})
 
         with patch.object(
             backend,

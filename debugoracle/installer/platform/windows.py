@@ -41,9 +41,7 @@ def build_path_plan(
     env: Mapping[str, str] | None = None,
 ) -> WindowsPathPlan:
     resolved_env = env or os.environ
-    state_home = Path(
-        resolved_env.get("LOCALAPPDATA", str(home / "AppData" / "Local"))
-    )
+    state_home = Path(resolved_env.get("LOCALAPPDATA", str(home / "AppData" / "Local")))
     return WindowsPathPlan(
         bin_dir=bin_dir,
         profile_path=state_home / "DebugOracle" / "installer-managed-path.json",
@@ -75,7 +73,9 @@ def _append_path_line_locked(record_path: Path, entry: str) -> tuple[bool, str |
                 write_managed_path_record(record_path, WindowsPathRecord(entry=entry))
             return True, None
         if _read_user_path() != current:
-            raise RuntimeError("Windows user PATH changed before the installer could update it.")
+            raise RuntimeError(
+                "Windows user PATH changed before the installer could update it."
+            )
         write_managed_path_record(
             record_path, WindowsPathRecord(entry=entry, committed=False)
         )
@@ -94,9 +94,7 @@ def cleanup_path_line(
     record_path: Path, entry: str, *, force_legacy: bool = False
 ) -> PathCleanupResult:
     with _windows_path_mutex():
-        return _cleanup_path_line_locked(
-            record_path, entry, force_legacy=force_legacy
-        )
+        return _cleanup_path_line_locked(record_path, entry, force_legacy=force_legacy)
 
 
 def _cleanup_path_line_locked(
@@ -122,9 +120,13 @@ def _cleanup_path_line_locked(
                 legacy_line_found=False,
                 manual_action="Windows PATH ownership is ambiguous; no PATH entry was removed.",
             )
-        _write_user_path(";".join(part for part in entries if part.casefold() != entry.casefold()))
+        _write_user_path(
+            ";".join(part for part in entries if part.casefold() != entry.casefold())
+        )
         record_path.unlink(missing_ok=True)
-        return PathCleanupResult(applied=True, marker_found=True, legacy_line_found=False)
+        return PathCleanupResult(
+            applied=True, marker_found=True, legacy_line_found=False
+        )
     except (OSError, RuntimeError) as error:
         return PathCleanupResult(False, True, False, error=str(error))
 
@@ -201,7 +203,9 @@ def _load_winreg() -> ModuleType:
     try:
         import winreg
     except ImportError as error:
-        raise RuntimeError("Windows PATH management is only available on Windows.") from error
+        raise RuntimeError(
+            "Windows PATH management is only available on Windows."
+        ) from error
     return winreg
 
 
