@@ -12,6 +12,13 @@
 - Made managed PATH updates atomic and hardened Windows PATH ownership and
   concurrent-update recovery so uninstall never removes an unproven entry.
 
+## [0.3.1] - 2026-08-26
+
+### Changed
+- Narrowed supported Python runtimes to Python 3.12.x on Linux, current macOS,
+  and current Windows PowerShell; retained installer contract coverage for all
+  supported platforms and removed the broad Python compatibility matrix.
+
 ## [0.3.0] - 2026-08-24
 
 ### Changed

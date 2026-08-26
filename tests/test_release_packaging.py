@@ -3,10 +3,7 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
-try:
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover - Python 3.10 compatibility
-    import tomli as tomllib
+import tomllib
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -44,7 +41,7 @@ class ReleasePackagingTests(unittest.TestCase):
             (REPOSITORY_ROOT / "pyproject.toml").read_text(encoding="utf-8")
         )
 
-        self.assertEqual(pyproject["project"]["requires-python"], ">=3.10,<3.15")
+        self.assertEqual(pyproject["project"]["requires-python"], ">=3.12,<3.13")
 
     def test_pep_440_runtime_uses_the_audited_packaging_dependency(self) -> None:
         pyproject = tomllib.loads(

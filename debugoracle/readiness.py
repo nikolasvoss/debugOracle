@@ -121,7 +121,7 @@ def collect_host_readiness(
             key="python",
             state=(
                 ReadinessState.READY
-                if sys.version_info >= (3, 10)
+                if sys.version_info >= (3, 12)
                 else ReadinessState.BLOCKED
             ),
             detail=("Python " + ".".join(str(part) for part in sys.version_info[:3])),

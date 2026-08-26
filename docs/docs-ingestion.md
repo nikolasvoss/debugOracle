@@ -6,7 +6,7 @@ Use `dbgoracle docs` to ingest MCU manuals/datasheets into local sidecar artifac
 
 Base requirements:
 
-- Python 3.10–3.14
+- Python 3.12.x
 - Installed `dbgoracle` CLI
 
 The Linux installer uses the base profile. Docling, semantic, and combined
@@ -135,7 +135,7 @@ reported explicitly and make an otherwise usable ingest `partial`. Encrypted
 or malformed PDFs fail explicitly without switching parsers or fabricating
 text.
 
-Docling is an experimental optional backend outside the supported 0.3.0 install
+Docling is an experimental optional backend outside the supported 0.3.1 install
 path. Its dependency and model license audits are not complete. When an
 independently prepared environment uses it and its page mapping cannot be
 trusted, DebugOracle reports the condition and explicitly retries with
