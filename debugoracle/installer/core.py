@@ -101,10 +101,10 @@ class InstallerCore:
                 message="Installer support is available only on Linux, macOS, and Windows.",
                 details=[f"Detected platform: {self.platform}"],
             )
-        if self.python_version < (3, 10, 0):
+        if self.python_version < (3, 12, 0):
             return InstallerOutcome(
                 code=InstallerOutcomeCode.BLOCKED_MISSING_PYTHON,
-                message="DebugOracle requires Python 3.10 or newer.",
+                message="DebugOracle requires Python 3.12 or newer.",
                 details=[
                     f"Detected Python: {'.'.join(str(part) for part in self.python_version)}"
                 ],

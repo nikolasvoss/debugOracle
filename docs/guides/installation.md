@@ -1,6 +1,6 @@
 # Installation
 
-The supported public-alpha installer requires Python 3.10–3.14 and `pipx`.
+The supported public-alpha installer requires Python 3.12.x and `pipx`.
 Linux, current macOS on Apple Silicon and Intel, and current Windows with
 PowerShell are supported. The Docling, semantic, and combined profiles remain
 disabled until their dependency and model license audits are complete.

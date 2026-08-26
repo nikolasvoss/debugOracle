@@ -9,7 +9,7 @@ description = "Passive embedded debug evidence packager for ChatGPT"
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
-requires-python = ">=3.10,<3.15"
+requires-python = ">=3.12,<3.13"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
@@ -28,7 +28,7 @@ dependencies = [
 [project.optional-dependencies]
 docling = ["docling>=2.0"]
 semantic = ["sentence-transformers>=2.7", "numpy>=1.26"]
-dev = ["pyright", "pytest", "tomli; python_version < '3.11'"]
+dev = ["pyright", "pytest"]
 
 [project.urls]
 Changelog = "https://github.com/nikolasvoss/debugOracle/blob/main/changelog.md"

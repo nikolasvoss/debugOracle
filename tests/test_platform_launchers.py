@@ -87,6 +87,7 @@ class WindowsLauncherContractTests(unittest.TestCase):
 
         self.assertIn("bootstrap.py", content)
         self.assertIn("@RemainingArgs", content)
+        self.assertIn("Python 3.12 or newer is required", content)
         self.assertNotIn("Invoke-Expression", content)
         self.assertNotIn("ExecutionPolicy", content)
 
@@ -99,6 +100,7 @@ class WindowsLauncherContractTests(unittest.TestCase):
 
         self.assertIn("uninstall.py", content)
         self.assertIn("@RemainingArgs", content)
+        self.assertIn("Python 3.12 or newer is required", content)
         self.assertNotIn("Invoke-Expression", content)
         self.assertNotIn("ExecutionPolicy", content)
 

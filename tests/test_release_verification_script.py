@@ -160,7 +160,7 @@ class ReleaseVerificationScriptTests(unittest.TestCase):
             environment = os.environ.copy()
             environment["PATH"] = f"{fake_bin}:/usr/bin:/bin"
             environment["DEBUGORACLE_SKIP_PRIVATE_REFERENCE"] = "1"
-            environment["DEBUGORACLE_RELEASE_TAG"] = "v0.3.0"
+            environment["DEBUGORACLE_RELEASE_TAG"] = "v0.3.1"
             completed = subprocess.run(
                 ["bash", str(scripts / SCRIPT_PATH.name)],
                 cwd=checkout,
@@ -215,17 +215,17 @@ class ReleaseVerificationScriptTests(unittest.TestCase):
                 "if [ \"${1:-}\" = '-m' ] && [ \"${2:-}\" = 'build' ]; then\n"
                 "  while [ \"${1:-}\" != '--outdir' ]; do shift; done\n"
                 '  mkdir -p "$2"\n'
-                '  touch "$2/debugoracle-0.3.0-py3-none-any.whl"\n'
-                '  touch "$2/debugoracle-0.3.0.tar.gz"\n'
+                '  touch "$2/debugoracle-0.3.1-py3-none-any.whl"\n'
+                '  touch "$2/debugoracle-0.3.1.tar.gz"\n'
                 "elif [ \"${1:-}\" = '-m' ] && [ \"${2:-}\" = 'zipfile' ]; then\n"
                 "  printf '%s\\n' 'debugoracle/__init__.py'\n"
-                "  printf '%s\\n' 'debugoracle-0.3.0.dist-info/licenses/LICENSE'\n"
-                "  printf '%s\\n' 'debugoracle-0.3.0.dist-info/entry_points.txt'\n"
+                "  printf '%s\\n' 'debugoracle-0.3.1.dist-info/licenses/LICENSE'\n"
+                "  printf '%s\\n' 'debugoracle-0.3.1.dist-info/entry_points.txt'\n"
                 "elif [ \"${1:-}\" = '-m' ] && [ \"${2:-}\" = 'venv' ]; then\n"
                 '  venv_dir="$3"\n'
                 '  mkdir -p "$venv_dir/bin"\n'
                 f"  printf '%s\\n' '#!/usr/bin/env bash' \"printf 'venv-python %s\\\\n' \\\"\\$*\\\" >> '{command_log}'\" > \"$venv_dir/bin/python\"\n"
-                "  printf '%s\\n' '#!/usr/bin/env bash' 'case \"$1\" in --version) echo 0.3.0 ;; --help) echo usage: dbgoracle ;; *) exit 2 ;; esac' > \"$venv_dir/bin/dbgoracle\"\n"
+                "  printf '%s\\n' '#!/usr/bin/env bash' 'case \"$1\" in --version) echo 0.3.1 ;; --help) echo usage: dbgoracle ;; *) exit 2 ;; esac' > \"$venv_dir/bin/dbgoracle\"\n"
                 '  chmod 755 "$venv_dir/bin/python" "$venv_dir/bin/dbgoracle"\n'
                 "fi\n",
                 encoding="utf-8",
