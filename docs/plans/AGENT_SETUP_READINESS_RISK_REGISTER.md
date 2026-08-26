@@ -2,7 +2,8 @@
 
 Status: Active
 
-Task: [Agent Setup Readiness Task Spec](AGENT_SETUP_READINESS_TASK_SPEC.md)
+The completed readiness task spec was pruned. Any renewed implementation work
+must begin with a replacement task spec under the current workflow rules.
 
 | ID | Risk | Tier | Required control | Exit evidence |
 | --- | --- | --- | --- | --- |

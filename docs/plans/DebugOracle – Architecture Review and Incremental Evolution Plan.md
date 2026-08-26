@@ -1,5 +1,11 @@
 # DebugOracle – Architecture Review and Incremental Evolution Plan
 
+Status: Proposal — a review framework, not an approved implementation plan.
+
+The current architectural source of truth is
+[`docs/architecture.md`](../architecture.md). Any approved change identified
+by this review requires a separate task spec and implementation plan.
+
 ## 1. Purpose
 
 This document defines a structured review of DebugOracle's current architecture and potential future direction.
@@ -32,7 +38,7 @@ Optimize for the simplest architecture that gives an Embedded Engineer and a cod
 
 ---
 
-# 2. Core principle
+## 2. Core principle
 
 Every architectural proposal in this document is a **hypothesis to test**, not a predetermined decision.
 
@@ -65,7 +71,7 @@ Do not refactor merely because another architecture looks cleaner.
 
 ---
 
-# 3. Non-goals
+## 3. Non-goals
 
 Do not perform a Big-Bang rewrite.
 
@@ -87,7 +93,7 @@ Avoid creating abstractions that have only one concrete consumer unless they cle
 
 ---
 
-# 4. Desired product question
+## 4. Desired product question
 
 All architectural decisions should ultimately support answering:
 
@@ -126,7 +132,7 @@ These classifications must still be validated.
 
 ---
 
-# 5. Decision categories
+## 5. Decision categories
 
 Every reviewed area must end with exactly one primary classification.
 
@@ -170,7 +176,7 @@ Every decision must include evidence.
 
 ---
 
-# 6. Standard review procedure
+## 6. Standard review procedure
 
 For every architectural topic below, perform the following procedure independently.
 
@@ -267,7 +273,7 @@ Do not automatically proceed into adjacent architecture changes.
 
 ---
 
-# 7. Review order
+## 7. Review order
 
 Use the order below.
 
@@ -275,7 +281,7 @@ Later decisions may depend on earlier results.
 
 ---
 
-# REVIEW 1 – Product boundary and USP
+## Review 1 – Product boundary and USP
 
 ## Hypothesis
 
@@ -337,7 +343,7 @@ Do not modify architecture yet.
 
 ---
 
-# REVIEW 2 – SVD subsystem
+## Review 2 – SVD subsystem
 
 ## Hypothesis
 
@@ -415,7 +421,7 @@ Do not assume the existing parser must survive.
 
 ---
 
-# REVIEW 3 – SVD auto-discovery
+## Review 3 – SVD auto-discovery
 
 ## Hypothesis
 
@@ -449,7 +455,7 @@ Design the minimum reliable solution.
 
 ---
 
-# REVIEW 4 – Provenance
+## Review 4 – Provenance
 
 ## Hypothesis
 
@@ -489,7 +495,7 @@ Do not preserve metadata merely because the current schema contains it.
 
 ---
 
-# REVIEW 5 – Freshness and `halt_id`
+## Review 5 – Freshness and `halt_id`
 
 ## Hypothesis
 
@@ -530,7 +536,7 @@ Potential minimal model:
 
 ---
 
-# REVIEW 6 – InvestigationArtifact
+## Review 6 – InvestigationArtifact
 
 ## Hypothesis
 
@@ -583,7 +589,7 @@ KEEP / SIMPLIFY / DEPRECATE.
 
 ---
 
-# REVIEW 7 – Pipeline architecture
+## Review 7 – Pipeline architecture
 
 ## Hypothesis
 
@@ -616,7 +622,7 @@ Do not remove the pipeline until at least one full replacement path is demonstra
 
 ---
 
-# REVIEW 8 – Source model versus Capability model
+## Review 8 – Source model versus Capability model
 
 ## Hypothesis
 
@@ -658,7 +664,7 @@ Assess whether this improves the public API and internal routing.
 
 ---
 
-# REVIEW 9 – Safety architecture
+## Review 9 – Safety architecture
 
 ## Hypothesis
 
@@ -711,7 +717,7 @@ Avoid creating a complex security framework.
 
 ---
 
-# REVIEW 10 – GDB/MI implementation
+## Review 10 – GDB/MI implementation
 
 ## Hypothesis
 
@@ -771,7 +777,7 @@ Use gdb-mcp for generic source debugging while retaining narrowly scoped DebugOr
 
 ---
 
-# REVIEW 11 – Transcript-based GDB workflow
+## Review 11 – Transcript-based GDB workflow
 
 ## Hypothesis
 
@@ -801,7 +807,7 @@ Test whether any important use case would be lost.
 
 ---
 
-# REVIEW 12 – LiveDebugBackend
+## Review 12 – LiveDebugBackend
 
 ## Hypothesis
 
@@ -834,7 +840,7 @@ A thin provider boundary underneath semantic features.
 
 ---
 
-# REVIEW 13 – embedded-debugger-mcp integration
+## Review 13 – embedded-debugger-mcp integration
 
 ## Hypothesis
 
@@ -875,7 +881,7 @@ Possible:
 
 ---
 
-# REVIEW 14 – probe-rs
+## Review 14 – probe-rs
 
 ## Hypothesis
 
@@ -902,7 +908,7 @@ Only build a proof of concept if embedded-debugger-mcp integration demonstrates 
 
 ---
 
-# REVIEW 15 – RTT
+## Review 15 – RTT
 
 ## Hypothesis
 
@@ -939,7 +945,7 @@ DebugOracle may need the second without owning the first.
 
 ---
 
-# REVIEW 16 – Cortex-M semantics
+## Review 16 – Cortex-M semantics
 
 ## Hypothesis
 
@@ -964,7 +970,7 @@ Do not expose unnecessary raw architecture data unless useful.
 
 ---
 
-# REVIEW 17 – Fault analysis
+## Review 17 – Fault analysis
 
 ## Hypothesis
 
@@ -997,7 +1003,7 @@ Possible differentiation:
 
 ---
 
-# REVIEW 18 – NVIC and interrupt semantics
+## Review 18 – NVIC and interrupt semantics
 
 ## Hypothesis
 
@@ -1034,7 +1040,7 @@ Implement this for one STM32 family first.
 
 ---
 
-# REVIEW 19 – Peripheral-specific semantic inspectors
+## Review 19 – Peripheral-specific semantic inspectors
 
 ## Hypothesis
 
@@ -1067,7 +1073,7 @@ could summarize:
 
 ---
 
-# REVIEW 20 – FreeRTOS semantics
+## Review 20 – FreeRTOS semantics
 
 ## Hypothesis
 
@@ -1109,7 +1115,7 @@ Do not implement full RTOS analysis in first iteration.
 
 ---
 
-# REVIEW 21 – Snapshot
+## Review 21 – Snapshot
 
 ## Hypothesis
 
@@ -1151,7 +1157,7 @@ Implement a manually scoped snapshot before designing automatic relevance algori
 
 ---
 
-# REVIEW 22 – Context reduction
+## Review 22 – Context reduction
 
 ## Hypothesis
 
@@ -1178,7 +1184,7 @@ Do not introduce embeddings/LLM selection inside DebugOracle without demonstrate
 
 ---
 
-# REVIEW 23 – Vendor documentation
+## Review 23 – Vendor documentation
 
 ## Hypothesis
 
@@ -1217,7 +1223,7 @@ Do not delete the current implementation before determining whether it offers un
 
 ---
 
-# REVIEW 24 – Build orchestration
+## Review 24 – Build orchestration
 
 ## Hypothesis
 
@@ -1245,7 +1251,7 @@ Only retain build awareness if it is needed to locate ELF/SVD/debug artifacts.
 
 ---
 
-# REVIEW 25 – Flash
+## Review 25 – Flash
 
 ## Hypothesis
 
@@ -1263,7 +1269,7 @@ DebugOracle should probably invoke rather than implement flashing.
 
 ---
 
-# REVIEW 26 – CLI
+## Review 26 – CLI
 
 ## Hypothesis
 
@@ -1298,7 +1304,7 @@ Do not remove commands until their use is understood.
 
 ---
 
-# REVIEW 27 – MCP interface
+## Review 27 – MCP interface
 
 ## Hypothesis
 
@@ -1316,7 +1322,7 @@ Prefer a small semantic surface.
 
 ---
 
-# REVIEW 28 – Agent / Skill boundary
+## Review 28 – Agent / Skill boundary
 
 ## Hypothesis
 
@@ -1341,7 +1347,7 @@ Keep agent policy separate from hardware semantics.
 
 ---
 
-# REVIEW 29 – Existing renderers
+## Review 29 – Existing renderers
 
 ## Hypothesis
 
@@ -1358,7 +1364,7 @@ Preserve richer reports only if users actively benefit from them.
 
 ---
 
-# REVIEW 30 – Tests and quality gates
+## Review 30 – Tests and quality gates
 
 Do not reduce test quality during simplification.
 
@@ -1401,7 +1407,7 @@ Prefer one known Nucleo target initially.
 
 ---
 
-# 8. Required external-project evaluation
+## 8. Required external-project evaluation
 
 Maintain a comparison matrix for:
 
@@ -1431,7 +1437,7 @@ Do not adopt its agent architecture unless a concrete DebugOracle requirement ju
 
 ---
 
-# 9. No replacement without a replacement test
+## 9. No replacement without a replacement test
 
 Before removing a subsystem, execute an equivalent real-world task through the proposed replacement.
 
@@ -1456,7 +1462,7 @@ Only then make a migration decision.
 
 ---
 
-# 10. Preferred implementation strategy
+## 10. Preferred implementation strategy
 
 Use vertical slices.
 
@@ -1502,7 +1508,7 @@ Reassess after each one.
 
 ---
 
-# 11. First concrete milestone
+## 11. First concrete milestone
 
 The first product experiment should be intentionally small.
 
@@ -1549,7 +1555,7 @@ Only if this is clearly useful should SVD semantics become the new core directio
 
 ---
 
-# 12. Second concrete milestone
+## 12. Second concrete milestone
 
 Test external GDB control.
 
@@ -1567,7 +1573,7 @@ Mark them for deprecation.
 
 ---
 
-# 13. Third concrete milestone
+## 13. Third concrete milestone
 
 Combine the two worlds.
 
@@ -1589,7 +1595,7 @@ This validates DebugOracle's intended architectural position.
 
 ---
 
-# 14. Architecture target to test
+## 14. Architecture target to test
 
 Do not implement this wholesale.
 
@@ -1629,7 +1635,7 @@ The semantic layer should not depend unnecessarily on one transport.
 
 ---
 
-# 15. Potential future DebugOracle core
+## 15. Potential future DebugOracle core
 
 Again, treat as a hypothesis.
 
@@ -1651,7 +1657,7 @@ Architecture follows validated capabilities, not the reverse.
 
 ---
 
-# 16. Deletion policy
+## 16. Deletion policy
 
 Deleting code is explicitly allowed.
 
@@ -1674,7 +1680,7 @@ When deleting:
 
 ---
 
-# 17. Preservation policy
+## 17. Preservation policy
 
 Existing code should be protected when:
 
@@ -1688,7 +1694,7 @@ Do not replace good code merely to reduce LOC.
 
 ---
 
-# 18. Decision quality standard
+## 18. Decision quality standard
 
 Avoid statements such as:
 
@@ -1709,7 +1715,7 @@ or:
 
 ---
 
-# 19. Ongoing architectural scorecard
+## 19. Ongoing architectural scorecard
 
 After every review, update:
 
@@ -1746,7 +1752,7 @@ No architectural rewrite should be scheduled from a LOW-confidence decision.
 
 ---
 
-# 20. Final objective
+## 20. Final objective
 
 The review is successful if DebugOracle becomes **smaller in conceptual scope while more valuable during real embedded debugging**.
 

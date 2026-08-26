@@ -1,20 +1,22 @@
 # DebugOracle – Architecture Decision Record
 
+Status: Reference template — this document records decisions but does not
+establish product direction. The current architectural source of truth is
+[`docs/architecture.md`](../architecture.md).
+
 Create one copy of this template for each reviewed architectural topic.
 
 Do not combine unrelated topics into one decision.
 
 ---
 
-## Decision ID
+**Decision ID:** `ADR-XXX`
 
-`ADR-XXX`
-
-## Topic
+**Topic:**
 
 Example: `GDB/MI ownership`
 
-## Status
+**Decision status:**
 
 - Investigation
 - Experiment
@@ -22,13 +24,11 @@ Example: `GDB/MI ownership`
 - Implemented
 - Superseded
 
-## Date
-
-YYYY-MM-DD
+**Date:** `YYYY-MM-DD`
 
 ---
 
-# 1. Question
+## 1. Question
 
 State one specific architectural question.
 
@@ -38,7 +38,7 @@ Example:
 
 ---
 
-# 2. Why this matters
+## 2. Why this matters
 
 Describe:
 
@@ -51,7 +51,7 @@ Keep this concrete.
 
 ---
 
-# 3. Current implementation
+## 3. Current implementation
 
 Document:
 
@@ -66,7 +66,7 @@ Do not evaluate yet.
 
 ---
 
-# 4. Problem solved today
+## 4. Problem solved today
 
 Complete:
 
@@ -76,7 +76,7 @@ If this cannot be answered clearly, record that.
 
 ---
 
-# 5. Strengths of current implementation
+## 5. Strengths of current implementation
 
 - 
 - 
@@ -84,7 +84,7 @@ If this cannot be answered clearly, record that.
 
 ---
 
-# 6. Weaknesses of current implementation
+## 6. Weaknesses of current implementation
 
 - 
 - 
@@ -94,19 +94,9 @@ Separate observed weaknesses from assumptions.
 
 ---
 
-# 7. Alternatives
+## 7. Alternatives
 
-## Alternative A – Keep current
-
-Description:
-
-Advantages:
-
-Disadvantages:
-
-Risks:
-
-## Alternative B
+### Alternative A – Keep current
 
 Description:
 
@@ -116,7 +106,17 @@ Disadvantages:
 
 Risks:
 
-## Alternative C
+### Alternative B
+
+Description:
+
+Advantages:
+
+Disadvantages:
+
+Risks:
+
+### Alternative C
 
 Description:
 
@@ -128,11 +128,11 @@ Risks:
 
 ---
 
-# 8. External alternatives inspected
+## 8. External alternatives inspected
 
 For each relevant project:
 
-## Project
+### Project
 
 Version/commit reviewed:
 
@@ -150,7 +150,7 @@ Evidence from real test:
 
 ---
 
-# 9. Minimal experiment
+## 9. Minimal experiment
 
 Describe the smallest test capable of distinguishing the alternatives.
 
@@ -169,7 +169,7 @@ Example:
 
 ---
 
-# 10. Experiment result
+## 10. Experiment result
 
 Observed:
 
@@ -189,7 +189,7 @@ Human usability:
 
 ---
 
-# 11. Decision criteria
+## 11. Decision criteria
 
 Explicitly state the threshold.
 
@@ -204,7 +204,7 @@ Replace current implementation only if:
 
 ---
 
-# 12. Decision
+## 12. Decision
 
 Choose one:
 
@@ -222,13 +222,13 @@ Decision:
 
 ---
 
-# 13. Reason
+## 13. Reason
 
 Use evidence rather than architectural preference.
 
 ---
 
-# 14. Confidence
+## 14. Confidence
 
 - LOW
 - MEDIUM
@@ -238,7 +238,7 @@ Reason:
 
 ---
 
-# 15. Minimal implementation change
+## 15. Minimal implementation change
 
 Describe only the smallest next change justified by this decision.
 
@@ -246,7 +246,7 @@ Do not include unrelated cleanup.
 
 ---
 
-# 16. What must NOT change yet
+## 16. What must NOT change yet
 
 Explicitly protect adjacent architecture.
 
@@ -261,23 +261,23 @@ This prevents cascading refactors.
 
 ---
 
-# 17. Tests required
+## 17. Tests required
 
-## Existing tests that must continue passing
-
-- 
-
-## New tests
+### Existing tests that must continue passing
 
 - 
 
-## Hardware validation
+### New tests
+
+- 
+
+### Hardware validation
 
 - 
 
 ---
 
-# 18. Migration
+## 18. Migration
 
 If replacing existing functionality:
 
@@ -291,13 +291,13 @@ Removal criteria:
 
 ---
 
-# 19. Rollback
+## 19. Rollback
 
 How can this change be reverted?
 
 ---
 
-# 20. Code to remove eventually
+## 20. Code to remove eventually
 
 Only list code whose replacement has already been validated.
 
@@ -305,7 +305,7 @@ Only list code whose replacement has already been validated.
 
 ---
 
-# 21. Follow-up questions
+## 21. Follow-up questions
 
 These are questions, not automatically approved work items.
 
@@ -314,13 +314,13 @@ These are questions, not automatically approved work items.
 
 ---
 
-# 22. Resulting architecture impact
+## 22. Resulting architecture impact
 
 One paragraph maximum.
 
 ---
 
-# 23. Scorecard update
+## 23. Scorecard update
 
 Area:
 
@@ -334,7 +334,7 @@ Next action:
 
 ---
 
-# 24. Stop condition
+## 24. Stop condition
 
 After implementing the minimal approved change:
 

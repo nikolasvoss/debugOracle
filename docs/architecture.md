@@ -1,5 +1,11 @@
 # DebugOracle Architecture
 
+Status: Active — current architectural source of truth.
+
+Use the [architecture review framework](plans/DebugOracle%20%E2%80%93%20Architecture%20Review%20and%20Incremental%20Evolution%20Plan.md)
+to evaluate prospective changes and the [ADR template](plans/DebugOracle%20%E2%80%93%20Architecture%20Decision%20Record%20Template.md)
+to record decisions. Neither supersedes this document.
+
 This document defines the target architecture for DebugOracle as the product expands beyond the current early implementation.
 
 It is intentionally product-shaped rather than code-shaped. Maintainers and agents should use this file to understand the intended system boundaries before inspecting module-level specs or implementation files.
