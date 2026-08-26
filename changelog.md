@@ -3,6 +3,8 @@
 ### Added
 - Added native checkout install and uninstall launchers for current macOS and
   Windows PowerShell, backed by the existing verified pipx installer core.
+- Added read-only release readiness and reproducible runtime-dependency audit
+  helpers for contributor and CI workflows.
 
 ### Changed
 - Expanded installer contract CI to Linux, Apple Silicon macOS, Intel macOS,

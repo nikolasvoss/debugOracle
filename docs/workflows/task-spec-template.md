@@ -10,6 +10,14 @@ Describe the concrete user/developer problem this task solves.
 ## Invariants Touched
 List any system invariants affected (determinism, evidence-first, reproducibility, read-only behavior, provenance).
 
+## Delivery Contract
+Required when the change touches installers, filesystem paths, parsers, CI, or
+release workflows.
+
+- Supported execution environments:
+- Adversarial boundary cases:
+- Release and operational prerequisites:
+
 ## Acceptance Criteria
 - AC-001:
 - AC-002:

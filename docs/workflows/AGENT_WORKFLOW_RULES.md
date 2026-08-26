@@ -36,6 +36,14 @@ If uncertain, treat the change as behavior-affecting: create a branch and a spec
   - `Plan:` link
   - `Acceptance Criteria -> Validation` mapping table with at least one non-header row
 
+## Delivery Contract
+
+For installer, filesystem-path, parser, CI, or release-workflow changes, the
+task spec must complete its `Delivery Contract` section. The implementation
+must provide evidence for every listed supported environment and adversarial
+boundary before merge. Pull requests to `main` must retain the applicable
+native CI checks as required GitHub branch-protection checks.
+
 ## Exception Handling (Solo-v1)
 
 - Exceptions are allowed only when the full workflow would block urgent progress.
