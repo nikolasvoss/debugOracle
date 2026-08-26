@@ -17,13 +17,18 @@ SPEC.loader.exec_module(release_readiness)
 
 class ReleaseReadinessTests(unittest.TestCase):
     def test_metadata_validation_accepts_current_release_surfaces(self) -> None:
+        version = release_readiness.canonical_version(REPOSITORY_ROOT)
+
         self.assertEqual(
-            release_readiness.metadata_errors(REPOSITORY_ROOT, "v0.3.0"), []
+            release_readiness.metadata_errors(REPOSITORY_ROOT, f"v{version}"), []
         )
 
     def test_metadata_validation_rejects_another_tag(self) -> None:
-        errors = release_readiness.metadata_errors(REPOSITORY_ROOT, "v0.3.1")
+        version = release_readiness.canonical_version(REPOSITORY_ROOT)
+        invalid_tag = "not-a-release-tag"
+        errors = release_readiness.metadata_errors(REPOSITORY_ROOT, invalid_tag)
 
         self.assertEqual(
-            errors, ["requested tag v0.3.1 does not match canonical tag v0.3.0"]
+            errors,
+            [f"requested tag {invalid_tag} does not match canonical tag v{version}"],
         )
