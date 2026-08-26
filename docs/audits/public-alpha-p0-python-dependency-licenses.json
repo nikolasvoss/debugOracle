@@ -106,14 +106,6 @@
           "source": "https://github.com/pytest-dev/pytest",
           "evidence": "Installed pytest 7.4.4 core metadata License and MIT classifier",
           "audit_status": "development_only_unlocked"
-        },
-        {
-          "requirement": "tomli; python_version < '3.11'",
-          "observed_version": "2.4.1",
-          "license": "MIT",
-          "source": "https://pypi.org/project/tomli/",
-          "evidence": "Official PyPI project metadata identifies Tomli 2.4.1 as an MIT-licensed backport of tomllib for Python 3.8 and newer",
-          "audit_status": "development_only_unlocked"
         }
       ],
       "unresolved": [

@@ -2,12 +2,12 @@
   "schema_version": "2",
   "channel": "stable",
   "package_name": "debugoracle",
-  "version": "0.3.0",
-  "python_requires": ">=3.10,<3.15",
+  "version": "0.3.1",
+  "python_requires": ">=3.12,<3.13",
   "installer_min_version": "0.2.0",
-  "release_notes_url": "https://github.com/nikolasvoss/debugOracle/releases/tag/v0.3.0",
-  "artifact_url": "https://github.com/nikolasvoss/debugOracle/releases/download/v0.3.0/debugoracle-0.3.0-py3-none-any.whl",
-  "artifact_sha256": "05c6c7c012f283f7b53a21718fc7704d4684216de3e8eafc2f8c40550ae8cd30",
-  "artifact_size": 147806,
+  "release_notes_url": "https://github.com/nikolasvoss/debugOracle/releases/tag/v0.3.1",
+  "artifact_url": "https://github.com/nikolasvoss/debugOracle/releases/download/v0.3.1/debugoracle-0.3.1-py3-none-any.whl",
+  "artifact_sha256": "61257f84500a3b587fab82f34de408689dfb7989d0ba8a580ae74501d118df3c",
+  "artifact_size": 150855,
   "artifact_kind": "wheel"
 }

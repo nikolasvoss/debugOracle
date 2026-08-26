@@ -28,8 +28,8 @@ def validate_release_tag(release_tag: str | None) -> None:
 
 
 class ReleaseVersionMetadataTests(unittest.TestCase):
-    def test_canonical_public_alpha_version_is_0_3_0(self) -> None:
-        self.assertEqual(__version__, "0.3.0")
+    def test_canonical_public_alpha_version_is_0_3_1(self) -> None:
+        self.assertEqual(__version__, "0.3.1")
 
     def test_release_version_metadata_is_consistent(self) -> None:
         manifest_path = REPOSITORY_ROOT / "release" / "install-manifest.json"

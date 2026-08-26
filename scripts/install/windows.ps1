@@ -14,7 +14,7 @@ if ($env:PYTHON_BIN) {
 } elseif (Get-Command python -ErrorAction SilentlyContinue) {
     & python $bootstrap @RemainingArgs
 } else {
-    Write-Error "Python 3.10 or newer is required. Install Python, then rerun this command."
+    Write-Error "Python 3.12 or newer is required. Install Python, then rerun this command."
     exit 1
 }
 

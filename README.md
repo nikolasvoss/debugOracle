@@ -20,7 +20,7 @@ DebugOracle is operated through its CLI by a coding agent such as Codex or Claud
 
 | For | You need |
 | --- | --- |
-| Install DebugOracle | Linux, current macOS, or current Windows PowerShell; Python 3.10–3.14; `pipx`; and Codex or Claude Code |
+| Install DebugOracle | Linux, current macOS, or current Windows PowerShell; Python 3.12.x only; `pipx`; and Codex or Claude Code |
 | Capture debug evidence | Your firmware project, a built ELF, and your existing debugger setup—normally Cortex-Debug and OpenOCD |
 | **Full hardware debugging** | A matching SVD plus the device reference manual and/or datasheet as PDFs |
 
@@ -66,7 +66,7 @@ The folder is not required. Everything in it is optional, and filenames and subf
 
 If PDFs are found, the agent asks permission before preparing them for local search. It may take seconds to several minutes. The tool searches only local PDFs; it does not download vendor documentation. Original files stay unchanged; generated search data is stored under `.dbgoracle/documentation-search/`.
 
-Parser choice affects result quality. The supported 0.3.0 install uses the
+Parser choice affects result quality. The supported 0.3.1 install uses the
 default `pypdf` parser, which extracts text page by page. Scanned or image-only
 pages are incomplete, encrypted or malformed PDFs cannot be ingested, and
 complex tables or layouts may extract less accurately. The optional Docling
@@ -84,7 +84,7 @@ audits are complete.
 
 ## Platform support
 
-The automated non-HIL compatibility suite covers Python 3.10 through 3.14 on Ubuntu. Installer contracts also run on Linux, current Apple Silicon macOS, current Intel macOS, and current Windows. Full end-to-end user installation workflows on macOS and Windows are currently unverified; the authoritative public-release environment remains Ubuntu 24.04 LTS x86-64 with Python 3.12 and `pipx`.
+DebugOracle supports Python 3.12.x only. Installer contracts run on Linux, current Apple Silicon macOS, current Intel macOS, and current Windows. Full end-to-end user installation workflows on macOS and Windows are currently unverified; the authoritative public-release environment remains Ubuntu 24.04 LTS x86-64 with Python 3.12 and `pipx`.
 
 ## Help and documentation
 
